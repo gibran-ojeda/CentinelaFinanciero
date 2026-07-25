@@ -43,6 +43,11 @@ PATRON = f"{PREFIJO}*"
 
 
 def _serializable(valor: Any) -> Any:
+    # Los filtros multivalor son conjuntos, y `str(frozenset)` no tiene orden
+    # garantizado entre procesos: sin ordenarlos, dos peticiones idénticas
+    # producirían llaves distintas y el cache no acertaría nunca.
+    if isinstance(valor, frozenset | set):
+        return sorted(_serializable(v) for v in valor)
     if hasattr(valor, "value"):
         return valor.value
     return str(valor) if valor is not None else None

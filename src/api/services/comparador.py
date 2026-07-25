@@ -46,16 +46,6 @@ from metrics.gat import Gat, resolver_gat
 from metrics.ten import ten
 
 
-class FiltroSeguro(StrEnum):
-    """Filtro de cobertura de §7: "solo IPAB / solo Gobierno / todos"."""
-
-    TODOS = "todos"
-    SOLO_IPAB = "solo_ipab"
-    SOLO_GOBIERNO = "solo_gobierno"
-    CON_COBERTURA = "con_cobertura"
-    """Cualquier fondo de protección. Excluye IFPEs."""
-
-
 class OrdenComparador(StrEnum):
     TASA_NOMINAL = "tasa_nominal"
     TEN = "ten"
@@ -72,10 +62,19 @@ PLAZO_LARGO_DIAS = 365
 
 @dataclass(frozen=True, slots=True)
 class FiltrosComparador:
+    """Los filtros de §7.
+
+    `seguros` y `categorias` son **conjuntos**: la UI los presenta como
+    desplegables de selección múltiple, y "IPAB o PROSOFIPO" es una pregunta
+    natural que un filtro de valor único no puede expresar. Conjunto vacío
+    significa "todos", no "ninguno": es lo que hace que la ausencia del
+    parámetro y el desplegable sin marcar den el mismo resultado.
+    """
+
     plazo: str | None = None
-    categoria: CategoriaInstitucion | None = None
+    categorias: frozenset[CategoriaInstitucion] = frozenset()
     monto: Decimal | None = None
-    seguro: FiltroSeguro = FiltroSeguro.TODOS
+    seguros: frozenset[TipoSeguro] = frozenset()
     liquidez: Liquidez | None = None
     sin_banderas: bool = False
     orden: OrdenComparador = OrdenComparador.TEN
@@ -116,8 +115,8 @@ def _aplicar_filtros_sql(
         else:
             consulta = consulta.where(Producto.plazo_dias == int(f.plazo))
 
-    if f.categoria is not None:
-        consulta = consulta.where(Institucion.categoria == f.categoria)
+    if f.categorias:
+        consulta = consulta.where(Institucion.categoria.in_(f.categorias))
 
     if f.monto is not None:
         # Excluye lo que el usuario no puede contratar con ese capital.
@@ -126,15 +125,8 @@ def _aplicar_filtros_sql(
     if f.liquidez is not None:
         consulta = consulta.where(Producto.liquidez == f.liquidez)
 
-    match f.seguro:
-        case FiltroSeguro.SOLO_IPAB:
-            consulta = consulta.where(Institucion.tipo_seguro == TipoSeguro.IPAB)
-        case FiltroSeguro.SOLO_GOBIERNO:
-            consulta = consulta.where(Institucion.tipo_seguro == TipoSeguro.SOBERANO)
-        case FiltroSeguro.CON_COBERTURA:
-            consulta = consulta.where(Institucion.tipo_seguro != TipoSeguro.NINGUNO)
-        case _:
-            pass
+    if f.seguros:
+        consulta = consulta.where(Institucion.tipo_seguro.in_(f.seguros))
 
     return consulta
 
@@ -268,7 +260,6 @@ async def construir_comparador(
 __all__ = [
     "PLAZO_LARGO_DIAS",
     "PLAZO_VISTA",
-    "FiltroSeguro",
     "FiltrosComparador",
     "OrdenComparador",
     "construir_comparador",

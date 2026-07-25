@@ -18,11 +18,10 @@ from api.schemas import RespuestaComparador
 from api.services import cache
 from api.services.comparador import (
     FiltrosComparador,
-    FiltroSeguro,
     OrdenComparador,
     construir_comparador,
 )
-from domain.enums import CategoriaInstitucion, Liquidez
+from domain.enums import CategoriaInstitucion, Liquidez, TipoSeguro
 
 router = APIRouter(prefix="/api/v1", tags=["comparador"])
 
@@ -44,12 +43,18 @@ async def comparador(
         str | None,
         Query(description="VISTA, 28, 91, 182, 364 o 365+"),
     ] = None,
-    categoria: Annotated[CategoriaInstitucion | None, Query()] = None,
+    categoria: Annotated[
+        list[CategoriaInstitucion] | None,
+        Query(description="Repetible: `?categoria=SOFIPO&categoria=BANCO_DIGITAL`"),
+    ] = None,
     monto: Annotated[
         Decimal | None,
         Query(gt=0, description="Excluye productos con monto mínimo mayor"),
     ] = None,
-    seguro: Annotated[FiltroSeguro, Query()] = FiltroSeguro.TODOS,
+    seguro: Annotated[
+        list[TipoSeguro] | None,
+        Query(description="Repetible: `?seguro=IPAB&seguro=PROSOFIPO`. Vacío = todos"),
+    ] = None,
     liquidez: Annotated[Liquidez | None, Query()] = None,
     sin_banderas: Annotated[
         bool,
@@ -68,9 +73,9 @@ async def comparador(
 
     filtros = FiltrosComparador(
         plazo=plazo,
-        categoria=categoria,
+        categorias=frozenset(categoria or ()),
         monto=monto,
-        seguro=seguro,
+        seguros=frozenset(seguro or ()),
         liquidez=liquidez,
         sin_banderas=sin_banderas,
         orden=orden,

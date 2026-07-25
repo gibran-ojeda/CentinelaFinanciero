@@ -270,6 +270,23 @@ async def test_bank_category_excludes_sofipos(api_lectura: AsyncClient) -> None:
     assert slugs == {"nu-cajita-turbo", "nu-plazo-91"}
 
 
+async def test_several_categories_can_be_selected_at_once(api_lectura: AsyncClient) -> None:
+    respuesta = await api_lectura.get(
+        RUTA, params=[("categoria", "SOFIPO"), ("categoria", "BANCO_DIGITAL")]
+    )
+    assert respuesta.status_code == 200
+    slugs = {f["producto_slug"] for f in respuesta.json()["filas"]}
+
+    assert slugs == {
+        "finsus-plazo-91",
+        "klar-vista",
+        "libertad-plazo-364",
+        "nu-cajita-turbo",
+        "nu-plazo-91",
+    }
+    assert not slugs & SLUGS_VERIFICADOS  # gobierno no marcado
+
+
 async def test_unknown_category_is_rejected(api_lectura: AsyncClient) -> None:
     respuesta = await api_lectura.get(RUTA, params={"categoria": "COOPERATIVA"})
     assert respuesta.status_code == 422
@@ -307,13 +324,13 @@ async def test_non_positive_amount_is_rejected(api_lectura: AsyncClient) -> None
 
 
 async def test_ipab_only_includes_and_excludes(api_lectura: AsyncClient) -> None:
-    slugs = await _slugs(api_lectura, seguro="solo_ipab")
+    slugs = await _slugs(api_lectura, seguro="IPAB")
     assert slugs == {"nu-cajita-turbo", "nu-plazo-91"}
     assert "finsus-plazo-91" not in slugs
 
 
 async def test_government_only_includes_and_excludes(api_lectura: AsyncClient) -> None:
-    slugs = await _slugs(api_lectura, seguro="solo_gobierno")
+    slugs = await _slugs(api_lectura, seguro="SOBERANO")
     # Los gubernamentales son hoy exactamente los verificados: lo que se pudo
     # confirmar contra fuente primaria fue el SIE de Banxico y cetesdirecto.
     assert slugs == set(SLUGS_VERIFICADOS)
@@ -321,18 +338,34 @@ async def test_government_only_includes_and_excludes(api_lectura: AsyncClient) -
     assert not slugs & SLUGS_DEMO
 
 
-async def test_with_coverage_excludes_only_the_unprotected(
-    api_lectura: AsyncClient,
-) -> None:
-    """El IFPE es el único sin fondo de protección."""
-    slugs = await _slugs(api_lectura, seguro="con_cobertura")
-    assert "mercado-pago-vista" not in slugs
-    assert "klar-vista" in slugs
-    assert "cetes-28" in slugs
+async def test_several_coverages_can_be_selected_at_once(api_lectura: AsyncClient) -> None:
+    """El desplegable del diseño es de selección múltiple, no de un valor."""
+    respuesta = await api_lectura.get(RUTA, params=[("seguro", "IPAB"), ("seguro", "PROSOFIPO")])
+    assert respuesta.status_code == 200
+    slugs = {f["producto_slug"] for f in respuesta.json()["filas"]}
+
+    assert slugs == {
+        "nu-cajita-turbo",
+        "nu-plazo-91",
+        "finsus-plazo-91",
+        "klar-vista",
+        "libertad-plazo-364",
+    }
+    assert "cetes-28" not in slugs  # soberano, no marcado
+    assert "mercado-pago-vista" not in slugs  # sin cobertura, no marcado
 
 
-async def test_all_includes_the_unprotected(api_lectura: AsyncClient) -> None:
-    assert "mercado-pago-vista" in await _slugs(api_lectura, seguro="todos")
+async def test_an_empty_selection_means_all_not_none(api_lectura: AsyncClient) -> None:
+    """Sin marcar nada, el desplegable no filtra: es lo que dice "Todos"."""
+    assert await _slugs(api_lectura) == await _slugs(api_lectura, seguro=[])
+
+
+async def test_no_coverage_filter_includes_the_unprotected(api_lectura: AsyncClient) -> None:
+    assert "mercado-pago-vista" in await _slugs(api_lectura)
+
+
+async def test_an_unknown_coverage_is_rejected(api_lectura: AsyncClient) -> None:
+    assert (await api_lectura.get(RUTA, params={"seguro": "solo_ipab"})).status_code == 422
 
 
 # ─── Filtro: liquidez ─────────────────────────────────────────

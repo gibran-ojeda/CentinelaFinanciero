@@ -15,7 +15,8 @@ from httpx import AsyncClient
 
 from api.dependencies import ContextoMercado
 from api.services import cache
-from api.services.comparador import FiltrosComparador, FiltroSeguro, OrdenComparador
+from api.services.comparador import FiltrosComparador, OrdenComparador
+from domain.enums import TipoSeguro
 from domain.models import ParametrosFiscales, UmbralesBanderas
 
 
@@ -47,10 +48,26 @@ def test_different_filters_produce_different_keys() -> None:
         cache.llave(FiltrosComparador(plazo="91"), contexto),
         cache.llave(FiltrosComparador(sin_banderas=True), contexto),
         cache.llave(FiltrosComparador(orden=OrdenComparador.GAT), contexto),
-        cache.llave(FiltrosComparador(seguro=FiltroSeguro.SOLO_IPAB), contexto),
+        cache.llave(FiltrosComparador(seguros=frozenset({TipoSeguro.IPAB})), contexto),
         cache.llave(FiltrosComparador(monto=Decimal("1000")), contexto),
     }
     assert len(claves) == 6
+
+
+def test_a_multi_value_filter_hashes_independently_of_set_order() -> None:
+    """`str(frozenset)` no garantiza orden: sin ordenar, el cache no acertaría.
+
+    Dos peticiones con los mismos seguros marcados tienen que dar la misma
+    llave aunque los conjuntos se hayan construido en distinto orden.
+    """
+    contexto = _contexto()
+    uno = FiltrosComparador(seguros=frozenset({TipoSeguro.IPAB, TipoSeguro.PROSOFIPO}))
+    otro = FiltrosComparador(seguros=frozenset({TipoSeguro.PROSOFIPO, TipoSeguro.IPAB}))
+
+    assert cache.llave(uno, contexto) == cache.llave(otro, contexto)
+    assert cache.llave(uno, contexto) != cache.llave(
+        FiltrosComparador(seguros=frozenset({TipoSeguro.IPAB})), contexto
+    )
 
 
 @pytest.mark.parametrize("cambio", [{"udi": "9.00"}, {"inflacion": "5.00"}, {"retencion": "0.50"}])
