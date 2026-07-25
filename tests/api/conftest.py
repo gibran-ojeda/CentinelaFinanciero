@@ -49,8 +49,12 @@ async def api_admin(api: AsyncClient) -> AsyncClient:
 
 
 @pytest.fixture
-async def catalogo_cargado() -> None:
-    """Base con el catálogo y las tasas del seed, como en producción."""
+async def catalogo_cargado(real_db: None) -> None:
+    """Base con el catálogo y las tasas del seed, como en producción.
+
+    Depende de `real_db` de forma explícita: sin esa dependencia pytest podría
+    ordenarla antes y la carga acabaría contra la base por defecto.
+    """
     from cli.seed import DEFAULT_SEEDS_DIR, run_seed
     from cli.tasas import import_csv
 
