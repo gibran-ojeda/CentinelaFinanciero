@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import select
 
 from core.db import session_scope
-from domain.enums import EstadoJob, NivelCapitalizacion, Severidad, TipoBandera
+from domain.enums import EstadoJob, EstadoTasa, NivelCapitalizacion, Severidad, TipoBandera
 from domain.orm import Bandera, IndicadorFinanciero, Institucion, JobRun
 from scheduler.jobs.banderas import JOB_ID, banderas_recompute, recomputar
 
@@ -216,6 +216,75 @@ async def test_flags_record_the_period_of_their_source_data() -> None:
     await recomputar()
 
     assert (await _banderas_de("Finsus"))[0].periodo_dato == date(2026, 3, 31)
+
+
+# ─── Contexto de mercado ──────────────────────────────────────
+
+
+async def _publica(slug: str, tasa: str, *, gat: str | None = None, fecha: date) -> None:
+    from domain.enums import FuenteTasa
+    from domain.orm import Producto as ProductoORM
+    from domain.orm import Tasa
+
+    async with session_scope() as session:
+        producto_id = await session.scalar(select(ProductoORM.id).where(ProductoORM.slug == slug))
+        assert producto_id is not None
+        session.add(
+            Tasa(
+                producto_id=producto_id,
+                tasa_nominal=Decimal(tasa),
+                gat_nominal=Decimal(gat) if gat else None,
+                fecha_dato=fecha,
+                fuente=FuenteTasa.MANUAL,
+                estado=EstadoTasa.VIGENTE,
+            )
+        )
+
+
+async def test_an_inconsistent_published_gat_raises_its_flag() -> None:
+    """La regla existía y estaba probada, pero nada la alimentaba.
+
+    `evaluar_gat_inconsistente` recibía `gat_publicada=None` desde el job, así
+    que devolvía None siempre y la bandera 🟡 no podía salir en el producto.
+    """
+    await _indicadores("Finsus", imor=Decimal("1.0"))
+    await _publica("finsus-plazo-91", "9.00", gat="12.50", fecha=date(2026, 7, 24))
+
+    await recomputar()
+
+    banderas = await _banderas_de("Finsus")
+    assert [b.tipo for b in banderas] == [TipoBandera.GAT_INCONSISTENTE]
+    assert banderas[0].severidad is Severidad.AMARILLA
+
+
+async def test_a_consistent_gat_raises_nothing() -> None:
+    await _indicadores("Finsus", imor=Decimal("1.0"))
+    await _publica("finsus-plazo-91", "9.00", gat="8.90", fecha=date(2026, 7, 24))
+
+    await recomputar()
+
+    assert await _banderas_de("Finsus") == []
+
+
+async def test_the_market_median_uses_only_the_current_rate() -> None:
+    """`tasas` es append-only: el histórico no es mercado.
+
+    Con un join directo contra la tabla, la observación vieja entraba en la
+    mediana y `mejor_oferta` elegía el máximo de todos los tiempos en vez del
+    vigente — bastaba una bajada de tasa para que la institución pareciera
+    seguir ofreciendo la de hace meses.
+    """
+    await _indicadores("Finsus", imor=Decimal("4.0"))
+    await _publica("finsus-plazo-91", "30.00", fecha=date(2026, 1, 15))
+    await _publica("finsus-plazo-91", "7.00", fecha=date(2026, 7, 24))
+
+    await recomputar()
+
+    tipos = {b.tipo for b in await _banderas_de("Finsus")}
+    # Con la tasa vigente (7%) no hay exceso sobre el mercado; con la histórica
+    # (30%) habría saltado la compuesta roja y habría tapado la amarilla.
+    assert TipoBandera.RED_FLAG_TASA not in tipos
+    assert TipoBandera.IMOR in tipos
 
 
 # ─── Job y gates ──────────────────────────────────────────────
