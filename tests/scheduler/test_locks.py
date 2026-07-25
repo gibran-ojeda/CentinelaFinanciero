@@ -32,7 +32,7 @@ async def test_claim_tick_returns_false_without_redis() -> None:
 
 
 def test_lock_key_is_namespaced() -> None:
-    assert locks.lock_key("heartbeat") == "brujula:lock:heartbeat"
+    assert locks.lock_key("heartbeat") == "centinela:lock:heartbeat"
 
 
 @pytest.mark.requires_docker

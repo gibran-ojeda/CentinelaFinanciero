@@ -33,13 +33,13 @@ class Settings(BaseSettings):
 
     # ─── Entorno ──────────────────────────────────────────────
     environment: Environment = "dev"
-    app_name: str = "brujula-financiera"
+    app_name: str = "centinela-financiero"
 
     # ─── PostgreSQL ───────────────────────────────────────────
     postgres_host: str = "127.0.0.1"
     postgres_port: int = 5433
-    postgres_db: str = "brujula"
-    postgres_user: str = "brujula"
+    postgres_db: str = "centinela"
+    postgres_user: str = "centinela"
     postgres_password: SecretStr = SecretStr("")
     db_pool_size: int = 10
     db_max_overflow: int = 5

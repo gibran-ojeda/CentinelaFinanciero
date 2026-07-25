@@ -4,14 +4,14 @@
 # y puertos fuera del rango que ese stack ya ocupa (5432, 6379, 8000, 8001,
 # 8002, 8080, 8899). Ver §14 del foundation y la fase 06 del plan.
 #
-#   COMPOSE_PROJECT_NAME=brujula   →  contenedores y volúmenes `brujula-*`
+#   COMPOSE_PROJECT_NAME=centinela   →  contenedores y volúmenes `centinela-*`
 #   Todo publicado sólo en 127.0.0.1: Caddy (compartido, en network_mode host)
 #   los alcanza por loopback. La API nunca se expone a internet.
 
-name: brujula
+name: centinela
 
 x-app-image: &app-image
-  image: brujula:latest
+  image: centinela:latest
   build:
     context: .
     dockerfile: docker/app/Dockerfile
@@ -27,8 +27,8 @@ x-app-env: &app-env
   ENVIRONMENT: ${ENVIRONMENT:-dev}
   POSTGRES_HOST: db
   POSTGRES_PORT: 5432
-  POSTGRES_DB: ${POSTGRES_DB:-brujula}
-  POSTGRES_USER: ${POSTGRES_USER:-brujula}
+  POSTGRES_DB: ${POSTGRES_DB:-centinela}
+  POSTGRES_USER: ${POSTGRES_USER:-centinela}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatorio}
   REDIS_HOST: redis
   REDIS_PORT: 6379
@@ -38,18 +38,18 @@ x-app-env: &app-env
 services:
   db:
     image: postgres:16
-    container_name: brujula-db
+    container_name: centinela-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-brujula}
-      POSTGRES_USER: ${POSTGRES_USER:-brujula}
+      POSTGRES_DB: ${POSTGRES_DB:-centinela}
+      POSTGRES_USER: ${POSTGRES_USER:-centinela}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatorio}
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-brujula} -d ${POSTGRES_DB:-brujula}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-centinela} -d ${POSTGRES_DB:-centinela}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -58,7 +58,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: brujula-redis
+    container_name: centinela-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
@@ -74,7 +74,7 @@ services:
 
   api:
     <<: [*app-image, *logging]
-    container_name: brujula-api
+    container_name: centinela-api
     restart: unless-stopped
     command: ["python", "-m", "api"]
     environment:
@@ -122,10 +122,10 @@ services:
 
 volumes:
   pgdata:
-    name: brujula-pgdata
+    name: centinela-pgdata
   redisdata:
-    name: brujula-redisdata
+    name: centinela-redisdata
 
 networks:
   default:
-    name: brujula-net
+    name: centinela-net

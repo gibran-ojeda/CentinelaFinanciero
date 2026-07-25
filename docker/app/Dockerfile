@@ -1,4 +1,4 @@
-# Imagen única `brujula:latest`. Los servicios (api, scheduler, cli) se
+# Imagen única `centinela:latest`. Los servicios (api, scheduler, cli) se
 # diferencian sólo por el `command` del compose — build una vez, deploy N.
 FROM python:3.12-slim
 
@@ -24,7 +24,7 @@ COPY alembic.ini ./
 COPY alembic/ ./alembic/
 
 # Usuario sin privilegios: nada aquí necesita root en runtime.
-RUN useradd --create-home --uid 10001 brujula && chown -R brujula:brujula /app
-USER brujula
+RUN useradd --create-home --uid 10001 centinela && chown -R centinela:centinela /app
+USER centinela
 
 CMD ["python", "-m", "api"]

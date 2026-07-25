@@ -40,8 +40,8 @@ from core.settings import settings
 
 log = get_logger(__name__)
 
-LOCK_PREFIX = "brujula:lock:"
-TICK_PREFIX = "brujula:tick:"
+LOCK_PREFIX = "centinela:lock:"
+TICK_PREFIX = "centinela:tick:"
 
 # Borra la clave sólo si sigue siendo nuestra. KEYS[1]=clave, ARGV[1]=token.
 _RELEASE_SCRIPT = """

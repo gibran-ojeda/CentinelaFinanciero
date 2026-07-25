@@ -110,12 +110,12 @@ class TestConRedisReal:
         """No puede llevarse por delante los locks del scheduler."""
         from core import redis
 
-        await redis.set("brujula:lock:heartbeat", "token")
+        await redis.set("centinela:lock:heartbeat", "token")
         await cache.guardar(cache.llave(FiltrosComparador(), _contexto()), "{}")
 
         await cache.invalidar()
 
-        assert await redis.get("brujula:lock:heartbeat") == "token"
+        assert await redis.get("centinela:lock:heartbeat") == "token"
 
     async def test_invalidating_an_empty_cache_is_harmless(self) -> None:
         assert await cache.invalidar() == 0

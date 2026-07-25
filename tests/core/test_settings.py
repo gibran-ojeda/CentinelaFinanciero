@@ -16,11 +16,11 @@ def test_database_url_is_async_dsn() -> None:
     s = Settings(
         postgres_host="db",
         postgres_port=5433,
-        postgres_db="brujula",
-        postgres_user="brujula",
+        postgres_db="centinela",
+        postgres_user="centinela",
         postgres_password=SecretStr("s3cr3t"),
     )
-    assert s.database_url == "postgresql+asyncpg://brujula:s3cr3t@db:5433/brujula"
+    assert s.database_url == "postgresql+asyncpg://centinela:s3cr3t@db:5433/centinela"
 
 
 def test_redis_url_omits_auth_when_no_password() -> None:
