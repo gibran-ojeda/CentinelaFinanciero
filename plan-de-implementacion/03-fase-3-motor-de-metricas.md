@@ -8,7 +8,7 @@ Toda la matemática del producto como **funciones puras exhaustivamente testeada
 
 `src/metrics/` — módulo de funciones puras (entradas y salidas como `Decimal` / modelos pydantic; nada de floats para dinero):
 
-- `fiscal.py` — tratamiento ISR por tipo de instrumento (§4.2 del foundation): retención sobre **capital** (~0.50% anual, parametrizada por `parametros_fiscales.tasa_retencion_capital`) para CETES/BONOS/BONDDIA/PRLV/SOFIPOs; retención sobre **ganancia** para fondos de deuda; caso especial UDIBONOS (ajuste inflacionario no gravado hasta vencimiento en ciertos esquemas). Expone `retencion_isr(instrumento, monto, tasa, plazo_dias, params) -> Decimal` y la nota fiscal legible que la calculadora debe mostrar (§6).
+- `fiscal.py` — tratamiento ISR por tipo de instrumento (§4.2 del foundation): retención sobre **capital** (**0.90% anual** en 2026, parametrizada por `parametros_fiscales.tasa_retencion_capital`) para CETES/BONOS/BONDDIA/PRLV/SOFIPOs **y fondos de deuda** — el art. 87 de la LISR remite al régimen de capital del art. 54, no al de ganancia; caso especial UDIBONOS (ajuste inflacionario no gravado hasta vencimiento en ciertos esquemas). Prorrateo sobre base de **360 días**. Expone `retencion_isr(instrumento, monto, tasa, plazo_dias, params) -> Decimal` y la nota fiscal legible que la calculadora debe mostrar (§6).
 - `ten.py` — Tasa Efectiva Neta: TNA menos el efecto de la retención aplicable, anualizada por plazo. `ten(tasa_nominal, instrumento, plazo_dias, params) -> Decimal`.
 - `gat.py` — equivalente GAT calculado (§4.4) para instrumentos que no la publican: rendimiento anual real después de retenciones y comisiones. Además `gat_inconsistente(gat_publicada, tasa_nominal, umbral_pp) -> bool` para la bandera compuesta de §5.2.
 - `real.py` — ganancia real (§4.5): `desglose_cascada(monto, tasa_nominal, instrumento, plazo_dias, inflacion_anual, params) -> DesgloseCascada` con los 5 conceptos: rendimiento bruto, ISR retenido, rendimiento neto, efecto inflación, ganancia real.
@@ -26,7 +26,7 @@ Toda la matemática del producto como **funciones puras exhaustivamente testeada
 2. Implementar `ten.py`, `gat.py`, `real.py`, `coverage.py`.
 3. Implementar `flags.py` con las reglas individuales, luego las compuestas, luego la resolución de prioridad.
 4. Tests (la parte más importante de la fase):
-   - **Los ejemplos numéricos del foundation son tests obligatorios**: §4.5 ($100,000 al 7.5% nominal → TEN ≈ 7.0% → ganancia neta $7,000; inflación 4.5% → ganancia real ≈ $2,500) y la narrativa de §6 ("de $1,000 brutos: $50 impuestos, $450 inflación, $500 real").
+   - **Los ejemplos numéricos del foundation son tests obligatorios**: §4.5 ($100,000 al 7.5% nominal → TEN 6.60% → ganancia neta $6,600; inflación 4.5% → ganancia real $2,100) y la narrativa de §6 ("de $1,000 brutos: $120 impuestos, $600 inflación, $280 real"). Ambos con la retención de 0.90% vigente en 2026.
    - Casos borde fiscales: UDIBONOS, plazos < 1 año anualizados, monto en el límite de retención.
    - Property tests (hypothesis): monotonicidad (más tasa nominal ⇒ más TEN, ceteris paribus; más inflación ⇒ menos ganancia real), la cascada siempre suma (bruto = ISR + inflación + real ± redondeo documentado), banderas nunca emiten compuesta e individual juntas.
    - Matriz de banderas: un caso por celda de las tablas de §5.1 (sano / atención / alerta) y uno por combinación de §5.2.

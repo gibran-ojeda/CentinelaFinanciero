@@ -90,7 +90,7 @@ Instituciones que operan 100% digital o con infraestructura ligera, con licencia
 
 | Institución | Origen / Grupo | Estatus |
 |---|---|---|
-| **Nu México** | Nubank (Brasil) | Licencia bancaria otorgada abril 2025; inicio de operaciones como banco en proceso |
+| **Nu México** | Nubank (Brasil) | Licencia bancaria otorgada abril 2025; **operando como banco desde 2026** con cobertura IPAB. Buena parte del mercado —incluidos comparadores como tasas.mx— la sigue listando como SOFIPO y le atribuye cobertura PROSOFIPO de ~$220 mil en vez de los ~$3.5M del IPAB |
 | **Revolut** | Revolut (Reino Unido) | Licencia CNBV otorgada oct. 2025; fase beta nov. 2025, lanzamiento masivo 2026 |
 | **Uala** | Uala (Argentina) | Licencia bancaria activa en México |
 | **OpenBank** | Grupo Santander | Brazo digital de Santander; opera desde feb. 2025 con licencia bancaria |
@@ -150,13 +150,33 @@ TNA descontando el tratamiento fiscal correspondiente **por tipo de instrumento*
 
 | Instrumento | Tratamiento ISR (persona física residente) |
 |---|---|
-| CETES / BONOS / BONDDIA | Retención del ~0.50% anual sobre el capital (tasa sobre capital, no sobre rendimiento) |
-| PRLV bancario | Retención del ~0.50% anual sobre el capital |
-| SOFIPOs | Retención del ~0.50% anual sobre el capital |
-| Fondos de inversión de deuda | Retención sobre ganancia; varía según fondo y horizonte |
+| CETES / BONOS / BONDDIA | Retención del **0.90% anual sobre el capital** (tasa sobre capital, no sobre rendimiento) |
+| PRLV bancario | Retención del **0.90% anual sobre el capital** |
+| SOFIPOs | Retención del **0.90% anual sobre el capital** |
+| Fondos de inversión de deuda | Retención del **0.90% anual sobre el capital**, igual que el resto — no sobre la ganancia |
 | UDIBONOS | La ganancia por inflación (ajuste UDI) no causa ISR hasta el vencimiento en algunos esquemas |
 
-> La tasa de retención sobre capital es la vigente al momento de publicación de este documento y puede cambiar por decreto. La plataforma debe actualizarla cuando haya modificaciones fiscales y dejar visible la fecha de referencia.
+**Tasa vigente: 0.90% anual.** La fija el art. 24 de la Ley de Ingresos de la
+Federación para 2026, publicada en el DOF el 7 de noviembre de 2025 y vigente
+desde el 1 de enero de 2026. Sustituye al 0.50% del ejercicio 2025 — un
+aumento del 80% que resta unos 0.4 puntos a la TEN de todo instrumento de
+deuda. La tasa cambia por decreto cada ejercicio, así que se almacena como
+parámetro fechado (`parametros_fiscales`) y no como constante.
+
+**Base de prorrateo: 360 días, no 365.** La regla de la Resolución Miscelánea
+Fiscal expresa la retención diaria como `0.00139% × días`, que es exactamente
+`0.50% / 360` con la tasa del ejercicio anterior. La base de día comercial es
+la que reproduce las cifras que efectivamente retienen las instituciones.
+
+**Los fondos de deuda retienen sobre capital, no sobre ganancia.** El art. 87
+de la LISR releva al fondo de la obligación de retener y remite al régimen del
+art. 54, que es el mismo de capital que aplica a los demás instrumentos. La
+distinción que hacía la versión anterior de esta tabla no existe en la ley.
+
+> La retención es **provisional y acreditable**: no es el impuesto final. En la
+> declaración anual se acredita contra el ISR que resulte de los intereses
+> reales. La plataforma muestra la retención porque es lo que el usuario ve
+> descontado en su estado de cuenta, y lo dice con esas palabras.
 
 La TEN es la métrica principal de comparación. Permite que el usuario vea cuánto **realmente se queda en su bolsillo** por cada instrumento.
 
@@ -180,10 +200,11 @@ El número más honesto que se le puede mostrar a un usuario:
 Ganancia Real = Monto invertido × TEN − (Monto invertido × Inflación INPC anual vigente)
 ```
 
-Ejemplo con $100,000 MXN:
-- CETE 28d al 7.5% nominal → TEN ≈ 7.0% → Ganancia neta: $7,000
-- Inflación INPC: 4.5%
-- **Ganancia real: ~$2,500** (lo que realmente creció el poder adquisitivo)
+Ejemplo con $100,000 MXN a un año:
+- CETE al 7.5% nominal → TEN = **6.60%** → Ganancia neta: **$6,600**
+  (bruto $7,500 − ISR $900, que es el 0.90% del capital)
+- Inflación INPC: 4.5% → **$4,500**
+- **Ganancia real: $2,100** (lo que realmente creció el poder adquisitivo)
 
 Este cálculo debe estar disponible en la calculadora y mostrarse visualmente de forma clara: cuánto ganas, cuánto se va a impuestos, cuánto "se come" la inflación.
 
@@ -300,7 +321,12 @@ La calculadora no es un extra — es una de las herramientas centrales de la pla
 4. **Efecto inflación** — cuánto "se come" el INPC en ese período
 5. **Ganancia real** — el número final: cuánto creció tu poder adquisitivo
 
-> La calculadora debe mostrar estos 5 conceptos visualmente en cascada, no como tabla. El usuario debe ver claramente que "de $1,000 de ganancia bruta, $50 son impuestos, $450 son inflación, y $500 son ganancia real tuya."
+> La calculadora debe mostrar estos 5 conceptos visualmente en cascada, no como tabla. El usuario debe ver claramente que "de $1,000 de ganancia bruta, $120 son impuestos, $600 son inflación, y $280 son ganancia real tuya."
+>
+> Esas proporciones salen del mismo escenario de §4.5 (7.5% nominal, 4.5% de
+> inflación) escalado a $1,000 de rendimiento bruto. Con la retención de 2025
+> la ganancia real de ese escenario era del 50% del bruto; con la de 2026 es
+> del 28%. La cascada existe justamente para que ese cambio se vea.
 
 **Nota fiscal importante:** El tratamiento de impuestos varía por instrumento (ver sección 4.2). La calculadora debe aplicar el correcto automáticamente según el instrumento seleccionado, y mostrar una nota breve de qué tasa de retención se está usando y cuándo fue actualizada.
 
@@ -552,6 +578,8 @@ centinela-financiero/
 ---
 
 *El plan ejecutable de esta fundación vive en [`plan-de-implementacion/`](plan-de-implementacion/00-overview.md).*
+
+*Versión 1.5 — Correcciones fiscales verificadas contra fuente primaria durante la implementación de las fases 1–4: retención al **0.90%** (art. 24 LIF 2026, DOF 7-nov-2025), base de prorrateo de **360 días** (RMF), los fondos de deuda retienen **sobre capital** (art. 87 LISR → régimen del art. 54), y actualización del estatus de Nu México. Los ejemplos numéricos de §4.5 y §6 se recalcularon en consecuencia.*
 
 *Versión 1.4 — Nombre de proyecto: **Centinela Financiero** (antes Brújula Financiera). Cambios: rebrand completo —nombre, tagline, identificadores de infraestructura y dominio propuesto—; la decisión D1 se divide y su parte de dominio queda reabierta (D1b).*
 
