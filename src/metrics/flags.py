@@ -216,12 +216,187 @@ def evaluar_cobertura_seguro(
     )
 
 
+# ─── Banderas compuestas (§5.2) ───────────────────────────────
+
+
+def evaluar_no_recomendable(
+    indicadores: IndicadoresInstitucion, umbrales: UmbralesBanderas
+) -> Bandera | None:
+    """IMOR alto + ICAP bajo + captación creciendo agresivamente.
+
+    El patrón que describe §5.2: la institución no cobra lo que prestó, tiene
+    poco capital para absorberlo, y aun así capta cada vez más. Ninguno de los
+    tres indicadores por separado significa esto; los tres juntos sí.
+    """
+    imor, icap = indicadores.imor, indicadores.icap
+    crecimiento = indicadores.crecimiento_captacion_pct
+    if imor is None or icap is None or crecimiento is None:
+        return None
+
+    if not (
+        imor > umbrales.imor_roja
+        and icap < umbrales.icap_amarilla
+        and crecimiento > umbrales.crecimiento_captacion_pct
+    ):
+        return None
+
+    return _bandera(
+        indicadores,
+        TipoBandera.NO_RECOMENDABLE,
+        Severidad.ROJA,
+        f"Combinación de riesgo: morosidad del {imor}%, capitalización del {icap}% y "
+        f"crecimiento de captación del {crecimiento}%. Es el patrón de una "
+        f"institución que capta para cubrir deudas previas.",
+        compuesta=True,
+    )
+
+
+def evaluar_red_flag_tasa(
+    indicadores: IndicadoresInstitucion,
+    umbrales: UmbralesBanderas,
+    *,
+    tasa_ofrecida: Decimal | None,
+    mediana_mercado: Decimal | None,
+) -> Bandera | None:
+    """Tasa muy por encima del mercado + morosidad en alerta.
+
+    Una tasa alta no es sospechosa por sí sola: puede ser una institución
+    eficiente compitiendo. Lo es cuando coincide con problemas de cobranza,
+    porque entonces sugiere necesidad de liquidez y no eficiencia.
+    """
+    imor = indicadores.imor
+    if imor is None or tasa_ofrecida is None or mediana_mercado is None:
+        return None
+
+    exceso = tasa_ofrecida - mediana_mercado
+    if not (exceso > umbrales.tasa_sobre_mercado_pp and imor >= umbrales.imor_amarilla):
+        return None
+
+    return _bandera(
+        indicadores,
+        TipoBandera.RED_FLAG_TASA,
+        Severidad.ROJA,
+        f"Ofrece {tasa_ofrecida}% cuando la mediana del mercado a ese plazo es "
+        f"{mediana_mercado}%, y su morosidad ({imor}%) está en alerta. Una tasa "
+        f"muy por encima del mercado puede indicar necesidad de liquidez.",
+        compuesta=True,
+    )
+
+
+def evaluar_gat_inconsistente(
+    indicadores: IndicadoresInstitucion,
+    umbrales: UmbralesBanderas,
+    *,
+    gat_publicada: Decimal | None,
+    tasa_nominal: Decimal | None,
+) -> Bandera | None:
+    """GAT publicada que no cuadra con la tasa nominal. Amarilla, no roja."""
+    from metrics.gat import gat_inconsistente
+
+    if tasa_nominal is None:
+        return None
+    if not gat_inconsistente(gat_publicada, tasa_nominal, umbrales.gat_inconsistencia_pp):
+        return None
+
+    return _bandera(
+        indicadores,
+        TipoBandera.GAT_INCONSISTENTE,
+        Severidad.AMARILLA,
+        f"La GAT publicada ({gat_publicada}%) se aleja más de "
+        f"{umbrales.gat_inconsistencia_pp} puntos de la tasa nominal ({tasa_nominal}%). "
+        f"Conviene revisar comisiones o condiciones del producto.",
+        compuesta=True,
+    )
+
+
+# ─── Resolución de prioridad ──────────────────────────────────
+
+#: Orden de severidad para desempatar. Las compuestas rojas mandan.
+_PESO_SEVERIDAD = {Severidad.ROJA: 2, Severidad.AMARILLA: 1}
+
+
+def resolver_prioridad(banderas: list[Bandera]) -> list[Bandera]:
+    """Aplica la nota de diseño de §5.2: se muestra sólo la más severa.
+
+    Si hay una compuesta roja, se emite **sólo** esa: mostrarla junto a las
+    individuales que la componen sería repetir el mismo hallazgo tres veces y
+    dar la impresión de tres problemas donde hay uno.
+
+    Excepción deliberada: `SIN_COBERTURA` sobrevive siempre. No es un hallazgo
+    sobre la salud de la institución sino un hecho estructural sobre la figura
+    regulatoria (§5.3), y el usuario necesita verlo aunque haya algo más grave.
+    """
+    if not banderas:
+        return []
+
+    permanentes = [b for b in banderas if b.tipo is TipoBandera.SIN_COBERTURA]
+    evaluadas = [b for b in banderas if b.tipo is not TipoBandera.SIN_COBERTURA]
+
+    compuestas_rojas = [b for b in evaluadas if b.compuesta and b.severidad is Severidad.ROJA]
+    if compuestas_rojas:
+        return [*compuestas_rojas, *permanentes]
+
+    if not evaluadas:
+        return permanentes
+
+    maxima = max(_PESO_SEVERIDAD[b.severidad] for b in evaluadas)
+    return [*[b for b in evaluadas if _PESO_SEVERIDAD[b.severidad] == maxima], *permanentes]
+
+
+def evaluar_banderas(
+    indicadores: IndicadoresInstitucion,
+    umbrales: UmbralesBanderas,
+    *,
+    tipo_seguro: TipoSeguro | None = None,
+    tasa_ofrecida: Decimal | None = None,
+    mediana_mercado: Decimal | None = None,
+    gat_publicada: Decimal | None = None,
+    tasa_nominal: Decimal | None = None,
+) -> list[Bandera]:
+    """Punto de entrada del motor: evalúa todo y resuelve prioridad.
+
+    `mediana_mercado` es el contexto de mercado que menciona §5.2 — lo calcula
+    quien llama, porque depende del conjunto de productos comparables y no de
+    esta institución.
+    """
+    candidatas = evaluar_individuales(indicadores, umbrales)
+
+    compuestas = [
+        evaluar_no_recomendable(indicadores, umbrales),
+        evaluar_red_flag_tasa(
+            indicadores,
+            umbrales,
+            tasa_ofrecida=tasa_ofrecida,
+            mediana_mercado=mediana_mercado,
+        ),
+        evaluar_gat_inconsistente(
+            indicadores,
+            umbrales,
+            gat_publicada=gat_publicada,
+            tasa_nominal=tasa_nominal,
+        ),
+    ]
+    candidatas.extend(b for b in compuestas if b is not None)
+
+    if tipo_seguro is not None:
+        sin_cobertura = evaluar_cobertura_seguro(indicadores, tipo_seguro)
+        if sin_cobertura is not None:
+            candidatas.append(sin_cobertura)
+
+    return resolver_prioridad(candidatas)
+
+
 __all__ = [
     "evaluar_apalancamiento",
+    "evaluar_banderas",
     "evaluar_cobertura_cartera",
     "evaluar_cobertura_seguro",
+    "evaluar_gat_inconsistente",
     "evaluar_icap",
     "evaluar_imor",
     "evaluar_individuales",
     "evaluar_nicap",
+    "evaluar_no_recomendable",
+    "evaluar_red_flag_tasa",
+    "resolver_prioridad",
 ]

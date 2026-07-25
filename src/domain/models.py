@@ -153,7 +153,10 @@ class UmbralesBanderas(DomainModel):
     cobertura_roja: Decimal = Decimal("70.0")
     gat_inconsistencia_pp: Decimal = Decimal("1.5")
     #: Crecimiento de captación a partir del cual se considera agresivo (§5.2).
-    crecimiento_captacion_agresivo_pct: Decimal = Decimal("50.0")
+    #: El nombre coincide con la clave `umbral_crecimiento_captacion_pct` del
+    #: ConfigStore, sin el prefijo: construir este objeto desde `effective` es
+    #: mapeo directo, sin tabla de traducción que se pueda desincronizar.
+    crecimiento_captacion_pct: Decimal = Decimal("50.0")
     #: Cuántos puntos porcentuales sobre la mediana del mercado disparan la
     #: sospecha de "tasa de desesperación" (§5.2).
     tasa_sobre_mercado_pp: Decimal = Decimal("3.0")
