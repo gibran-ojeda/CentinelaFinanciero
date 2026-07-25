@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -44,10 +45,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="valida y reporta sin escribir nada",
     )
 
+    config = sub.add_parser("config", help="inspección y ajuste del ConfigStore")
+    config_sub = config.add_subparsers(dest="subcomando", required=True)
+
+    listar = config_sub.add_parser("list", help="valor efectivo de cada parámetro")
+    listar.add_argument("--grupo", default=None, help="banderas | fiscal | revision | scheduler")
+
+    fijar = config_sub.add_parser("set", help="sobrescribe un parámetro en caliente")
+    fijar.add_argument("key")
+    fijar.add_argument("valor")
+    # El motivo es obligatorio: sin él, el historial de config_versions no
+    # sirve para reconstruir por qué una institución salió marcada (§19).
+    fijar.add_argument("--motivo", required=True, help="por qué se cambia (queda en el historial)")
+    fijar.add_argument("--actor", default=os.environ.get("USER", "cli"), help="quién lo cambia")
+
+    historial = config_sub.add_parser("history", help="historial de cambios de un parámetro")
+    historial.add_argument("key")
+
     return parser
 
 
 async def _run(args: argparse.Namespace) -> int:
+    from cli import config as config_module
     from cli import seed as seed_module
     from cli import tasas as tasas_module
 
@@ -65,6 +84,19 @@ async def _run(args: argparse.Namespace) -> int:
             # Una fila rechazada es un fallo operativo: el CSV traía un dato
             # que no se pudo cargar y alguien tiene que enterarse.
             return 1 if resultado.errores else 0
+        case "config":
+            match args.subcomando:
+                case "list":
+                    print(await config_module.listar(args.grupo))
+                case "set":
+                    print(
+                        await config_module.fijar(
+                            args.key, args.valor, motivo=args.motivo, actor=args.actor
+                        )
+                    )
+                case "history":
+                    print(await config_module.historial(args.key))
+            return 0
         case _:  # pragma: no cover — argparse ya lo impide
             return 2
 
