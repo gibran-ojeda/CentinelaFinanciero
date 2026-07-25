@@ -57,8 +57,8 @@ def test_deep_recursion_is_bounded() -> None:
 
 
 def test_json_renderer_in_production(capsys: Any) -> None:
-    from core.settings import Settings
     import core.logging as logging_module
+    from core.settings import Settings
 
     original = logging_module.settings
     logging_module.settings = Settings(environment="prod", log_level="INFO")  # type: ignore[misc]

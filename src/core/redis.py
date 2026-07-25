@@ -58,11 +58,15 @@ async def ping() -> bool:
 async def get(key: str) -> str | None:
     """Lectura degradable: un Redis caído se comporta como cache miss."""
     try:
-        value: str | None = await get_client().get(key)
+        # El tipo declarado por redis-py es `bytes | str | None` porque no sabe
+        # que el cliente se creó con decode_responses=True.
+        raw: bytes | str | None = await get_client().get(key)
     except (RedisError, OSError) as exc:
         log.warning("redis_get_failed", key=key, error=str(exc))
         return None
-    return value
+    if isinstance(raw, bytes):
+        return raw.decode("utf-8")
+    return raw
 
 
 async def set(key: str, value: str, *, ttl_seconds: int | None = None) -> bool:
