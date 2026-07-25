@@ -13,7 +13,13 @@ from core.db import session_scope
 from domain.enums import EstadoRevision, EstadoTasa
 from domain.orm import Producto, RevisionTasa, Tasa
 
-pytestmark = [pytest.mark.requires_docker, pytest.mark.usefixtures("comparador_poblado")]
+#: `sin_modo_demo` porque lo que se prueba aquí es el pipeline de publicación:
+#: qué llega al comparador y qué no. Con el modo encendido, una tasa pendiente
+#: aparece por diseño y ya no se distinguiría de una que llegó por aprobación.
+pytestmark = [
+    pytest.mark.requires_docker,
+    pytest.mark.usefixtures("comparador_poblado", "sin_modo_demo"),
+]
 
 
 async def _producto_id(slug: str) -> int:

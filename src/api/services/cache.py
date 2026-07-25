@@ -55,6 +55,10 @@ def llave(filtros: FiltrosComparador, contexto: ContextoMercado) -> str:
         "udi": str(contexto.valor_udi),
         "inflacion": str(contexto.inflacion_anual),
         "retencion": str(contexto.params_fiscales.tasa_retencion_capital),
+        # Apagar el modo demo cambia qué filas existen, no sólo cómo se
+        # presentan: sin esto, el cache seguiría sirviendo el catálogo con
+        # instituciones ficticias después de retirarlas.
+        "demo": contexto.modo_demo,
     }
     huella = hashlib.sha256(
         json.dumps(partes, sort_keys=True, ensure_ascii=False).encode()

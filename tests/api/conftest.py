@@ -16,6 +16,48 @@ READ_KEY = settings.api_read_key.get_secret_value()
 ADMIN_KEY = settings.api_admin_key.get_secret_value()
 
 
+async def _modo_demo(activo: bool) -> None:
+    from core.config_store import effective, set_value
+
+    await set_value("mostrar_datos_demo", "true" if activo else "false", actor="test")
+    await effective.refresh()
+
+
+@pytest.fixture
+async def sin_modo_demo(real_db: None) -> AsyncIterator[None]:
+    """Catálogo estable: sólo lo verificado.
+
+    Con el modo demo encendido —el default— el comparador publica también las
+    treinta tasas que el seed dejó en `PENDIENTE_REVISION`. Eso es correcto en
+    producto, pero convierte el catálogo en algo que cambia cada vez que se
+    añade una tasa al seed, y hay tests que afirman conjuntos exactos porque
+    lo que prueban es qué entra y qué sale, no cuántas filas hay.
+
+    Depende de `real_db` de forma explícita porque escribe en la base: sin esa
+    dependencia pytest puede ordenarla antes de que el engine apunte al
+    contenedor, y la escritura acaba contra la base por defecto.
+
+    Se restaura al salir: `effective` es un singleton de proceso, y dejarlo
+    apagado haría que el resto de la sesión dependiera del orden de ejecución.
+    """
+    await _modo_demo(False)
+    try:
+        yield
+    finally:
+        await _modo_demo(True)
+
+
+@pytest.fixture
+async def con_modo_demo(sin_modo_demo: None) -> AsyncIterator[None]:
+    """Vuelve a encenderlo para los tests que prueban el modo en sí.
+
+    Se apila sobre `sin_modo_demo` en vez de sustituirlo para que haya un solo
+    punto de restauración.
+    """
+    await _modo_demo(True)
+    yield
+
+
 @pytest.fixture
 def read_key() -> str:
     return READ_KEY

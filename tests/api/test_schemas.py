@@ -32,8 +32,28 @@ def test_provenance_requires_a_date_and_a_source() -> None:
 
 def test_source_url_is_the_only_optional_part_of_provenance() -> None:
     """Banxico se identifica por serie; no toda fuente tiene URL de página."""
-    procedencia = Procedencia(fecha_dato="2026-07-23", fuente="MANUAL")  # type: ignore[arg-type]
+    procedencia = Procedencia(
+        fecha_dato="2026-07-23",  # type: ignore[arg-type]
+        fuente="MANUAL",  # type: ignore[arg-type]
+        estado="VIGENTE",  # type: ignore[arg-type]
+        verificada=True,
+    )
     assert procedencia.fuente_url is None
+
+
+def test_provenance_requires_saying_whether_the_rate_is_verified() -> None:
+    """No hay default: publicar una tasa obliga a declarar si está confirmada.
+
+    Un default de `True` haría que olvidar el campo afirmara algo falso, y uno
+    de `False` marcaría como dudosos los datos buenos. Ninguno de los dos es
+    aceptable, así que el campo es obligatorio.
+    """
+    with pytest.raises(ValidationError):
+        Procedencia(  # type: ignore[call-arg]
+            fecha_dato="2026-07-23",  # type: ignore[arg-type]
+            fuente="MANUAL",  # type: ignore[arg-type]
+            estado="VIGENTE",  # type: ignore[arg-type]
+        )
 
 
 @pytest.mark.parametrize("respuesta", [RespuestaComparador, RespuestaCalculadora])

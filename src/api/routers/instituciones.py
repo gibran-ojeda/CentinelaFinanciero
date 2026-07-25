@@ -65,7 +65,9 @@ async def detalle(
     productos = sorted(
         institucion.productos, key=lambda p: (p.tipo.value, p.plazo_dias or 0, p.nombre)
     )
-    vigentes = await tasas_vigentes_por_producto(session, [p.id for p in productos])
+    vigentes = await tasas_vigentes_por_producto(
+        session, [p.id for p in productos], incluir_pendientes=contexto.modo_demo
+    )
 
     detalles: list[ProductoDetalle] = []
     for producto in productos:
@@ -132,6 +134,7 @@ async def detalle(
         estatus_regulatorio=institucion.estatus_regulatorio,
         url_sitio=institucion.url_sitio,
         activa=institucion.activa,
+        es_demostracion=institucion.es_demostracion,
         notas=institucion.notas,
         cobertura=cobertura_de(institucion, contexto.valor_udi),
         productos=detalles,

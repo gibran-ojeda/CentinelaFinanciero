@@ -102,7 +102,13 @@ class EstadoTasa(StrEnum):
 
     VIGENTE = "VIGENTE"
     PENDIENTE_REVISION = "PENDIENTE_REVISION"
-    """Fuera de tolerancia o sin verificar. **No se publica.**"""
+    """Fuera de tolerancia o sin verificar. **No se publica.**
+
+    Única excepción: el modo demostración (`mostrar_datos_demo`) las muestra
+    con `procedencia.verificada = false` para que un entorno recién levantado
+    no parezca vacío. Se amplía lo que se enseña, nunca lo que se afirma, y
+    una pendiente jamás desplaza a una VIGENTE del mismo producto.
+    """
 
     RECHAZADA = "RECHAZADA"
 

@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domain.enums import (
     CategoriaInstitucion,
+    EstadoTasa,
     FuenteTasa,
     Liquidez,
     NivelCapitalizacion,
@@ -48,11 +49,19 @@ class Esquema(BaseModel):
 
 
 class Procedencia(Esquema):
-    """De dónde salió un dato y cuándo. Acompaña a toda tasa."""
+    """De dónde salió un dato, cuándo, y si está confirmado."""
 
     fecha_dato: date = Field(description="Fecha a la que corresponde la observación")
     fuente: FuenteTasa
     fuente_url: str | None = None
+    estado: EstadoTasa
+    verificada: bool = Field(
+        description=(
+            "false significa que la tasa no se pudo confirmar contra la fuente oficial "
+            "de la institución. La UI está obligada a mostrarla como tal, nunca como "
+            "un dato confirmado."
+        )
+    )
 
 
 class GatSchema(Esquema):
@@ -91,6 +100,14 @@ class InstitucionResumen(Esquema):
     slug: str
     categoria: CategoriaInstitucion
     tipo_seguro: TipoSeguro
+    es_demostracion: bool = Field(
+        default=False,
+        description=(
+            "La institución es **ficticia**, sembrada para ilustrar el comportamiento "
+            "del producto. Distinto de una tasa sin verificar, que sí es de una "
+            "institución real: eso viaja en `procedencia.verificada`."
+        ),
+    )
 
 
 # ─── Comparador ───────────────────────────────────────────────
@@ -172,6 +189,7 @@ class DetalleInstitucion(Esquema):
     estatus_regulatorio: str | None
     url_sitio: str | None
     activa: bool
+    es_demostracion: bool = False
     notas: str | None
 
     cobertura: CoberturaSchema
@@ -251,6 +269,18 @@ class RespuestaFrescura(Esquema):
     """Obligación de §11: la fecha de cada dato, siempre visible."""
 
     fuentes: list[FrescuraFuente]
+    ultima_actualizacion: date | None = Field(
+        default=None,
+        description="La más reciente de todas las fuentes. La UI la muestra en la cabecera.",
+    )
+    modo_demo: bool = Field(
+        default=False,
+        description=(
+            "Si es true, el catálogo incluye instituciones ilustrativas y tasas sin "
+            "verificar. Se publica aquí para que el estado sea observable desde fuera "
+            "y no haya que leer los logs del servidor para saberlo."
+        ),
+    )
     generado_en: datetime
     todo_dentro_de_sla: bool
 

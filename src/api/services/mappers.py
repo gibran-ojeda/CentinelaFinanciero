@@ -18,6 +18,7 @@ from api.schemas import (
     Procedencia,
 )
 from domain import orm
+from domain.enums import EstadoTasa
 from domain.models import Bandera
 from metrics.coverage import Cobertura, resolver_cobertura
 from metrics.gat import Gat
@@ -30,6 +31,7 @@ def institucion_resumen(institucion: orm.Institucion) -> InstitucionResumen:
         slug=institucion.slug,
         categoria=institucion.categoria,
         tipo_seguro=institucion.tipo_seguro,
+        es_demostracion=institucion.es_demostracion,
     )
 
 
@@ -38,6 +40,11 @@ def procedencia(tasa: orm.Tasa) -> Procedencia:
         fecha_dato=tasa.fecha_dato,
         fuente=tasa.fuente,
         fuente_url=tasa.fuente_url,
+        estado=tasa.estado,
+        # Una sola definición de "verificada", aquí y no en cada router: es
+        # exactamente lo que significa el estado VIGENTE, y la UI no debería
+        # tener que conocer la máquina de estados para saber si marcar la fila.
+        verificada=tasa.estado is EstadoTasa.VIGENTE,
     )
 
 

@@ -100,12 +100,20 @@ async def test_published_rates_carry_provenance(api_lectura: AsyncClient) -> Non
         assert producto["procedencia"]["fuente"]
 
 
-async def test_unverified_rates_are_not_published(api_lectura: AsyncClient) -> None:
-    """Finsus sólo tiene tasas PENDIENTE_REVISION: no deben salir."""
+async def test_unverified_rates_are_marked_as_such(api_lectura: AsyncClient) -> None:
+    """Finsus sólo tiene tasas PENDIENTE_REVISION.
+
+    Con el modo demo encendido salen, pero ninguna se presenta como
+    confirmada. Que el detalle las muestre es deliberado: es la capa de
+    profundidad de §11, donde el usuario que llega hasta aquí quiere ver todo
+    lo que hay — siempre que se le diga qué es cada cosa.
+    """
     cuerpo = (await api_lectura.get(f"/api/v1/instituciones/{await _id_de('Finsus')}")).json()
 
-    assert all(p["tasa_nominal"] is None for p in cuerpo["productos"])
-    assert all(p["procedencia"] is None for p in cuerpo["productos"])
+    con_tasa = [p for p in cuerpo["productos"] if p["procedencia"] is not None]
+    assert con_tasa, "el seed trae tasas pendientes de Finsus"
+    assert all(p["procedencia"]["verificada"] is False for p in con_tasa)
+    assert all(p["procedencia"]["estado"] == "PENDIENTE_REVISION" for p in con_tasa)
 
 
 async def test_products_without_a_rate_still_appear(api_lectura: AsyncClient) -> None:

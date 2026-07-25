@@ -20,9 +20,15 @@ from domain.orm import Bandera, Institucion
 
 #: `real_redis` da un Redis efímero y vacío por test. Sin él, el cache del
 #: comparador serviría a un test la respuesta que dejó el anterior.
+#:
+#: `sin_modo_demo` apaga el modo demostración para todo el módulo: los tests de
+#: filtros afirman conjuntos exactos, y con el modo encendido entran las 30
+#: tasas sin verificar del seed y el catálogo deja de ser estable. Lo que se
+#: prueba aquí es que cada filtro incluya y excluya lo que debe, no cuántas
+#: filas hay. El modo demo tiene su propia sección, que lo enciende.
 pytestmark = [
     pytest.mark.requires_docker,
-    pytest.mark.usefixtures("comparador_poblado", "real_redis"),
+    pytest.mark.usefixtures("comparador_poblado", "real_redis", "sin_modo_demo"),
 ]
 
 RUTA = "/api/v1/comparador"
@@ -35,9 +41,21 @@ SLUGS_VERIFICADOS = frozenset({"cetes-28", "cetes-91", "cetes-182", "cetes-364",
 #: banderas tenga casos que evaluar mientras la CNBV no llega (fase 8).
 SLUGS_DEMO = frozenset({"ahorra-mas-plazo-364", "alcancia-plazo-182"})
 
-#: Todo lo que el seed publica. El resto de las filas del comparador de prueba
-#: las añade `comparador_poblado`.
+#: Todo lo que el seed publica.
 SLUGS_DEL_SEED = SLUGS_VERIFICADOS | SLUGS_DEMO
+
+#: Tasas VIGENTE que añade `comparador_poblado` sobre instituciones reales,
+#: para que cada filtro de §7 tenga algo que incluir y algo que excluir.
+SLUGS_FIXTURE = frozenset(
+    {
+        "finsus-plazo-91",
+        "klar-vista",
+        "nu-cajita-turbo",
+        "nu-plazo-91",
+        "mercado-pago-vista",
+        "libertad-plazo-364",
+    }
+)
 
 
 async def _slugs(api: AsyncClient, **params: object) -> set[str]:
@@ -70,15 +88,107 @@ async def test_requires_authentication(api: AsyncClient) -> None:
 
 
 async def test_returns_only_publishable_rates(api_lectura: AsyncClient) -> None:
-    """El catálogo tiene 40 productos; sólo salen los que tienen tasa vigente."""
-    assert await _slugs(api_lectura) == SLUGS_DEL_SEED | {
-        "finsus-plazo-91",
-        "klar-vista",
-        "nu-cajita-turbo",
-        "nu-plazo-91",
-        "mercado-pago-vista",
-        "libertad-plazo-364",
-    }
+    """El catálogo tiene 42 productos; sólo salen los que tienen tasa vigente."""
+    assert await _slugs(api_lectura) == SLUGS_VERIFICADOS | SLUGS_FIXTURE
+
+
+# ─── Modo demostración ────────────────────────────────────────
+
+
+@pytest.mark.usefixtures("con_modo_demo")
+async def test_demo_mode_adds_the_illustrative_and_unverified_rows(
+    api_lectura: AsyncClient,
+) -> None:
+    slugs = await _slugs(api_lectura)
+
+    assert SLUGS_DEMO <= slugs
+    assert "hey-vista" in slugs  # institución real con tasa sin confirmar
+    assert SLUGS_VERIFICADOS | SLUGS_FIXTURE <= slugs
+
+
+@pytest.mark.usefixtures("con_modo_demo")
+async def test_demo_rows_are_always_marked_as_such(api_lectura: AsyncClient) -> None:
+    """Se amplía lo que se muestra, nunca lo que se afirma."""
+    cuerpo = (await api_lectura.get(RUTA)).json()
+    por_slug = {f["producto_slug"]: f for f in cuerpo["filas"]}
+
+    # Institución ficticia: la marca va en la institución.
+    assert por_slug["alcancia-plazo-182"]["institucion"]["es_demostracion"] is True
+    # ...y su tasa sí es "verificada" en el sentido del estado: no hay fuente
+    # oficial que contradecirla porque la institución no existe. Lo que avisa
+    # al usuario es el ◆, no la procedencia.
+    assert por_slug["alcancia-plazo-182"]["procedencia"]["verificada"] is True
+
+    # Institución real con tasa sin confirmar: al revés exactamente.
+    assert por_slug["hey-vista"]["institucion"]["es_demostracion"] is False
+    assert por_slug["hey-vista"]["procedencia"]["verificada"] is False
+    assert por_slug["hey-vista"]["procedencia"]["estado"] == "PENDIENTE_REVISION"
+
+    # Y lo verificado de verdad no lleva ninguna de las dos marcas.
+    assert por_slug["cetes-28"]["institucion"]["es_demostracion"] is False
+    assert por_slug["cetes-28"]["procedencia"]["verificada"] is True
+
+
+async def test_turning_the_switch_off_serves_only_verified_data(
+    api_lectura: AsyncClient,
+) -> None:
+    """El paso 9 de la fase 6: no basta con no marcar, hay que no servir.
+
+    Queda lo verificado del seed más las tasas VIGENTE que añade la fixture
+    sobre instituciones reales. Desaparecen las ficticias y las 30 que el seed
+    dejó en PENDIENTE_REVISION.
+    """
+    slugs = await _slugs(api_lectura)
+
+    assert slugs == SLUGS_VERIFICADOS | SLUGS_FIXTURE
+    assert not slugs & SLUGS_DEMO
+
+
+async def test_with_the_switch_off_no_row_is_unverified(
+    api_lectura: AsyncClient,
+) -> None:
+    cuerpo = (await api_lectura.get(RUTA)).json()
+
+    assert cuerpo["filas"]
+    assert all(f["procedencia"]["verificada"] for f in cuerpo["filas"])
+    assert not any(f["institucion"]["es_demostracion"] for f in cuerpo["filas"])
+
+
+@pytest.mark.usefixtures("con_modo_demo")
+async def test_an_unverified_rate_never_supersedes_a_verified_one(
+    api_lectura: AsyncClient,
+) -> None:
+    """Precedencia por estado antes que por fecha.
+
+    Sin ella, una observación pendiente más reciente ocultaría el dato bueno
+    del mismo producto — justo lo contrario de lo que el modo demo busca.
+
+    Tiene que correr con el modo **encendido**: apagado, la tasa pendiente ni
+    siquiera es candidata y el test pasaría sin comprobar nada.
+    """
+    from datetime import timedelta
+
+    from domain.enums import EstadoTasa, FuenteTasa
+    from domain.orm import Producto, Tasa
+
+    async with session_scope() as session:
+        producto_id = await session.scalar(select(Producto.id).where(Producto.slug == "cetes-28"))
+        assert producto_id is not None
+        session.add(
+            Tasa(
+                producto_id=producto_id,
+                tasa_nominal=Decimal("99.00"),
+                fecha_dato=date.today() + timedelta(days=0),
+                fuente=FuenteTasa.LLM_RESEARCH,
+                estado=EstadoTasa.PENDIENTE_REVISION,
+            )
+        )
+
+    cuerpo = (await api_lectura.get(RUTA)).json()
+    cetes = next(f for f in cuerpo["filas"] if f["producto_slug"] == "cetes-28")
+
+    assert Decimal(cetes["tasa_nominal"]) == Decimal("6.18")
+    assert cetes["procedencia"]["verificada"] is True
 
 
 async def test_every_row_carries_provenance(api_lectura: AsyncClient) -> None:
@@ -120,7 +230,7 @@ async def test_term_filter_includes_and_excludes(api_lectura: AsyncClient) -> No
 async def test_one_year_filter_includes_and_excludes(api_lectura: AsyncClient) -> None:
     """§7 distingue "1 año" (364 días, el plazo de CETES) de "más de 1 año"."""
     slugs = await _slugs(api_lectura, plazo="364")
-    assert slugs == {"cetes-364", "libertad-plazo-364", "ahorra-mas-plazo-364"}
+    assert slugs == {"cetes-364", "libertad-plazo-364"}
     assert "cetes-182" not in slugs
 
 
@@ -150,7 +260,7 @@ async def test_invalid_term_fails_instead_of_returning_nothing(
 
 async def test_category_filter_includes_and_excludes(api_lectura: AsyncClient) -> None:
     slugs = await _slugs(api_lectura, categoria="SOFIPO")
-    assert slugs == {"finsus-plazo-91", "klar-vista", "libertad-plazo-364"} | SLUGS_DEMO
+    assert slugs == {"finsus-plazo-91", "klar-vista", "libertad-plazo-364"}
     assert "cetes-28" not in slugs
     assert "nu-cajita-turbo" not in slugs
 
@@ -297,9 +407,7 @@ async def test_orders_by_nominal_rate(api_lectura: AsyncClient) -> None:
     cuerpo = (await api_lectura.get(RUTA, params={"orden": "tasa_nominal"})).json()
     tasas = [Decimal(f["tasa_nominal"]) for f in cuerpo["filas"]]
     assert tasas == sorted(tasas, reverse=True)
-    # La tasa más alta del catálogo es la de la institución ficticia que
-    # existe justamente para ilustrar que la tasa más alta no es la mejor.
-    assert cuerpo["filas"][0]["producto_slug"] == "alcancia-plazo-182"
+    assert cuerpo["filas"][0]["producto_slug"] == "nu-cajita-turbo"
 
 
 async def test_ascending_order_is_supported(api_lectura: AsyncClient) -> None:
@@ -321,25 +429,37 @@ async def test_coverage_order_puts_sovereign_debt_first(
     assert orden[-1] == "mercado-pago-vista"
 
 
-async def test_gat_order_uses_published_and_falls_back_to_computed(
+async def test_gat_order_falls_back_to_the_computed_equivalent(
     api_lectura: AsyncClient,
 ) -> None:
     cuerpo = (await api_lectura.get(RUTA, params={"orden": "gat"})).json()
 
     gats = [Decimal(f["gat"]["nominal"]) for f in cuerpo["filas"]]
     assert gats == sorted(gats, reverse=True)
+    # Ninguna institución real publica GAT todavía: todas calculadas, y cada
+    # fila lo declara.
+    assert all(f["gat"]["es_calculada"] for f in cuerpo["filas"])
 
+
+@pytest.mark.usefixtures("con_modo_demo")
+async def test_gat_order_uses_the_published_value_when_there_is_one(
+    api_lectura: AsyncClient,
+) -> None:
+    """El único producto del catálogo con GAT publicada es el ilustrativo.
+
+    Existe justamente por eso: sin él, esta rama del `resolver_gat` no tendría
+    ningún dato real que la ejercitara de punta a punta.
+    """
+    cuerpo = (await api_lectura.get(RUTA, params={"orden": "gat"})).json()
     por_slug = {f["producto_slug"]: f["gat"] for f in cuerpo["filas"]}
 
-    # La única del catálogo que publica GAT es la ficticia de demostración, y
-    # el orden usa la publicada tal cual: 18.40, muy por encima de lo que su
-    # tasa nominal daría. Es lo que hace visible la bandera de inconsistencia.
-    assert por_slug["ahorra-mas-plazo-364"]["origen"] == "PUBLICADA"
-    assert por_slug["ahorra-mas-plazo-364"]["es_calculada"] is False
-    assert Decimal(por_slug["ahorra-mas-plazo-364"]["nominal"]) == Decimal("18.40")
+    ahorra = por_slug["ahorra-mas-plazo-364"]
+    assert ahorra["origen"] == "PUBLICADA"
+    assert ahorra["es_calculada"] is False
+    assert Decimal(ahorra["nominal"]) == Decimal("18.40")
 
-    # Ninguna institución real publica GAT todavía: se cae al equivalente
-    # calculado, y cada fila lo declara.
+    gats = [Decimal(f["gat"]["nominal"]) for f in cuerpo["filas"]]
+    assert gats == sorted(gats, reverse=True)
     assert all(por_slug[slug]["es_calculada"] for slug in SLUGS_VERIFICADOS)
 
 

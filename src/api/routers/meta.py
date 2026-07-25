@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 
 from api.dependencies import LecturaDep, SessionDep
 from api.schemas import FrescuraFuente, RespuestaFrescura
+from core.config_store import effective
 from domain.enums import FuenteTasa
 from domain.orm import Tasa
 
@@ -74,8 +75,15 @@ async def frescura(session: SessionDep, _nivel: LecturaDep) -> RespuestaFrescura
             )
         )
 
+    fechas = [f.ultima_actualizacion for f in fuentes if f.ultima_actualizacion]
     return RespuestaFrescura(
         fuentes=fuentes,
+        ultima_actualizacion=max(fechas) if fechas else None,
+        # Se lee del ConfigStore y no del `ContextoMercado`: éste resuelve
+        # parámetros fiscales y devuelve 503 si faltan, lo que haría que una
+        # petición sin credenciales recibiera 503 en vez de 401. Este endpoint
+        # informa, no calcula.
+        modo_demo=effective.mostrar_datos_demo,
         generado_en=datetime.now(UTC),
         todo_dentro_de_sla=all(f.dentro_de_sla for f in fuentes),
     )

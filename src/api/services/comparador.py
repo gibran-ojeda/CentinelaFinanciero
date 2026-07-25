@@ -6,8 +6,15 @@ que dependen de un cálculo —`sin_banderas`, el orden por TEN o por GAT— se
 resuelven después, porque no existen como columna.
 
 Regla que atraviesa todo el módulo: **sólo se muestra lo publicable**. Un
-producto sin tasa VIGENTE no aparece en el comparador, aunque exista en el
-catálogo. La vista principal no puede tener huecos ni datos sin verificar.
+producto sin tasa publicable no aparece en el comparador, aunque exista en el
+catálogo: la vista principal no puede tener huecos.
+
+Qué cuenta como publicable depende del modo demostración, que viaja en el
+contexto de la petición. Con el modo apagado —lo que debe estar en producción,
+paso 9 de la fase 6— publicable significa **tasa VIGENTE de institución real**.
+Con el modo encendido entran también las instituciones ilustrativas y las tasas
+sin verificar, pero cada fila lo declara en `institucion.es_demostracion` y en
+`procedencia.verificada`: se amplía lo que se muestra, nunca lo que se afirma.
 """
 
 from __future__ import annotations
@@ -88,10 +95,18 @@ class _Candidato:
 
 
 def _aplicar_filtros_sql(
-    consulta: Select[tuple[Producto]], f: FiltrosComparador
+    consulta: Select[tuple[Producto]],
+    f: FiltrosComparador,
+    *,
+    modo_demo: bool,
 ) -> Select[tuple[Producto]]:
     """Los filtros que sí son columnas."""
     consulta = consulta.where(Producto.activo.is_(True), Institucion.activa.is_(True))
+
+    if not modo_demo:
+        # Con el modo apagado las instituciones ficticias no existen para el
+        # público. No basta con no marcarlas: hay que no servirlas.
+        consulta = consulta.where(Institucion.es_demostracion.is_(False))
 
     if f.plazo is not None:
         if f.plazo.upper() == PLAZO_VISTA:
@@ -165,12 +180,17 @@ async def construir_comparador(
     consulta = _aplicar_filtros_sql(
         select(Producto).join(Institucion).options(selectinload(Producto.institucion)),
         filtros,
+        modo_demo=contexto.modo_demo,
     )
     productos = (await session.execute(consulta)).scalars().all()
     if not productos:
         return []
 
-    vigentes = await tasas_vigentes_por_producto(session, [p.id for p in productos])
+    vigentes = await tasas_vigentes_por_producto(
+        session,
+        [p.id for p in productos],
+        incluir_pendientes=contexto.modo_demo,
+    )
 
     banderas_por_institucion: dict[int, list[Bandera]] = {}
     filas_bandera = (

@@ -122,6 +122,11 @@ class ContextoMercado:
     inflacion_anual: Decimal
     params_fiscales: ParametrosFiscales
     umbrales: UmbralesBanderas
+    #: Si está activo, el catálogo incluye instituciones ilustrativas y tasas
+    #: sin verificar, siempre marcadas. Viaja en el contexto y no se lee del
+    #: ConfigStore en cada servicio para que todas las filas de una respuesta
+    #: se resuelvan con el mismo criterio, igual que la UDI y la inflación.
+    modo_demo: bool = False
 
 
 async def _ultimo_valor_serie(session: AsyncSession, clave: str) -> Decimal | None:
@@ -223,6 +228,7 @@ async def get_contexto(session: SessionDep) -> ContextoMercado:
         inflacion_anual=inflacion,
         params_fiscales=await _params_fiscales(session),
         umbrales=umbrales_desde_config(),
+        modo_demo=effective.mostrar_datos_demo,
     )
 
 
