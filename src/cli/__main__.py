@@ -34,11 +34,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="directorio de semillas (por defecto: seeds/ del repo)",
     )
 
+    tasas = sub.add_parser("tasas", help="alta y consulta de tasas")
+    tasas_sub = tasas.add_subparsers(dest="subcomando", required=True)
+    importar = tasas_sub.add_parser("import", help="alta de tasas desde un CSV")
+    importar.add_argument("csv", type=Path, help="archivo CSV de observaciones")
+    importar.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="valida y reporta sin escribir nada",
+    )
+
     return parser
 
 
 async def _run(args: argparse.Namespace) -> int:
     from cli import seed as seed_module
+    from cli import tasas as tasas_module
 
     match args.comando:
         case "seed":
@@ -46,6 +57,14 @@ async def _run(args: argparse.Namespace) -> int:
             print("Carga de catálogos:")
             print(report.render())
             return 0
+        case "tasas":
+            resultado = await tasas_module.import_csv(args.csv, dry_run=args.dry_run)
+            titulo = "Simulación de alta de tasas" if args.dry_run else "Alta de tasas"
+            print(f"{titulo}:")
+            print(resultado.render())
+            # Una fila rechazada es un fallo operativo: el CSV traía un dato
+            # que no se pudo cargar y alguien tiene que enterarse.
+            return 1 if resultado.errores else 0
         case _:  # pragma: no cover — argparse ya lo impide
             return 2
 
