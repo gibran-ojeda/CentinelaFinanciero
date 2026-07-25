@@ -11,6 +11,7 @@ consumidor de una capa a la otra es cambiar `settings.x` por `effective.x`.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import SecretStr, field_validator
@@ -72,6 +73,32 @@ class Settings(BaseSettings):
     scheduler_heartbeat_interval_seconds: int = 60
     scheduler_lock_ttl_seconds: int = 300
     scheduler_timezone: str = "America/Mexico_City"
+
+    # ─── Parámetros de negocio (defaults) ─────────────────────
+    # Estos SÍ son ajustables en caliente: el ConfigStore (capa 2) los
+    # sobrescribe desde la base y `effective.x` devuelve el override si
+    # existe, o el valor de aquí si no. Los defaults son los del foundation.
+    umbral_imor_amarilla: Decimal = Decimal("3.0")
+    umbral_imor_roja: Decimal = Decimal("6.0")
+    umbral_icap_amarilla: Decimal = Decimal("15.0")
+    umbral_icap_roja: Decimal = Decimal("10.5")
+    umbral_cobertura_amarilla: Decimal = Decimal("100.0")
+    umbral_cobertura_roja: Decimal = Decimal("70.0")
+    umbral_gat_inconsistencia_pp: Decimal = Decimal("1.5")
+    umbral_crecimiento_captacion_pct: Decimal = Decimal("50.0")
+    umbral_tasa_sobre_mercado_pp: Decimal = Decimal("3.0")
+    umbral_apalancamiento_amarilla: Decimal = Decimal("10.0")
+
+    # Respaldo mientras las series de Banxico no se pueblan (fase 7). La
+    # cobertura en MXN y la calculadora necesitan estos dos números desde la
+    # fase 4; sin ellos no habría de dónde sacarlos.
+    udi_valor_fallback: Decimal = Decimal("8.700000")
+    inflacion_anual_fallback: Decimal = Decimal("4.0")
+
+    tolerancia_revision_pp: Decimal = Decimal("0.5")
+    cache_comparador_ttl_seconds: int = 300
+    banderas_recompute_enabled: bool = True
+    config_cache_ttl_seconds: int = 60
 
     # ─── Fuentes de datos (fases 7 y 9) ───────────────────────
     banxico_token: SecretStr = SecretStr("")
