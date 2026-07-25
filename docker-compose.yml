@@ -1,0 +1,131 @@
+# Stack de Brújula Financiera.
+#
+# Convive con NarrativeAlpha en el mismo VPS, así que todo lleva prefijo propio
+# y puertos fuera del rango que ese stack ya ocupa (5432, 6379, 8000, 8001,
+# 8002, 8080, 8899). Ver §14 del foundation y la fase 06 del plan.
+#
+#   COMPOSE_PROJECT_NAME=brujula   →  contenedores y volúmenes `brujula-*`
+#   Todo publicado sólo en 127.0.0.1: Caddy (compartido, en network_mode host)
+#   los alcanza por loopback. La API nunca se expone a internet.
+
+name: brujula
+
+x-app-image: &app-image
+  image: brujula:latest
+  build:
+    context: .
+    dockerfile: docker/app/Dockerfile
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-app-env: &app-env
+  ENVIRONMENT: ${ENVIRONMENT:-dev}
+  POSTGRES_HOST: db
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: ${POSTGRES_DB:-brujula}
+  POSTGRES_USER: ${POSTGRES_USER:-brujula}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatorio}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: ${LOG_FORMAT:-}
+
+services:
+  db:
+    image: postgres:16
+    container_name: brujula-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-brujula}
+      POSTGRES_USER: ${POSTGRES_USER:-brujula}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatorio}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-brujula} -d ${POSTGRES_DB:-brujula}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    <<: *logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: brujula-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    <<: *logging
+
+  api:
+    <<: [*app-image, *logging]
+    container_name: brujula-api
+    restart: unless-stopped
+    command: ["python", "-m", "api"]
+    environment:
+      <<: *app-env
+      API_PORT: 8000
+      API_READ_KEY: ${API_READ_KEY:-}
+      API_ADMIN_KEY: ${API_ADMIN_KEY:-}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-}
+    ports:
+      - "127.0.0.1:8010:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # -f falla con status >= 400, así que un 503 del /healthz marca unhealthy.
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/healthz > /dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  scheduler:
+    <<: [*app-image, *logging]
+    restart: unless-stopped
+    command: ["python", "-m", "scheduler"]
+    environment:
+      <<: *app-env
+      SCHEDULER_HEARTBEAT_ENABLED: ${SCHEDULER_HEARTBEAT_ENABLED:-true}
+      SCHEDULER_HEARTBEAT_INTERVAL_SECONDS: ${SCHEDULER_HEARTBEAT_INTERVAL_SECONDS:-60}
+      SCHEDULER_LOCK_TTL_SECONDS: ${SCHEDULER_LOCK_TTL_SECONDS:-300}
+      SCHEDULER_TIMEZONE: ${SCHEDULER_TIMEZONE:-America/Mexico_City}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'python -m scheduler' > /dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  pgdata:
+    name: brujula-pgdata
+  redisdata:
+    name: brujula-redisdata
+
+networks:
+  default:
+    name: brujula-net
