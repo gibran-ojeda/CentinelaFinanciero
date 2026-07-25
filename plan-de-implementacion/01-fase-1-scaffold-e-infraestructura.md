@@ -6,7 +6,7 @@ Repo ejecutable de punta a punta **sin lógica de negocio**: `docker compose up`
 
 ## Entregables
 
-- `pyproject.toml` único: proyecto `brujula-financiera`, Python `>=3.12`, layout `src/` con paquetes planos, extras `[api]`, `[scheduler]`, `[ingest]`, `[llm]`, `[browser]`, `[mcp]`, `[dev]`; configuración de ruff, black, mypy strict y pytest (`asyncio_mode = "auto"`) en el mismo archivo.
+- `pyproject.toml` único: proyecto `centinela-financiero`, Python `>=3.12`, layout `src/` con paquetes planos, extras `[api]`, `[scheduler]`, `[ingest]`, `[llm]`, `[browser]`, `[mcp]`, `[dev]`; configuración de ruff, black, mypy strict y pytest (`asyncio_mode = "auto"`) en el mismo archivo.
 - `src/core/`:
   - `settings.py` — `Settings(BaseSettings)` con `env_file=".env"`, `SecretStr` para secretos, singleton `settings`.
   - `logging.py` — structlog: JSON en prod, pretty en dev; processor que redacta claves sensibles.
@@ -14,7 +14,7 @@ Repo ejecutable de punta a punta **sin lógica de negocio**: `docker compose up`
   - `redis.py` — cliente redis async con reconexión y degradación (si Redis cae, la app sigue).
 - `src/api/` — `app.py` con factory `create_app()`, `__main__.py` (uvicorn), router `GET /healthz` que reporta estado de db y redis.
 - `src/scheduler/` — `runner.py` (`AsyncIOScheduler`, `job_defaults={"misfire_grace_time": 60, "coalesce": True, "max_instances": 1}`, shutdown por SIGINT/SIGTERM), `registry.py` (lista declarativa `JOBS_REGISTRY` de dicts `{id, func, trigger, name}` con registro condicional por flag), `locks.py` (lock distribuido Redis `SET NX` + TTL + liberación compare-and-delete vía Lua), `__main__.py`, y un job noop `heartbeat` que loguea y escribe en la (futura) tabla `job_runs` — por ahora solo log.
-- `docker/app/Dockerfile` — `python:3.12-slim`, imagen única `brujula:latest`; servicios diferenciados por `command`.
+- `docker/app/Dockerfile` — `python:3.12-slim`, imagen única `centinela:latest`; servicios diferenciados por `command`.
 - `docker-compose.yml` — servicios `db` (postgres:16, healthcheck `pg_isready`, volumen nombrado), `redis` (redis:7-alpine, `--appendonly yes`), `api` (`python -m api`, puerto 8000 en loopback), `scheduler` (`python -m scheduler`). Todos con `restart: unless-stopped`, healthchecks y logging `json-file` rotado.
 - `.env.example` documentado por secciones (Entorno, PostgreSQL, Redis, Logging, API, Scheduler) — se mantiene al día en cada fase que añada variables.
 - `.pre-commit-config.yaml` — ruff (`--fix`), black, mypy (`files: ^src/`).

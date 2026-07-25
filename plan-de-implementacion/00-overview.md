@@ -1,4 +1,4 @@
-# Plan de implementación — Brújula Financiera
+# Plan de implementación — Centinela Financiero
 
 > Plan ejecutable de la [fundación](../foundation-comparador-financiero-mx.md) (v1.3). Diez fases incrementales: cada una deja el sistema en un estado funcional y verificable antes de pasar a la siguiente.
 
@@ -68,7 +68,8 @@ Se descarta el scraping clásico por selectores CSS. Toda tasa de origen LLM fue
 
 | # | Decisión | Estado | Afecta a |
 |---|---|---|---|
-| D1 | Dominio y hosting | **Resuelta** — **co-hosting en el VPS de NarrativeAlpha**, aislado en su propio stack Docker (proyecto `brujula`, contenedores y volúmenes con prefijo propio, puertos distintos). Dominio: **`brujulafinanciera.cloud`** (sin guion). Sin PaaS de pago — todo en el VPS. Implicaciones en la fase 06 | 06 |
+| D1 | Hosting | **Resuelta** — **co-hosting en el VPS de NarrativeAlpha**, aislado en su propio stack Docker (proyecto `centinela`, contenedores y volúmenes con prefijo propio, puertos distintos). Sin PaaS de pago — todo en el VPS. Implicaciones en la fase 06 | 06 |
+| D1b | Dominio | **Reabierta por el rebrand** — `brujulafinanciera.cloud` quedó obsoleto al renombrar el proyecto. Propuesto: **`centinelafinanciero.cloud`** (sin guion), pendiente de verificar disponibilidad y registrar. Bloquea el paso 2 de la fase 06 | 06 |
 | D2 | API key de DeepSeek y límite diario del CostTracker | **Resuelta** — límite duro **$1 USD/día** (`LLM_COST_DAILY_LIMIT_USD=1.0`) | 09 |
 | D3 | Alcance del seed inicial | **Resuelta** — catálogo **completo de F1**: top 10 SOFIPOs + top 5 neobancos + CETES + BONDDIA | 02 |
 | D4 | Cola de revisión de tasas: ¿CLI o UI admin? | **Resuelta** — **CLI + endpoints admin** al inicio; mini-UI solo si el volumen de revisión lo justifica | 09 |
@@ -78,13 +79,13 @@ Se descarta el scraping clásico por selectores CSS. Toda tasa de origen LLM fue
 
 ### Convivencia con NarrativeAlpha en el mismo VPS (consecuencia de D1)
 
-Brújula **no comparte base de datos, Redis ni imagen** con NarrativeAlpha: son dos stacks Docker independientes en la misma máquina. Reglas que aplican a todas las fases:
+Centinela **no comparte base de datos, Redis ni imagen** con NarrativeAlpha: son dos stacks Docker independientes en la misma máquina. Reglas que aplican a todas las fases:
 
-- **Proyecto Docker propio**: `COMPOSE_PROJECT_NAME=brujula`; contenedores `brujula-*`, volúmenes `brujula-*`, red propia. Cero colisión de nombres con `narrativealpha-*`.
-- **Puertos**: todo publicado **solo en `127.0.0.1`** y fuera del rango que ya ocupa NarrativeAlpha (5432, 6379, 8000, 8001, 8002, 8080 y 8899 del motor Vibe-Trading). Asignación de Brújula: `db` 5433, `redis` 6380, `api` 8010, `web` 8011.
-- **Caddy es infraestructura compartida**: NarrativeAlpha ya corre el único Caddy del VPS en `network_mode: host` ocupando 80/443. Brújula **no levanta un Caddy propio** — se añade un site block al Caddyfile existente. Ver fase 06.
-- **Sin `network_mode: host`** en los servicios de Brújula: el dashboard de NarrativeAlpha lo usa por el motor Vibe-Trading en `127.0.0.1:8899`, restricción que Brújula no tiene. Bridge con puertos publicados en loopback es suficiente y más limpio (Caddy en host mode los alcanza por `127.0.0.1`).
-- **Cuidado con `ufw`**: en ese VPS el firewall dropea el tráfico `docker0 → host`, así que un contenedor de Brújula en bridge **no** alcanza servicios publicados en el loopback del host. Si Brújula necesitara consumir un servicio de NarrativeAlpha (p. ej. su SearXNG), la vía es adjuntar ese contenedor a la red bridge de NarrativeAlpha como red externa, no pasar por la gateway de Docker.
+- **Proyecto Docker propio**: `COMPOSE_PROJECT_NAME=centinela`; contenedores `centinela-*`, volúmenes `centinela-*`, red propia. Cero colisión de nombres con `narrativealpha-*`.
+- **Puertos**: todo publicado **solo en `127.0.0.1`** y fuera del rango que ya ocupa NarrativeAlpha (5432, 6379, 8000, 8001, 8002, 8080 y 8899 del motor Vibe-Trading). Asignación de Centinela: `db` 5433, `redis` 6380, `api` 8010, `web` 8011.
+- **Caddy es infraestructura compartida**: NarrativeAlpha ya corre el único Caddy del VPS en `network_mode: host` ocupando 80/443. Centinela **no levanta un Caddy propio** — se añade un site block al Caddyfile existente. Ver fase 06.
+- **Sin `network_mode: host`** en los servicios de Centinela: el dashboard de NarrativeAlpha lo usa por el motor Vibe-Trading en `127.0.0.1:8899`, restricción que Centinela no tiene. Bridge con puertos publicados en loopback es suficiente y más limpio (Caddy en host mode los alcanza por `127.0.0.1`).
+- **Cuidado con `ufw`**: en ese VPS el firewall dropea el tráfico `docker0 → host`, así que un contenedor de Centinela en bridge **no** alcanza servicios publicados en el loopback del host. Si Centinela necesitara consumir un servicio de NarrativeAlpha (p. ej. su SearXNG), la vía es adjuntar ese contenedor a la red bridge de NarrativeAlpha como red externa, no pasar por la gateway de Docker.
 
 ## Índice de fases
 

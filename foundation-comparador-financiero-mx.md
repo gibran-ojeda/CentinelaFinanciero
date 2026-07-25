@@ -1,10 +1,10 @@
-# Brújula Financiera
+# Centinela Financiero
 ## Foundation: Comparador de Herramientas Financieras en México
 
 > Documento de definición conceptual y de producto para una plataforma centralizada de comparación de instrumentos financieros en México.
 
-**Nombre del proyecto:** Brújula Financiera
-**Tagline provisional:** *Tu dinero, con dirección.*
+**Nombre del proyecto:** Centinela Financiero
+**Tagline provisional:** *Vigila lo que de verdad ganas.*
 
 ---
 
@@ -393,7 +393,7 @@ Para mantener el enfoque, definir explícitamente lo que queda fuera del alcance
 
 # Parte II — Fundación Técnica
 
-> Esta parte define el stack, la arquitectura de servicios y la estrategia de obtención de datos con que se construye Brújula Financiera. La plantilla de referencia es el stack probado de NarrativeAlpha (Python 3.12 + FastAPI + PostgreSQL + Docker). El plan ejecutable, fase por fase, vive en [`plan-de-implementacion/`](plan-de-implementacion/00-overview.md).
+> Esta parte define el stack, la arquitectura de servicios y la estrategia de obtención de datos con que se construye Centinela Financiero. La plantilla de referencia es el stack probado de NarrativeAlpha (Python 3.12 + FastAPI + PostgreSQL + Docker). El plan ejecutable, fase por fase, vive en [`plan-de-implementacion/`](plan-de-implementacion/00-overview.md).
 
 ---
 
@@ -413,7 +413,7 @@ Para mantener el enfoque, definir explícitamente lo que queda fuera del alcance
 | LLM | Cliente router con tiers y fallback; `OpenAICompatProvider` con **DeepSeek** como primario; `CostTracker` con límite diario; prompts como plantillas `.md` externas; parsers JSON robustos | Costo mínimo, proveedor intercambiable vía `base_url`, gasto acotado |
 | Frontend | **Astro SSR + islas React** (TanStack Query solo en calculadora y filtros) | Un comparador público vive del SEO; SSR para páginas indexables, interactividad como islas |
 | Edge | Caddy 2 (TLS automático), **compartido con NarrativeAlpha** en el mismo VPS | El navegador solo llega al servicio `web`; la API interna nunca se expone |
-| Contenedores | Docker Compose (proyecto `brujula`, aislado); imagen única `python:3.12-slim` diferenciada por `command` | Build una vez, deploy N servicios; cero colisión con el stack vecino |
+| Contenedores | Docker Compose (proyecto `centinela`, aislado); imagen única `python:3.12-slim` diferenciada por `command` | Build una vez, deploy N servicios; cero colisión con el stack vecino |
 | Calidad | pytest (`asyncio_mode=auto`) + respx + testcontainers; ruff + black + mypy strict; pre-commit; GitHub Actions | CI bloqueante en lint y tests |
 
 **Doble gate por módulo** (patrón heredado de NarrativeAlpha): cada job de ingesta tiene un flag *env-only* que decide si se registra en el scheduler (ej. `SCHEDULER_BANXICO_ENABLED`) y un kill-switch *caliente* en ConfigStore que lo hace no-operar sin reiniciar (ej. `BANXICO_SYNC_ENABLED`).
@@ -447,7 +447,7 @@ flowchart LR
 
 **Patrón BFF:** el navegador solo habla con `web`; `web` consume la API por red interna inyectando `X-API-Key`. La API nunca se expone a internet.
 
-**Co-hosting con NarrativeAlpha:** Brújula corre en el **mismo VPS** que NarrativeAlpha, como stack Docker independiente (proyecto `brujula`, base de datos, Redis e imagen propias — no se comparte estado). El **único recurso compartido es el Caddy del host**, que ya ocupa 80/443 en `network_mode: host`: Brújula no levanta su propio edge, se le añade un site block para `brujulafinanciera.cloud` que apunta a `127.0.0.1:8011`. Todos los puertos de Brújula se publican solo en loopback y fuera del rango que NarrativeAlpha ya usa (5432, 6379, 8000, 8001, 8002, 8080, 8899). El detalle operativo —incluida la restricción de `ufw` sobre el tráfico `docker0 → host`— está en la [fase 06 del plan](plan-de-implementacion/06-fase-6-despliegue-mvp.md).
+**Co-hosting con NarrativeAlpha:** Centinela corre en el **mismo VPS** que NarrativeAlpha, como stack Docker independiente (proyecto `centinela`, base de datos, Redis e imagen propias — no se comparte estado). El **único recurso compartido es el Caddy del host**, que ya ocupa 80/443 en `network_mode: host`: Centinela no levanta su propio edge, se le añade un site block para `centinelafinanciero.cloud` que apunta a `127.0.0.1:8011`. Todos los puertos de Centinela se publican solo en loopback y fuera del rango que NarrativeAlpha ya usa (5432, 6379, 8000, 8001, 8002, 8080, 8899). El detalle operativo —incluida la restricción de `ufw` sobre el tráfico `docker0 → host`— está en la [fase 06 del plan](plan-de-implementacion/06-fase-6-despliegue-mvp.md).
 
 ---
 
@@ -498,8 +498,12 @@ Cada fuente tiene un **SLA de frescura**; si se excede, `frescura_check` genera 
 
 ## 17. Estructura del Repositorio
 
+> El directorio del repositorio sigue llamándose `brujula-financiera` por el
+> nombre original del proyecto; renombrarlo es un movimiento independiente del
+> rebrand y no afecta a nada del código, que ya no lo menciona.
+
 ```
-brujula-financiera/
+centinela-financiero/
 ├── foundation-comparador-financiero-mx.md
 ├── plan-de-implementacion/        # este plan, fase por fase
 ├── pyproject.toml                 # único, con extras por módulo
@@ -533,7 +537,7 @@ brujula-financiera/
 - **Estática:** ruff + black + mypy strict vía pre-commit.
 - **CI (GitHub Actions):** lint bloqueante, mypy informativo, tests bloqueantes en cada PR.
 - **CD:** push a `main` → SSH al VPS → `git reset --hard` + build + **gates duros**: migraciones Alembic aplicadas, verificación de deriva de esquema derivada del ORM (no de una lista a mano), smoke tests HTTP post-deploy y verificación de no-interferencia con el stack vecino. Rollback documentado.
-- **Hosting:** despliegue íntegro en el VPS propio, sin PaaS de pago. El VPS ya está operando y el costo marginal de Brújula es ~$0.
+- **Hosting:** despliegue íntegro en el VPS propio, sin PaaS de pago. El VPS ya está operando y el costo marginal de Centinela es ~$0.
 - **Backups:** `pg_dump` programado con retención.
 
 ---
@@ -549,4 +553,6 @@ brujula-financiera/
 
 *El plan ejecutable de esta fundación vive en [`plan-de-implementacion/`](plan-de-implementacion/00-overview.md).*
 
-*Versión 1.3 — Nombre de proyecto registrado: Brújula Financiera. Cambios: corrección NICAP → GAT (secciones 3, 4, 5, 7 y 8) y Parte II: Fundación Técnica (secciones 13–19).*
+*Versión 1.4 — Nombre de proyecto: **Centinela Financiero** (antes Brújula Financiera). Cambios: rebrand completo —nombre, tagline, identificadores de infraestructura y dominio propuesto—; la decisión D1 se divide y su parte de dominio queda reabierta (D1b).*
+
+*Versión 1.3 — Corrección NICAP → GAT (secciones 3, 4, 5, 7 y 8) y Parte II: Fundación Técnica (secciones 13–19).*
