@@ -1,0 +1,29 @@
+# Tasa de retención de ISR sobre el capital, por ejercicio fiscal.
+#
+# Sólo la **tasa** vive aquí, porque es lo que cambia cada año con la Ley de
+# Ingresos. El *tratamiento* por instrumento (sobre capital vs. sobre ganancia)
+# es estructural y vive en `src/metrics/fiscal.py`.
+#
+# CORRECCIÓN RESPECTO AL FOUNDATION v1.3: el documento cita ~0.50% anual, que
+# fue la tasa de 2025. El artículo 24 de la Ley de Ingresos de la Federación
+# para 2026 (DOF del 7 de noviembre de 2025) la subió a 0.90% a partir del 1 de
+# enero de 2026 — un incremento del 80%. Es exactamente el escenario que §4.2
+# anticipa ("puede cambiar por decreto... la plataforma debe actualizarla y
+# dejar visible la fecha de referencia").
+
+parametros_fiscales:
+  - anio: 2026
+    tasa_retencion_capital: 0.90
+    vigente_desde: 2026-01-01
+    fuente_url: http://www.diputados.gob.mx/LeyesBiblio/pdf/LIF_2026.pdf
+    notas: >-
+      Artículo 24 de la LIF 2026. Retención provisional y acreditable sobre el
+      capital que genera intereses, no sobre el interés cobrado.
+
+  - anio: 2025
+    tasa_retencion_capital: 0.50
+    vigente_desde: 2025-01-01
+    fuente_url: https://www.cefp.gob.mx/publicaciones/nota/2025/notacefp1472025.pdf
+    notas: >-
+      Tasa del ejercicio 2025. Se conserva para poder recalcular rendimientos
+      históricos con el parámetro que estaba vigente en su momento.

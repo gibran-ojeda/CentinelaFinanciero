@@ -1,0 +1,101 @@
+# URLs curadas por institución para el fetch dirigido de la fase 9.
+#
+# Nivel 2 = fetch determinista (httpx + trafilatura) y extracción con LLM.
+# Nivel 3 = sólo descubrimiento y verificación con búsqueda abierta.
+#
+# `requiere_js: true` marca las páginas que no rinden contenido sin ejecutar
+# JavaScript y que necesitarán Playwright. Se sabe porque al construir este
+# catálogo (2026-07-25) devolvieron 403 o una página vacía a un cliente HTTP
+# plano — exactamente el motivo por el que §15 descarta el scraping por
+# selectores CSS y opta por fetch + LLM.
+
+fuentes_tasas:
+  - institucion: Gobierno Federal
+    url: https://www.cetesdirecto.com/tablas/valores_gubernamentales/cetes.html
+    nivel: 2
+    requiere_js: false
+
+  - institucion: Gobierno Federal
+    url: https://www.cetesdirecto.com/tablas/valores_gubernamentales/bonddia.html
+    nivel: 2
+    requiere_js: false
+
+  - institucion: DiDi
+    url: https://www.didiglobal.com/mx/finance
+    nivel: 2
+    requiere_js: true
+
+  - institucion: Finsus
+    url: https://www.finsus.mx/inversion
+    nivel: 2
+    requiere_js: true
+
+  - institucion: Klar
+    url: https://www.klar.mx/
+    nivel: 2
+    requiere_js: true
+
+  - institucion: kubo.financiero
+    url: https://www.kubofinanciero.com/invertir
+    nivel: 2
+    requiere_js: true
+
+  - institucion: Stori
+    url: https://www.storicard.com/
+    nivel: 2
+    requiere_js: true
+
+  - institucion: Supertasas
+    url: https://www.supertasas.com/
+    nivel: 2
+    requiere_js: false
+
+  - institucion: Libertad Servicios Financieros
+    url: https://www.libertad.mx/
+    nivel: 3
+    requiere_js: false
+
+  - institucion: Te Creemos
+    url: https://www.tecreemos.com/
+    nivel: 3
+    requiere_js: false
+
+  - institucion: CAME
+    url: https://www.came.org.mx/
+    nivel: 3
+    requiere_js: false
+
+  - institucion: Crediclub
+    url: https://www.crediclub.com/
+    nivel: 3
+    requiere_js: false
+
+  - institucion: Nu México
+    url: https://nu.com.mx/cuenta/
+    nivel: 2
+    requiere_js: true
+
+  - institucion: Revolut
+    url: https://www.revolut.com/es-MX/
+    nivel: 2
+    requiere_js: true
+
+  - institucion: Ualá
+    url: https://www.uala.mx/
+    nivel: 2
+    requiere_js: true
+
+  - institucion: Openbank
+    url: https://www.openbank.mx/
+    nivel: 2
+    requiere_js: true
+
+  - institucion: Hey Banco
+    url: https://www.hey.inc/
+    nivel: 2
+    requiere_js: true
+
+  - institucion: Mercado Pago
+    url: https://www.mercadopago.com.mx/
+    nivel: 2
+    requiere_js: true

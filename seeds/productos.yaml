@@ -1,0 +1,384 @@
+# Productos de captación del catálogo MVP.
+#
+# El `instrumento` determina el tratamiento fiscal (§4.2) y es independiente de
+# la categoría de la institución: un banco puede ofrecer PRLV y también fondos
+# de deuda, que tributan distinto.
+#
+# Regla del esquema: VISTA nunca lleva `plazo_dias`; PLAZO siempre lo lleva.
+# Clave natural para el upsert idempotente: institución + nombre + plazo.
+
+productos:
+  # ─── Gubernamentales ────────────────────────────────────────
+  - institucion: Gobierno Federal
+    nombre: CETES 28 días
+    slug: cetes-28
+    tipo: PLAZO
+    instrumento: CETES
+    plazo_dias: 28
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+    penalizacion_retiro: >-
+      Se pueden vender antes del vencimiento en el mercado secundario, a precio
+      de mercado: el rendimiento puede diferir del contratado.
+
+  - institucion: Gobierno Federal
+    nombre: CETES 91 días
+    slug: cetes-91
+    tipo: PLAZO
+    instrumento: CETES
+    plazo_dias: 91
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Gobierno Federal
+    nombre: CETES 182 días
+    slug: cetes-182
+    tipo: PLAZO
+    instrumento: CETES
+    plazo_dias: 182
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Gobierno Federal
+    nombre: CETES 364 días
+    slug: cetes-364
+    tipo: PLAZO
+    instrumento: CETES
+    plazo_dias: 364
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Gobierno Federal
+    nombre: BONDDIA
+    slug: bonddia
+    tipo: VISTA
+    instrumento: BONDDIA
+    monto_minimo: 100.00
+    liquidez: INMEDIATA
+    penalizacion_retiro: >-
+      Sin penalización. Liquidez diaria en días hábiles. Cobra comisión anual
+      de administración, que se descuenta del rendimiento bruto.
+
+  # ─── SOFIPOs ────────────────────────────────────────────────
+  - institucion: DiDi
+    nombre: DiDi Rendimiento
+    slug: didi-vista
+    tipo: VISTA
+    instrumento: DEPOSITO_SOFIPO
+    monto_minimo: 0.00
+    liquidez: INMEDIATA
+    penalizacion_retiro: >-
+      La tasa promocional aplica sólo hasta cierto saldo; el excedente rinde a
+      una tasa menor.
+
+  - institucion: Finsus
+    nombre: Finsus Plazo 28 días
+    slug: finsus-plazo-28
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 28
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Finsus
+    nombre: Finsus Plazo 91 días
+    slug: finsus-plazo-91
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 91
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Finsus
+    nombre: Finsus Plazo 182 días
+    slug: finsus-plazo-182
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 182
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Finsus
+    nombre: Finsus Plazo 364 días
+    slug: finsus-plazo-364
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 364
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Klar
+    nombre: Klar Ahorro
+    slug: klar-vista
+    tipo: VISTA
+    instrumento: DEPOSITO_SOFIPO
+    monto_minimo: 0.00
+    liquidez: INMEDIATA
+    penalizacion_retiro: >-
+      La tasa más alta requiere categoría de cliente Plus o Platino.
+
+  - institucion: Klar
+    nombre: Klar Plazo 28 días
+    slug: klar-plazo-28
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 28
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Klar
+    nombre: Klar Plazo 91 días
+    slug: klar-plazo-91
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 91
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Klar
+    nombre: Klar Plazo 182 días
+    slug: klar-plazo-182
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 182
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Klar
+    nombre: Klar Plazo 364 días
+    slug: klar-plazo-364
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 364
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: kubo.financiero
+    nombre: kubo Plazo Fijo 91 días
+    slug: kubo-plazo-91
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 91
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: kubo.financiero
+    nombre: kubo Plazo Fijo 182 días
+    slug: kubo-plazo-182
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 182
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: kubo.financiero
+    nombre: kubo Plazo Fijo 364 días
+    slug: kubo-plazo-364
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 364
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Stori
+    nombre: Stori Plazo 28 días
+    slug: stori-plazo-28
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 28
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Stori
+    nombre: Stori Plazo 91 días
+    slug: stori-plazo-91
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 91
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Stori
+    nombre: Stori Plazo 182 días
+    slug: stori-plazo-182
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 182
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Stori
+    nombre: Stori Plazo 364 días
+    slug: stori-plazo-364
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 364
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Supertasas
+    nombre: Supertasas Ahorro
+    slug: supertasas-vista
+    tipo: VISTA
+    instrumento: DEPOSITO_SOFIPO
+    monto_minimo: 0.00
+    liquidez: INMEDIATA
+
+  - institucion: Supertasas
+    nombre: Supertasas Plazo 28 días
+    slug: supertasas-plazo-28
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 28
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Supertasas
+    nombre: Supertasas Plazo 91 días
+    slug: supertasas-plazo-91
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 91
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Supertasas
+    nombre: Supertasas Plazo 182 días
+    slug: supertasas-plazo-182
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 182
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Supertasas
+    nombre: Supertasas Plazo 364 días
+    slug: supertasas-plazo-364
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 364
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  # SOFIPOs del catálogo sin tasa verificada todavía: el producto existe para
+  # que la ingesta de la fase 9 tenga dónde colgar la observación.
+  - institucion: Libertad Servicios Financieros
+    nombre: Libertad Inversión a Plazo 364 días
+    slug: libertad-plazo-364
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 364
+    monto_minimo: 1000.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Te Creemos
+    nombre: Te Creemos Inversión a Plazo 364 días
+    slug: te-creemos-plazo-364
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 364
+    monto_minimo: 1000.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: CAME
+    nombre: CAME Inversión a Plazo 364 días
+    slug: came-plazo-364
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 364
+    monto_minimo: 1000.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Crediclub
+    nombre: Crediclub Inversión a Plazo 364 días
+    slug: crediclub-plazo-364
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 364
+    monto_minimo: 1000.00
+    liquidez: AL_VENCIMIENTO
+
+  # ─── Neobancos con licencia bancaria ────────────────────────
+  - institucion: Nu México
+    nombre: Cajita Turbo
+    slug: nu-cajita-turbo
+    tipo: VISTA
+    instrumento: DEPOSITO_BANCARIO
+    monto_minimo: 0.00
+    liquidez: INMEDIATA
+    penalizacion_retiro: >-
+      La tasa promocional aplica sólo hasta cierto saldo y puede exigir
+      consumo mínimo con tarjeta.
+
+  - institucion: Nu México
+    nombre: Nu Plazo 28 días
+    slug: nu-plazo-28
+    tipo: PLAZO
+    instrumento: DEPOSITO_BANCARIO
+    plazo_dias: 28
+    monto_minimo: 0.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Nu México
+    nombre: Nu Plazo 91 días
+    slug: nu-plazo-91
+    tipo: PLAZO
+    instrumento: DEPOSITO_BANCARIO
+    plazo_dias: 91
+    monto_minimo: 0.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Nu México
+    nombre: Nu Plazo 182 días
+    slug: nu-plazo-182
+    tipo: PLAZO
+    instrumento: DEPOSITO_BANCARIO
+    plazo_dias: 182
+    monto_minimo: 0.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Revolut
+    nombre: Revolut Cuenta con Rendimiento
+    slug: revolut-vista
+    tipo: VISTA
+    instrumento: DEPOSITO_BANCARIO
+    monto_minimo: 0.00
+    liquidez: INMEDIATA
+    penalizacion_retiro: >-
+      La tasa más alta aplica sólo a un tramo del saldo; por encima de ese
+      tope el rendimiento baja de forma escalonada.
+
+  - institucion: Openbank
+    nombre: Openbank Cuenta de Ahorro
+    slug: openbank-vista
+    tipo: VISTA
+    instrumento: DEPOSITO_BANCARIO
+    monto_minimo: 0.00
+    liquidez: INMEDIATA
+
+  - institucion: Hey Banco
+    nombre: Hey Inversión a la vista
+    slug: hey-vista
+    tipo: VISTA
+    instrumento: DEPOSITO_BANCARIO
+    monto_minimo: 0.00
+    liquidez: INMEDIATA
+
+  - institucion: Ualá
+    nombre: Ualá Rendimientos
+    slug: uala-vista
+    tipo: VISTA
+    instrumento: DEPOSITO_BANCARIO
+    monto_minimo: 0.00
+    liquidez: INMEDIATA
+
+  # ─── IFPE ───────────────────────────────────────────────────
+  - institucion: Mercado Pago
+    nombre: Mercado Pago Rendimientos
+    slug: mercado-pago-vista
+    tipo: VISTA
+    instrumento: MONEDERO_ELECTRONICO
+    monto_minimo: 0.00
+    liquidez: INMEDIATA
+    penalizacion_retiro: >-
+      La tasa aplica sólo hasta cierto saldo. Sin cobertura IPAB ni PROSOFIPO.

@@ -1,0 +1,152 @@
+# Catálogo de instituciones del MVP (decisión D3): top 10 SOFIPOs, top 5
+# neobancos con licencia bancaria, el emisor gubernamental y un IFPE.
+#
+# La `categoria` es la **figura regulatoria vigente**, no la percepción de
+# mercado (§3 del foundation). De ella se deriva la cobertura de seguro, así
+# que equivocarla equivale a mentirle al usuario sobre cuánto tiene protegido.
+#
+# `nombre_cnbv` queda vacío a propósito: es la clave de mapeo contra los
+# boletines de la CNBV y se rellena en la fase 8 leyendo el fichero real. No se
+# inventa.
+#
+# Clave natural para el upsert idempotente: `nombre`.
+
+instituciones:
+  # ─── Gubernamental ──────────────────────────────────────────
+  - nombre: Gobierno Federal
+    slug: gobierno-federal
+    categoria: GOBIERNO
+    tipo_seguro: SOBERANO
+    url_sitio: https://www.cetesdirecto.com/
+    estatus_regulatorio: Deuda soberana emitida por la SHCP y colocada por Banxico
+    notas: >-
+      Sin límite de cobertura: no hay fondo de protección porque el obligado es
+      el propio Gobierno Federal (§4.6). Incluye CETES y BONDDIA, este último
+      operado por Nacional Financiera.
+
+  # ─── SOFIPOs (PROSOFIPO, 25,000 UDIs) ───────────────────────
+  - nombre: DiDi
+    slug: didi
+    categoria: SOFIPO
+    tipo_seguro: PROSOFIPO
+    url_sitio: https://www.didiglobal.com/mx/finance
+    estatus_regulatorio: Sociedad Financiera Popular autorizada por la CNBV
+
+  - nombre: Finsus
+    slug: finsus
+    categoria: SOFIPO
+    tipo_seguro: PROSOFIPO
+    url_sitio: https://www.finsus.mx/
+    estatus_regulatorio: Sociedad Financiera Popular autorizada por la CNBV
+
+  - nombre: Klar
+    slug: klar
+    categoria: SOFIPO
+    tipo_seguro: PROSOFIPO
+    url_sitio: https://www.klar.mx/
+    estatus_regulatorio: Sociedad Financiera Popular autorizada por la CNBV
+    notas: >-
+      Opera también como emisora de tarjeta. La figura que determina la
+      cobertura de los depósitos es la SOFIPO.
+
+  - nombre: kubo.financiero
+    slug: kubo-financiero
+    categoria: SOFIPO
+    tipo_seguro: PROSOFIPO
+    url_sitio: https://www.kubofinanciero.com/
+    estatus_regulatorio: Sociedad Financiera Popular autorizada por la CNBV
+
+  - nombre: Stori
+    slug: stori
+    categoria: SOFIPO
+    tipo_seguro: PROSOFIPO
+    url_sitio: https://www.storicard.com/
+    estatus_regulatorio: Sociedad Financiera Popular autorizada por la CNBV
+
+  - nombre: Supertasas
+    slug: supertasas
+    categoria: SOFIPO
+    tipo_seguro: PROSOFIPO
+    url_sitio: https://www.supertasas.com/
+    estatus_regulatorio: Sociedad Financiera Popular autorizada por la CNBV
+
+  - nombre: Libertad Servicios Financieros
+    slug: libertad-servicios-financieros
+    categoria: SOFIPO
+    tipo_seguro: PROSOFIPO
+    url_sitio: https://www.libertad.mx/
+    estatus_regulatorio: Sociedad Financiera Popular autorizada por la CNBV
+
+  - nombre: Te Creemos
+    slug: te-creemos
+    categoria: SOFIPO
+    tipo_seguro: PROSOFIPO
+    url_sitio: https://www.tecreemos.com/
+    estatus_regulatorio: Sociedad Financiera Popular autorizada por la CNBV
+
+  - nombre: CAME
+    slug: came
+    categoria: SOFIPO
+    tipo_seguro: PROSOFIPO
+    url_sitio: https://www.came.org.mx/
+    estatus_regulatorio: Sociedad Financiera Popular autorizada por la CNBV
+
+  - nombre: Crediclub
+    slug: crediclub
+    categoria: SOFIPO
+    tipo_seguro: PROSOFIPO
+    url_sitio: https://www.crediclub.com/
+    estatus_regulatorio: Sociedad Financiera Popular autorizada por la CNBV
+
+  # ─── Neobancos con licencia bancaria (IPAB, 400,000 UDIs) ───
+  - nombre: Nu México
+    slug: nu-mexico
+    categoria: BANCO_DIGITAL
+    tipo_seguro: IPAB
+    url_sitio: https://nu.com.mx/
+    estatus_regulatorio: Institución de Banca Múltiple autorizada por la CNBV
+    notas: >-
+      Fue SOFIPO hasta 2025. Obtuvo licencia bancaria en abril de 2025 y la
+      CNBV autorizó el inicio de operaciones como banca múltiple en julio de
+      2026, de modo que sus depósitos pasan de PROSOFIPO (25,000 UDIs) a IPAB
+      (400,000 UDIs). Varios comparadores del mercado siguen clasificándola
+      como SOFIPO y muestran una cobertura 16 veces menor de la real.
+
+  - nombre: Revolut
+    slug: revolut
+    categoria: BANCO_DIGITAL
+    tipo_seguro: IPAB
+    url_sitio: https://www.revolut.com/es-MX/
+    estatus_regulatorio: Institución de Banca Múltiple autorizada por la CNBV
+
+  - nombre: Ualá
+    slug: uala
+    categoria: BANCO_DIGITAL
+    tipo_seguro: IPAB
+    url_sitio: https://www.uala.mx/
+    estatus_regulatorio: Institución de Banca Múltiple (ABC Capital) autorizada por la CNBV
+
+  - nombre: Openbank
+    slug: openbank
+    categoria: BANCO_DIGITAL
+    tipo_seguro: IPAB
+    url_sitio: https://www.openbank.mx/
+    estatus_regulatorio: Institución de Banca Múltiple del grupo Santander
+
+  - nombre: Hey Banco
+    slug: hey-banco
+    categoria: BANCO_DIGITAL
+    tipo_seguro: IPAB
+    url_sitio: https://www.hey.inc/
+    estatus_regulatorio: Institución de Banca Múltiple autorizada por la CNBV
+
+  # ─── IFPE (sin fondo de protección) ─────────────────────────
+  - nombre: Mercado Pago
+    slug: mercado-pago
+    categoria: IFPE
+    tipo_seguro: NINGUNO
+    url_sitio: https://www.mercadopago.com.mx/
+    estatus_regulatorio: Institución de Fondos de Pago Electrónico (Ley Fintech)
+    notas: >-
+      Sin cobertura IPAB ni PROSOFIPO: los fondos viven en un fideicomiso
+      segregado (§3.5). Lleva bandera informativa permanente (§5.3).
