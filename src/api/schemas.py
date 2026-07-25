@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domain.enums import (
     CategoriaInstitucion,
+    EstadoIndicador,
     EstadoTasa,
     FuenteTasa,
     Liquidez,
@@ -31,6 +32,7 @@ from domain.enums import (
     TipoInstrumento,
     TipoProducto,
     TipoSeguro,
+    UnidadIndicador,
 )
 
 DISCLAIMER = (
@@ -149,6 +151,25 @@ class RespuestaComparador(Esquema):
 # ─── Detalle de institución ───────────────────────────────────
 
 
+class IndicadorEvaluadoSchema(Esquema):
+    """Un indicador con su semáforo, listo para pintar como tarjeta.
+
+    El estado sale de la **misma** regla que emite la bandera, así que la
+    tarjeta y la bandera no pueden contradecirse. El formato del número es
+    cosa de la UI; aquí viaja el valor y su unidad.
+    """
+
+    clave: str
+    etiqueta: str
+    valor: Decimal | None
+    valor_texto: str | None = Field(
+        description='Para los que no son número, como el nivel NICAP ("N2")'
+    )
+    unidad: UnidadIndicador
+    estado: EstadoIndicador
+    descripcion: str
+
+
 class IndicadoresSchema(Esquema):
     periodo: date
     imor: Decimal | None
@@ -158,6 +179,10 @@ class IndicadoresSchema(Esquema):
     captacion: Decimal | None
     cartera_total: Decimal | None
     fuente_url: str | None
+    evaluados: list[IndicadorEvaluadoSchema] = Field(
+        default_factory=list,
+        description="Los mismos indicadores con su estado respecto a los umbrales vigentes",
+    )
 
 
 class ProductoDetalle(Esquema):
@@ -335,6 +360,7 @@ __all__ = [
     "FilaComparador",
     "FrescuraFuente",
     "GatSchema",
+    "IndicadorEvaluadoSchema",
     "IndicadoresSchema",
     "InstitucionResumen",
     "Procedencia",

@@ -20,6 +20,7 @@ from api.dependencies import ContextoDep, LecturaDep, SessionDep
 from api.schemas import (
     DetalleInstitucion,
     IndicadoresSchema,
+    IndicadorEvaluadoSchema,
     ProductoDetalle,
 )
 from api.services.mappers import (
@@ -29,7 +30,9 @@ from api.services.mappers import (
     procedencia,
 )
 from api.services.tasas_vigentes import tasas_vigentes_por_producto
+from domain.models import from_orm_indicadores
 from domain.orm import Bandera, IndicadorFinanciero, Institucion
+from metrics.flags import evaluar_indicadores
 from metrics.gat import resolver_gat
 from metrics.ten import ten
 
@@ -139,6 +142,18 @@ async def detalle(
         .all()
     )
 
+    indicadores: IndicadoresSchema | None = None
+    if ultimo is not None:
+        indicadores = IndicadoresSchema.model_validate(ultimo)
+        indicadores = indicadores.model_copy(
+            update={
+                "evaluados": [
+                    IndicadorEvaluadoSchema.model_validate(e, from_attributes=True)
+                    for e in evaluar_indicadores(from_orm_indicadores(ultimo), contexto.umbrales)
+                ]
+            }
+        )
+
     return DetalleInstitucion(
         id=institucion.id,
         nombre=institucion.nombre,
@@ -152,7 +167,7 @@ async def detalle(
         notas=institucion.notas,
         cobertura=cobertura_de(institucion, contexto.valor_udi),
         productos=detalles,
-        indicadores_ultimo_periodo=(IndicadoresSchema.model_validate(ultimo) if ultimo else None),
+        indicadores_ultimo_periodo=indicadores,
         banderas_activas=[bandera_desde_orm(b) for b in banderas if b.activa],
         banderas_historicas=[bandera_desde_orm(b) for b in banderas if not b.activa],
     )

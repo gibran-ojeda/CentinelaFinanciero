@@ -21,9 +21,17 @@ código:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 
-from domain.enums import NivelCapitalizacion, Severidad, TipoBandera, TipoSeguro
+from domain.enums import (
+    EstadoIndicador,
+    NivelCapitalizacion,
+    Severidad,
+    TipoBandera,
+    TipoSeguro,
+    UnidadIndicador,
+)
 from domain.models import Bandera, IndicadoresInstitucion, UmbralesBanderas
 
 
@@ -191,6 +199,126 @@ def evaluar_individuales(
         evaluar_apalancamiento(indicadores, umbrales),
     ]
     return [b for b in candidatas if b is not None]
+
+
+# ─── Estado por indicador ─────────────────────────────────────
+#
+# La ficha de detalle muestra cada indicador con su semáforo. El estado se
+# **deriva de la misma regla** que emitiría la bandera, no de una tabla de
+# umbrales paralela: si se duplicaran, un día la tarjeta diría "en rango" con
+# la bandera roja al lado y no habría forma de saber cuál miente.
+
+
+@dataclass(frozen=True, slots=True)
+class IndicadorEvaluado:
+    """Un indicador listo para pintar como tarjeta."""
+
+    clave: str
+    etiqueta: str
+    valor: Decimal | None
+    valor_texto: str | None
+    """Para los que no son número, como el nivel NICAP ("N2")."""
+
+    unidad: UnidadIndicador
+    estado: EstadoIndicador
+    descripcion: str
+
+
+_ESTADO_POR_SEVERIDAD = {
+    Severidad.AMARILLA: EstadoIndicador.ATENCION,
+    Severidad.ROJA: EstadoIndicador.ALERTA,
+}
+
+
+def _estado(valor: object | None, bandera: Bandera | None) -> EstadoIndicador:
+    if valor is None:
+        return EstadoIndicador.SIN_DATO
+    if bandera is None:
+        return EstadoIndicador.EN_RANGO
+    return _ESTADO_POR_SEVERIDAD[bandera.severidad]
+
+
+def evaluar_indicadores(
+    indicadores: IndicadoresInstitucion, umbrales: UmbralesBanderas
+) -> list[IndicadorEvaluado]:
+    """Los indicadores de la ficha, cada uno con su estado.
+
+    Se devuelven **todos**, incluso los que la CNBV no publica para esa figura:
+    un hueco explícito ("sin dato") dice más que una tarjeta ausente, sobre
+    todo mientras la ingesta de la fase 8 no existe. La UI decide cuáles pinta.
+    """
+    return [
+        IndicadorEvaluado(
+            clave="IMOR",
+            etiqueta="Morosidad",
+            valor=indicadores.imor,
+            valor_texto=None,
+            unidad=UnidadIndicador.PORCENTAJE,
+            estado=_estado(indicadores.imor, evaluar_imor(indicadores, umbrales)),
+            descripcion="Cartera vencida sobre cartera total",
+        ),
+        IndicadorEvaluado(
+            clave="ICAP",
+            etiqueta="Capitalización",
+            valor=indicadores.icap,
+            valor_texto=None,
+            unidad=UnidadIndicador.PORCENTAJE,
+            estado=_estado(indicadores.icap, evaluar_icap(indicadores, umbrales)),
+            descripcion="Capital propio frente a activos en riesgo",
+        ),
+        IndicadorEvaluado(
+            clave="NICAP",
+            etiqueta="Nivel de capitalización",
+            valor=None,
+            valor_texto=(
+                indicadores.nicap_nivel.value if indicadores.nicap_nivel is not None else None
+            ),
+            unidad=UnidadIndicador.NIVEL,
+            estado=_estado(indicadores.nicap_nivel, evaluar_nicap(indicadores)),
+            descripcion="Categoría prudencial que la CNBV asigna a cada SOFIPO",
+        ),
+        IndicadorEvaluado(
+            clave="ICOR",
+            etiqueta="Cobertura de cartera vencida",
+            valor=indicadores.icor,
+            valor_texto=None,
+            unidad=UnidadIndicador.PORCENTAJE,
+            estado=_estado(indicadores.icor, evaluar_cobertura_cartera(indicadores, umbrales)),
+            descripcion="Reservas frente a la cartera ya vencida",
+        ),
+        IndicadorEvaluado(
+            clave="APALANCAMIENTO",
+            etiqueta="Apalancamiento",
+            valor=(
+                indicadores.apalancamiento.quantize(Decimal("0.01"))
+                if indicadores.apalancamiento is not None
+                else None
+            ),
+            valor_texto=None,
+            unidad=UnidadIndicador.VECES,
+            estado=_estado(
+                indicadores.apalancamiento, evaluar_apalancamiento(indicadores, umbrales)
+            ),
+            descripcion="Cuánto debe por cada peso de capital propio",
+        ),
+        IndicadorEvaluado(
+            clave="CAPTACION",
+            etiqueta="Captación",
+            valor=indicadores.captacion,
+            valor_texto=None,
+            unidad=UnidadIndicador.MONEDA,
+            # No hay umbral de captación: un saldo grande no es bueno ni malo
+            # por sí mismo. Entra en la compuesta de §5.2 como *crecimiento*,
+            # no como nivel. Marcarlo "en rango" sugeriría una evaluación que
+            # nadie ha hecho.
+            estado=(
+                EstadoIndicador.SIN_DATO
+                if indicadores.captacion is None
+                else EstadoIndicador.INFORMATIVO
+            ),
+            descripcion="Saldo total captado del público",
+        ),
+    ]
 
 
 # ─── Bandera informativa de cobertura (§5.3) ──────────────────
@@ -387,6 +515,7 @@ def evaluar_banderas(
 
 
 __all__ = [
+    "IndicadorEvaluado",
     "evaluar_apalancamiento",
     "evaluar_banderas",
     "evaluar_cobertura_cartera",
@@ -394,6 +523,7 @@ __all__ = [
     "evaluar_gat_inconsistente",
     "evaluar_icap",
     "evaluar_imor",
+    "evaluar_indicadores",
     "evaluar_individuales",
     "evaluar_nicap",
     "evaluar_no_recomendable",

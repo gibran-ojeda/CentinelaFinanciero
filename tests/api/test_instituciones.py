@@ -43,6 +43,37 @@ async def test_a_nonexistent_reference_is_a_404_not_a_422(api_lectura: AsyncClie
     assert (await api_lectura.get("/api/v1/instituciones/no-existe")).status_code == 404
 
 
+async def test_indicators_come_with_their_status(api_lectura: AsyncClient) -> None:
+    """Las cuatro tarjetas del detalle salen de la API, no del frontend.
+
+    Ahorra+ Capital tiene la salud en rango; su única bandera es la de GAT,
+    que no es un indicador. Alcancía Fuerte los tiene en alerta.
+    """
+    sana = (await api_lectura.get("/api/v1/instituciones/ahorra-mas-capital")).json()
+    estados = {i["clave"]: i["estado"] for i in sana["indicadores_ultimo_periodo"]["evaluados"]}
+
+    assert estados["IMOR"] == "EN_RANGO"
+    assert estados["NICAP"] == "EN_RANGO"
+    assert estados["ICOR"] == "EN_RANGO"
+    assert estados["ICAP"] == "SIN_DATO"  # las SOFIPOs reportan NICAP
+    assert estados["CAPTACION"] == "INFORMATIVO"
+
+    enferma = (await api_lectura.get("/api/v1/instituciones/alcancia-fuerte")).json()
+    estados = {i["clave"]: i["estado"] for i in enferma["indicadores_ultimo_periodo"]["evaluados"]}
+
+    assert estados["IMOR"] == "ALERTA"
+    assert estados["NICAP"] == "ALERTA"
+    assert estados["ICOR"] == "ALERTA"
+
+
+async def test_institutions_without_cnbv_data_have_no_indicators(
+    api_lectura: AsyncClient,
+) -> None:
+    """Sin boletines no hay tarjetas que pintar, y eso se dice explícitamente."""
+    cuerpo = (await api_lectura.get("/api/v1/instituciones/finsus")).json()
+    assert cuerpo["indicadores_ultimo_periodo"] is None
+
+
 async def test_resolves_by_slug(api_lectura: AsyncClient) -> None:
     """La URL indexable del frontend es `/institucion/{slug}`."""
     respuesta = await api_lectura.get("/api/v1/instituciones/finsus")

@@ -120,6 +120,39 @@ class Severidad(StrEnum):
     ROJA = "ROJA"
 
 
+class EstadoIndicador(StrEnum):
+    """Cómo está un indicador respecto a sus umbrales.
+
+    Es la misma evaluación que produce las banderas, expresada por indicador
+    en vez de por institución: la ficha de detalle muestra IMOR, ICAP/NICAP e
+    ICOR con su semáforo. Se deriva de las reglas de §5.1, nunca de umbrales
+    propios, para que la tarjeta y la bandera no puedan contradecirse.
+    """
+
+    EN_RANGO = "EN_RANGO"
+    ATENCION = "ATENCION"
+    """Equivale a una bandera 🟡."""
+
+    ALERTA = "ALERTA"
+    """Equivale a una bandera 🔴."""
+
+    SIN_DATO = "SIN_DATO"
+    """La CNBV no publica ese indicador para esta figura, o aún no se ingirió."""
+
+    INFORMATIVO = "INFORMATIVO"
+    """Tiene valor pero no umbral: es contexto, no señal. La captación, p. ej."""
+
+
+class UnidadIndicador(StrEnum):
+    """Cómo se lee el valor. El formato es cosa de la UI, la unidad no."""
+
+    PORCENTAJE = "PORCENTAJE"
+    MONEDA = "MONEDA"
+    VECES = "VECES"
+    NIVEL = "NIVEL"
+    """Categoría prudencial de la CNBV (N1–N4): no es un número."""
+
+
 class TipoBandera(StrEnum):
     """Qué disparó la bandera. Individuales de §5.1, compuestas de §5.2."""
 
@@ -193,6 +226,7 @@ SEGURO_POR_CATEGORIA: dict[CategoriaInstitucion, TipoSeguro] = {
 __all__ = [
     "SEGURO_POR_CATEGORIA",
     "CategoriaInstitucion",
+    "EstadoIndicador",
     "EstadoJob",
     "EstadoRevision",
     "EstadoTasa",
@@ -204,4 +238,5 @@ __all__ = [
     "TipoInstrumento",
     "TipoProducto",
     "TipoSeguro",
+    "UnidadIndicador",
 ]
