@@ -32,6 +32,7 @@ for _key, _value in _TEST_ENV.items():
 # que el `.env`, así que estos valores ganan sobre el `.env` del desarrollador
 # (y sobre el `cp .env.example .env` que hace el CI) sin necesidad de borrarlo.
 
+import socket  # noqa: E402
 import subprocess  # noqa: E402
 from collections.abc import Iterator  # noqa: E402
 from functools import lru_cache  # noqa: E402
@@ -72,6 +73,65 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if "requires_docker" in item.keywords:
             item.add_marker(skip)
+
+
+def closed_port() -> int:
+    """Un puerto TCP en el que con toda seguridad no escucha nadie.
+
+    Los tests de degradación no pueden asumir "no hay Redis levantado": basta
+    con que el desarrollador tenga el `docker compose up` corriendo para que
+    los puertos de test estén ocupados por servicios reales. Apuntar a un
+    puerto cerrado hace la ausencia explícita en vez de ambiental.
+    """
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port: int = sock.getsockname()[1]
+    return port
+
+
+@pytest.fixture
+async def dead_redis() -> Iterator[None]:
+    """Apunta `core.redis` a un puerto cerrado."""
+    from redis.asyncio import Redis
+
+    import core.redis as redis_module
+
+    previous = redis_module._client
+    client = Redis.from_url(
+        f"redis://127.0.0.1:{closed_port()}/0",
+        decode_responses=True,
+        socket_timeout=0.25,
+        socket_connect_timeout=0.25,
+    )
+    redis_module._client = client
+    try:
+        yield
+    finally:
+        # El test pudo llamar a `close()` y dejar el módulo en None: se cierra
+        # el cliente que creó la fixture, no el que haya quedado.
+        await client.aclose()
+        redis_module._client = previous
+
+
+@pytest.fixture
+async def dead_db() -> Iterator[None]:
+    """Apunta `core.db` a un puerto cerrado."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    import core.db as db_module
+
+    previous_engine, previous_maker = db_module._engine, db_module._sessionmaker
+    engine = create_async_engine(
+        f"postgresql+asyncpg://nadie:nadie@127.0.0.1:{closed_port()}/nada",
+        connect_args={"timeout": 1},
+    )
+    db_module._engine = engine
+    db_module._sessionmaker = None
+    try:
+        yield
+    finally:
+        await engine.dispose()
+        db_module._engine, db_module._sessionmaker = previous_engine, previous_maker
 
 
 @pytest.fixture(scope="session")

@@ -30,6 +30,7 @@ def _fake_ping(result: bool) -> Callable[[], Awaitable[bool]]:
     return _ping
 
 
+@pytest.mark.usefixtures("dead_db", "dead_redis")
 async def test_healthz_returns_503_when_database_is_down(client: AsyncClient) -> None:
     response = await client.get("/healthz")
     assert response.status_code == 503

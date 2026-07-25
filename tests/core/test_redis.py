@@ -11,21 +11,24 @@ import pytest
 import core.redis as redis_module
 from core.redis import close, delete, delete_pattern, eval_script, get, ping, set
 
+# La degradación se prueba contra un puerto cerrado, no contra "que no haya
+# nada levantado": el compose de desarrollo ocupa los puertos de test.
+pytestmark = pytest.mark.usefixtures("dead_redis")
 
-@pytest.fixture(autouse=True)
-async def _reset_client() -> None:
+
+async def test_client_is_created_lazily_and_cached() -> None:
     await close()
-
-
-def test_client_is_created_lazily_and_cached() -> None:
     assert redis_module._client is None
     client = redis_module.get_client()
     assert redis_module.get_client() is client
+    await close()
 
 
-def test_client_decodes_responses() -> None:
+async def test_client_decodes_responses() -> None:
+    await close()
     client = redis_module.get_client()
     assert client.connection_pool.connection_kwargs["decode_responses"] is True
+    await close()
 
 
 async def test_ping_returns_false_when_unavailable() -> None:
@@ -55,7 +58,6 @@ async def test_eval_script_returns_none_when_unavailable() -> None:
 
 
 async def test_close_is_idempotent() -> None:
-    redis_module.get_client()
     await close()
     assert redis_module._client is None
     await close()

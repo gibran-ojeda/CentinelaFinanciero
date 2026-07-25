@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import pytest
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from scheduler.registry import JobSpec, build_registry, enabled_jobs
-from scheduler.runner import JOB_DEFAULTS, _guarded, build_scheduler
+from scheduler.runner import JOB_DEFAULTS, _derive_cooldown, _guarded, build_scheduler
 
 
 async def _noop() -> None:
@@ -53,10 +54,22 @@ def test_scheduler_registers_enabled_jobs() -> None:
         scheduler.shutdown(wait=False) if scheduler.running else None
 
 
-async def test_guarded_job_is_skipped_when_lock_is_unavailable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Sin Redis el lock no se obtiene y el job no debe ejecutarse."""
+def test_cooldown_is_shorter_than_the_interval() -> None:
+    """La llave de tick debe caducar antes del siguiente disparo."""
+    assert _derive_cooldown(IntervalTrigger(seconds=60)) == 48
+    assert _derive_cooldown(IntervalTrigger(seconds=15)) == 12
+    # Nunca cero, aunque el intervalo sea de un segundo.
+    assert _derive_cooldown(IntervalTrigger(seconds=1)) >= 1
+
+
+def test_cron_triggers_use_a_fixed_cooldown_window() -> None:
+    """Un cron no tiene espaciado fijo; basta cubrir la deriva entre réplicas."""
+    assert _derive_cooldown(CronTrigger(hour=7)) == 60
+
+
+@pytest.mark.usefixtures("dead_redis")
+async def test_guarded_job_is_skipped_when_redis_is_unavailable() -> None:
+    """Sin Redis no hay exclusión posible: el job no corre."""
     ejecutado = False
 
     async def marcar() -> None:
@@ -67,18 +80,55 @@ async def test_guarded_job_is_skipped_when_lock_is_unavailable(
     assert ejecutado is False
 
 
-async def test_guarded_job_runs_when_lock_is_acquired(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_guarded_job_runs_when_tick_and_lock_are_won(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     ejecutado = False
 
     async def marcar() -> None:
         nonlocal ejecutado
         ejecutado = True
 
-    monkeypatch.setattr("scheduler.runner.locks.acquire", _always_acquires)
-    monkeypatch.setattr("scheduler.runner.locks.release", _always_releases)
-
+    _patch_exclusion(monkeypatch, tick_won=True)
     await _guarded(_spec(func=marcar))()
     assert ejecutado is True
+
+
+async def test_guarded_job_is_skipped_when_another_replica_won_the_tick(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """El caso que el lock por sí solo no cubre: dos réplicas, un disparo."""
+    ejecutado = False
+
+    async def marcar() -> None:
+        nonlocal ejecutado
+        ejecutado = True
+
+    _patch_exclusion(monkeypatch, tick_won=False)
+    await _guarded(_spec(func=marcar))()
+    assert ejecutado is False
+
+
+async def test_tick_is_released_when_the_lock_is_busy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Una corrida anterior en vuelo no consume el disparo actual."""
+    liberado = False
+
+    async def _release_tick(name: str) -> bool:
+        nonlocal liberado
+        liberado = True
+        return True
+
+    async def _lock_busy(name: str, *, ttl_seconds: int | None = None) -> None:
+        return None
+
+    _patch_exclusion(monkeypatch, tick_won=True)
+    monkeypatch.setattr("scheduler.runner.locks.acquire", _lock_busy)
+    monkeypatch.setattr("scheduler.runner.locks.release_tick", _release_tick)
+
+    await _guarded(_spec())()
+    assert liberado is True
 
 
 async def test_guarded_job_swallows_exceptions(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -87,15 +137,20 @@ async def test_guarded_job_swallows_exceptions(monkeypatch: pytest.MonkeyPatch) 
     async def revienta() -> None:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("scheduler.runner.locks.acquire", _always_acquires)
-    monkeypatch.setattr("scheduler.runner.locks.release", _always_releases)
-
+    _patch_exclusion(monkeypatch, tick_won=True)
     await _guarded(_spec(func=revienta))()  # no debe propagar
 
 
-async def _always_acquires(name: str, *, ttl_seconds: int | None = None) -> str:
-    return "token"
+def _patch_exclusion(monkeypatch: pytest.MonkeyPatch, *, tick_won: bool) -> None:
+    async def _claim_tick(name: str, *, cooldown_seconds: int) -> bool:
+        return tick_won
 
+    async def _acquire(name: str, *, ttl_seconds: int | None = None) -> str:
+        return "token"
 
-async def _always_releases(name: str, token: str) -> bool:
-    return True
+    async def _release(name: str, token: str) -> bool:
+        return True
+
+    monkeypatch.setattr("scheduler.runner.locks.claim_tick", _claim_tick)
+    monkeypatch.setattr("scheduler.runner.locks.acquire", _acquire)
+    monkeypatch.setattr("scheduler.runner.locks.release", _release)

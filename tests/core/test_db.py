@@ -39,6 +39,7 @@ def test_sessionmaker_is_bound_to_the_engine() -> None:
     assert get_sessionmaker() is maker
 
 
+@pytest.mark.usefixtures("dead_db")
 async def test_check_connection_returns_false_without_database() -> None:
     """El healthcheck reporta el fallo, no lo propaga."""
     assert await check_connection() is False

@@ -1,10 +1,19 @@
-"""Lock distribuido en Redis para jobs del scheduler.
+"""Exclusión distribuida en Redis para jobs del scheduler.
 
-Garantiza que un job no corra dos veces a la vez aunque haya varias réplicas
-del scheduler. `max_instances=1` de APScheduler sólo protege dentro de un
-proceso; esto protege entre procesos.
+Con varias réplicas del scheduler hay que garantizar **dos** cosas distintas,
+y una sola llave no cubre las dos:
 
-Dos detalles que no son opcionales:
+1. **Un job no se solapa consigo mismo** — lo da el lock (`acquire`/`release`).
+   `max_instances=1` de APScheduler sólo protege dentro de un proceso; el lock
+   protege entre procesos.
+2. **Un job corre una sola vez por disparo programado** — lo da `claim_tick`.
+   El lock por sí solo no basta: un job corto lo toma y lo libera en un
+   milisegundo, así que la réplica que dispara 300 ms más tarde lo encuentra
+   libre y ejecuta también. El "tick" es una llave con TTL cercano al intervalo
+   que **no se libera**: la primera réplica que la pone gana el disparo y las
+   demás se saltan la corrida. Expira sola a tiempo para el siguiente disparo.
+
+Detalles del lock que no son opcionales:
 
 1. **TTL obligatorio.** Si el proceso muere con el lock tomado, el TTL lo
    libera. Sin TTL, un crash bloquea el job para siempre.
@@ -13,8 +22,8 @@ Dos detalles que no son opcionales:
    toma, y entonces A termina y borra el lock de B. El script compara el token
    antes de borrar, de forma atómica.
 
-Degradación: si Redis no está disponible, `acquire` devuelve `False` — el job
-**no** corre. Preferimos saltarnos una corrida a ejecutarla dos veces.
+Degradación: si Redis no está disponible, ni el tick ni el lock se obtienen —
+el job **no** corre. Preferimos saltarnos una corrida a ejecutarla dos veces.
 """
 
 from __future__ import annotations
@@ -32,6 +41,7 @@ from core.settings import settings
 log = get_logger(__name__)
 
 LOCK_PREFIX = "brujula:lock:"
+TICK_PREFIX = "brujula:tick:"
 
 # Borra la clave sólo si sigue siendo nuestra. KEYS[1]=clave, ARGV[1]=token.
 _RELEASE_SCRIPT = """
@@ -54,6 +64,38 @@ end
 
 def lock_key(name: str) -> str:
     return f"{LOCK_PREFIX}{name}"
+
+
+def tick_key(name: str) -> str:
+    return f"{TICK_PREFIX}{name}"
+
+
+async def claim_tick(name: str, *, cooldown_seconds: int) -> bool:
+    """Reclama el disparo actual del job. Sólo una réplica puede ganarlo.
+
+    A diferencia del lock, esta llave **no se libera**: expira por TTL. El
+    `cooldown_seconds` debe ser menor que el intervalo del job (ver
+    `runner._derive_cooldown`) para que la llave haya caducado cuando llegue el
+    siguiente disparo, pero mayor que la deriva entre réplicas.
+    """
+    try:
+        claimed = await redis.get_client().set(
+            tick_key(name), "1", nx=True, ex=max(1, cooldown_seconds)
+        )
+    except (RedisError, OSError) as exc:
+        log.warning("tick_claim_failed", job=name, error=str(exc))
+        return False
+    return bool(claimed)
+
+
+async def release_tick(name: str) -> bool:
+    """Libera el tick para permitir un reintento inmediato.
+
+    Se usa cuando el job no llegó a ejecutarse (por ejemplo, porque el lock
+    estaba ocupado por una corrida anterior que se alargó): en ese caso el
+    disparo no se consumió realmente.
+    """
+    return await redis.delete(tick_key(name)) > 0
 
 
 async def acquire(name: str, *, ttl_seconds: int | None = None) -> str | None:
@@ -113,4 +155,15 @@ async def job_lock(name: str, *, ttl_seconds: int | None = None) -> AsyncIterato
         await release(name, token)
 
 
-__all__ = ["LOCK_PREFIX", "acquire", "extend", "job_lock", "lock_key", "release"]
+__all__ = [
+    "LOCK_PREFIX",
+    "TICK_PREFIX",
+    "acquire",
+    "claim_tick",
+    "extend",
+    "job_lock",
+    "lock_key",
+    "release",
+    "release_tick",
+    "tick_key",
+]

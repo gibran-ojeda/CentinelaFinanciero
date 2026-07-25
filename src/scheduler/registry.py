@@ -40,6 +40,9 @@ class JobSpec:
     lock_name: str | None = None
     # TTL del lock. Debe superar la duración máxima esperada del job.
     lock_ttl_seconds: int | None = None
+    # Ventana en la que un disparo ya consumido no se repite. Por defecto se
+    # deriva del trigger (ver `runner._derive_cooldown`).
+    cooldown_seconds: int | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
 
     @property

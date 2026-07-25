@@ -14,14 +14,21 @@ import pytest
 from scheduler import locks
 
 
+@pytest.mark.usefixtures("dead_redis")
 async def test_acquire_returns_none_without_redis() -> None:
     """Sin Redis no hay garantía de exclusión: el job se salta la corrida."""
     assert await locks.acquire("heartbeat") is None
 
 
+@pytest.mark.usefixtures("dead_redis")
 async def test_job_lock_yields_false_without_redis() -> None:
     async with locks.job_lock("heartbeat") as adquirido:
         assert adquirido is False
+
+
+@pytest.mark.usefixtures("dead_redis")
+async def test_claim_tick_returns_false_without_redis() -> None:
+    assert await locks.claim_tick("heartbeat", cooldown_seconds=30) is False
 
 
 def test_lock_key_is_namespaced() -> None:
@@ -87,3 +94,47 @@ class TestConRedisReal:
 
         # El lock quedó libre pese a la excepción.
         assert await locks.acquire("job-g", ttl_seconds=30) is not None
+
+    async def test_only_one_replica_claims_a_tick(self) -> None:
+        """El caso que el lock por sí solo no cubre.
+
+        Un job corto toma y suelta el lock en un milisegundo, así que la
+        réplica que dispara un instante después lo encuentra libre. El tick sí
+        lo impide porque no se libera al terminar.
+        """
+        primera = await locks.claim_tick("job-h", cooldown_seconds=30)
+        segunda = await locks.claim_tick("job-h", cooldown_seconds=30)
+        assert primera is True
+        assert segunda is False
+
+    async def test_tick_expires_so_the_next_run_can_proceed(self) -> None:
+        assert await locks.claim_tick("job-i", cooldown_seconds=1) is True
+        await asyncio.sleep(1.3)
+        assert await locks.claim_tick("job-i", cooldown_seconds=1) is True
+
+    async def test_release_tick_allows_an_immediate_retry(self) -> None:
+        assert await locks.claim_tick("job-j", cooldown_seconds=300) is True
+        assert await locks.release_tick("job-j") is True
+        assert await locks.claim_tick("job-j", cooldown_seconds=300) is True
+
+    async def test_tick_and_lock_use_separate_namespaces(self) -> None:
+        """Tomar el tick no debe consumir el lock ni al revés."""
+        assert await locks.claim_tick("job-k", cooldown_seconds=30) is True
+        assert await locks.acquire("job-k", ttl_seconds=30) is not None
+
+    async def test_concurrent_replicas_produce_exactly_one_run(self) -> None:
+        """Reproduce el escenario de `docker compose --scale scheduler=2`."""
+        corridas = 0
+
+        async def replica() -> None:
+            nonlocal corridas
+            if not await locks.claim_tick("job-l", cooldown_seconds=30):
+                return
+            async with locks.job_lock("job-l", ttl_seconds=30) as adquirido:
+                if adquirido:
+                    corridas += 1
+
+        # Secuencial a propósito: es el caso que fallaba, no el concurrente.
+        await replica()
+        await replica()
+        assert corridas == 1
