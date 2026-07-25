@@ -87,7 +87,9 @@ class _Candidato:
     banderas: list[Bandera] = field(default_factory=list)
 
 
-def _aplicar_filtros_sql(consulta: Select[tuple[Producto]], f: FiltrosComparador) -> Select:
+def _aplicar_filtros_sql(
+    consulta: Select[tuple[Producto]], f: FiltrosComparador
+) -> Select[tuple[Producto]]:
     """Los filtros que sí son columnas."""
     consulta = consulta.where(Producto.activo.is_(True), Institucion.activa.is_(True))
 

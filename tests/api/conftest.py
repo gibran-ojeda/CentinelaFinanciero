@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from decimal import Decimal
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -60,3 +61,52 @@ async def catalogo_cargado(real_db: None) -> None:
 
     await run_seed()
     await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
+
+
+#: Tasas VIGENTE que el seed real **no** publica, porque están pendientes de
+#: verificación. Se añaden para poder probar que cada filtro de §7 excluye lo
+#: que debe: con una sola categoría —la gubernamental, que es la única
+#: verificada— no habría nada que un filtro pudiera dejar fuera.
+#:
+#: Se suman a las cinco que el seed sí publica (CETES 28/91/182/364 y BONDDIA),
+#: así que el conjunto de prueba mezcla datos reales y sintéticos igual que lo
+#: haría el sistema en marcha.
+_TASAS_DE_PRUEBA: tuple[tuple[str, str], ...] = (
+    ("finsus-plazo-91", "7.50"),  # SOFIPO, PLAZO 91, mín. 100
+    ("klar-vista", "8.50"),  # SOFIPO, VISTA, inmediata, mín. 0
+    ("nu-cajita-turbo", "13.00"),  # BANCO_DIGITAL, VISTA, mín. 0
+    ("nu-plazo-91", "6.70"),  # BANCO_DIGITAL, PLAZO 91
+    ("mercado-pago-vista", "12.00"),  # IFPE, VISTA, sin cobertura
+    ("libertad-plazo-364", "9.10"),  # SOFIPO, PLAZO 364, mín. 1000
+)
+
+
+@pytest.fixture
+async def comparador_poblado(catalogo_cargado: None) -> None:
+    """Catálogo con tasas publicables en todas las categorías y plazos."""
+    from datetime import date
+
+    from sqlalchemy import select
+
+    from core.db import session_scope
+    from domain.enums import EstadoTasa, FuenteTasa
+    from domain.orm import Producto, Tasa
+
+    async with session_scope() as session:
+        productos = {
+            slug: pid
+            for slug, pid in (
+                (await session.execute(select(Producto.slug, Producto.id))).tuples().all()
+            )
+        }
+        session.add_all(
+            Tasa(
+                producto_id=productos[slug],
+                tasa_nominal=Decimal(tasa),
+                fecha_dato=date(2026, 7, 24),
+                fuente=FuenteTasa.MANUAL,
+                fuente_url="https://example.test/tasas",
+                estado=EstadoTasa.VIGENTE,
+            )
+            for slug, tasa in _TASAS_DE_PRUEBA
+        )
