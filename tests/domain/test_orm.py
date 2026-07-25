@@ -11,7 +11,8 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from domain.enums import (
@@ -110,8 +111,8 @@ async def test_institution_name_is_unique(session: AsyncSession) -> None:
         await session.commit()
 
 
-async def test_invalid_enum_value_is_rejected(session: AsyncSession) -> None:
-    """El check de enum evita que una ingesta escriba una categoría inventada."""
+async def test_invalid_enum_value_is_rejected_by_the_orm(session: AsyncSession) -> None:
+    """`EnumText` valida al escribir: falla antes de llegar a la base."""
     session.add(
         Institucion(
             nombre="Rara",
@@ -120,8 +121,52 @@ async def test_invalid_enum_value_is_rejected(session: AsyncSession) -> None:
             tipo_seguro=TipoSeguro.PROSOFIPO,
         )
     )
-    with pytest.raises(IntegrityError):
+    with pytest.raises(StatementError, match="COOPERATIVA"):
         await session.commit()
+
+
+async def test_invalid_enum_value_is_also_rejected_by_the_database(
+    session: AsyncSession,
+) -> None:
+    """Segunda capa: el CHECK protege lo que no pasa por el ORM.
+
+    Un job de ingesta que use `insert()` con cadenas, o alguien en psql, no
+    ejercitan `EnumText`. El constraint es lo que garantiza que la columna no
+    pueda contener una categoría inventada venga de donde venga.
+    """
+    with pytest.raises(IntegrityError):
+        await session.execute(
+            text(
+                "INSERT INTO instituciones (nombre, slug, categoria, tipo_seguro, activa) "
+                "VALUES ('Rara', 'rara', 'COOPERATIVA', 'PROSOFIPO', true)"
+            )
+        )
+        await session.commit()
+
+
+async def test_enums_round_trip_as_enum_members_not_strings(session: AsyncSession) -> None:
+    """El fallo silencioso que motiva `EnumText`.
+
+    Con una columna `String` a secas, leer devolvía `str` y comparaciones como
+    `producto.tipo is TipoProducto.VISTA` eran siempre falsas — pero `==`
+    seguía funcionando por ser StrEnum, así que nada avisaba.
+    """
+    institucion = _institucion()
+    producto = _producto(institucion, tipo=TipoProducto.VISTA, plazo_dias=None, slug="v")
+    session.add(producto)
+    await session.commit()
+    session.expunge_all()
+
+    recuperado = await session.get(Producto, producto.id)
+    assert recuperado is not None
+    assert recuperado.tipo is TipoProducto.VISTA
+    assert isinstance(recuperado.instrumento, TipoInstrumento)
+    assert isinstance(recuperado.liquidez, Liquidez)
+
+    recuperada = await session.get(Institucion, institucion.id)
+    assert recuperada is not None
+    assert recuperada.categoria is CategoriaInstitucion.SOFIPO
+    assert isinstance(recuperada.tipo_seguro, TipoSeguro)
 
 
 async def test_vista_product_cannot_have_a_term(session: AsyncSession) -> None:

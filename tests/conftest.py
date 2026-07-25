@@ -145,6 +145,50 @@ def redis_container_url() -> Iterator[str]:
         yield f"redis://{host}:{port}/0"
 
 
+@pytest.fixture(scope="session")
+def postgres_container_url() -> Iterator[str]:
+    """Postgres real y efímero, compartido por toda la sesión de tests.
+
+    El contenedor es caro de levantar (~10s), así que se comparte; el aislado
+    entre tests lo da `real_db`, que vacía las tablas.
+    """
+    from testcontainers.postgres import PostgresContainer
+
+    with PostgresContainer("postgres:16") as container:
+        yield (
+            f"postgresql+asyncpg://{container.username}:{container.password}"
+            f"@{container.get_container_host_ip()}:{container.get_exposed_port(5432)}"
+            f"/{container.dbname}"
+        )
+
+
+@pytest.fixture
+async def real_db(postgres_container_url: str) -> Iterator[None]:
+    """Apunta `core.db` a un Postgres real con el esquema creado y vacío."""
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    import core.db as db_module
+    from domain.orm import Base
+
+    engine = create_async_engine(postgres_container_url)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        # TRUNCATE en vez de drop/create: mucho más rápido entre tests y
+        # RESTART IDENTITY deja los ids reproducibles.
+        tablas = ", ".join(f'"{t}"' for t in Base.metadata.tables)
+        await conn.execute(text(f"TRUNCATE {tablas} RESTART IDENTITY CASCADE"))
+
+    previous = (db_module._engine, db_module._sessionmaker)
+    db_module._engine = engine
+    db_module._sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        yield
+    finally:
+        await engine.dispose()
+        db_module._engine, db_module._sessionmaker = previous
+
+
 @pytest.fixture
 async def real_redis(redis_container_url: str) -> Iterator[None]:
     """Apunta `core.redis` al contenedor durante el test."""

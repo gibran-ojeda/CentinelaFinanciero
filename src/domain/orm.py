@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any
+from typing import Any, TypeVar
 
 from sqlalchemy import (
     JSON,
@@ -33,6 +33,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    TypeDecorator,
     UniqueConstraint,
     func,
 )
@@ -74,6 +75,40 @@ def _enum_check(column: str, enum: type[StrEnum]) -> CheckConstraint:
     return CheckConstraint(f"{column} IN ({valores})", name=f"ck_{column}_valido")
 
 
+E = TypeVar("E", bound=StrEnum)
+
+
+class EnumText(TypeDecorator[E]):
+    """Columna de texto que **devuelve miembros del enum**, no cadenas.
+
+    Sin esto, `Mapped[TipoProducto]` sobre un `String` guarda bien pero al leer
+    devuelve `str`: `producto.tipo is TipoProducto.VISTA` sería siempre falso y
+    un `match` sobre el enum nunca entraría en su rama. Como `StrEnum` compara
+    igual con `==`, el fallo es silencioso — el peor tipo.
+
+    Se usa un TypeDecorator sobre `String` y no `sa.Enum` para conservar los
+    CHECK con nombre propio de `_enum_check` (mejores nombres en migraciones) y
+    para que el DDL generado siga siendo un VARCHAR simple.
+    """
+
+    impl = String
+    cache_ok = True
+
+    def __init__(self, enum_cls: type[E], length: int) -> None:
+        self._enum = enum_cls
+        super().__init__(length=length)
+
+    def process_bind_param(self, value: E | str | None, dialect: object) -> str | None:
+        if value is None:
+            return None
+        return self._enum(value).value
+
+    def process_result_value(self, value: str | None, dialect: object) -> E | None:
+        if value is None:
+            return None
+        return self._enum(value)
+
+
 class Base(DeclarativeBase):
     """Base declarativa. `Base.metadata` es el objetivo de Alembic."""
 
@@ -102,8 +137,10 @@ class Institucion(TimestampMixin, Base):
     #: clave de mapeo de la fase 8: la CNBV escribe "BANCO NU MEXICO, S.A." y
     #: nosotros mostramos "Nu México".
     nombre_cnbv: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
-    categoria: Mapped[CategoriaInstitucion] = mapped_column(String(24), nullable=False)
-    tipo_seguro: Mapped[TipoSeguro] = mapped_column(String(16), nullable=False)
+    categoria: Mapped[CategoriaInstitucion] = mapped_column(
+        EnumText(CategoriaInstitucion, 24), nullable=False
+    )
+    tipo_seguro: Mapped[TipoSeguro] = mapped_column(EnumText(TipoSeguro, 16), nullable=False)
     estatus_regulatorio: Mapped[str | None] = mapped_column(String(200), nullable=True)
     url_sitio: Mapped[str | None] = mapped_column(Text, nullable=True)
     activa: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -135,13 +172,15 @@ class Producto(TimestampMixin, Base):
     )
     nombre: Mapped[str] = mapped_column(String(160), nullable=False)
     slug: Mapped[str] = mapped_column(String(180), nullable=False, unique=True)
-    tipo: Mapped[TipoProducto] = mapped_column(String(8), nullable=False)
+    tipo: Mapped[TipoProducto] = mapped_column(EnumText(TipoProducto, 8), nullable=False)
     #: Determina el tratamiento fiscal. No se deriva de la categoría de la
     #: institución: un banco puede ofrecer PRLV y también fondos de deuda.
-    instrumento: Mapped[TipoInstrumento] = mapped_column(String(24), nullable=False)
+    instrumento: Mapped[TipoInstrumento] = mapped_column(
+        EnumText(TipoInstrumento, 24), nullable=False
+    )
     plazo_dias: Mapped[int | None] = mapped_column(Integer, nullable=True)
     monto_minimo: Mapped[Decimal] = mapped_column(Dinero, nullable=False, default=Decimal("0"))
-    liquidez: Mapped[Liquidez] = mapped_column(String(20), nullable=False)
+    liquidez: Mapped[Liquidez] = mapped_column(EnumText(Liquidez, 20), nullable=False)
     penalizacion_retiro: Mapped[str | None] = mapped_column(Text, nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -189,10 +228,10 @@ class Tasa(TimestampMixin, Base):
     gat_nominal: Mapped[Decimal | None] = mapped_column(Porcentaje, nullable=True)
     gat_real: Mapped[Decimal | None] = mapped_column(Porcentaje, nullable=True)
     fecha_dato: Mapped[date] = mapped_column(Date, nullable=False)
-    fuente: Mapped[FuenteTasa] = mapped_column(String(20), nullable=False)
+    fuente: Mapped[FuenteTasa] = mapped_column(EnumText(FuenteTasa, 20), nullable=False)
     fuente_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     estado: Mapped[EstadoTasa] = mapped_column(
-        String(20), nullable=False, default=EstadoTasa.VIGENTE
+        EnumText(EstadoTasa, 20), nullable=False, default=EstadoTasa.VIGENTE
     )
     notas: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -223,7 +262,9 @@ class IndicadorFinanciero(TimestampMixin, Base):
     icor: Mapped[Decimal | None] = mapped_column(Porcentaje, nullable=True)
     """Índice de cobertura de cartera vencida (reservas / cartera vencida)."""
 
-    nicap_nivel: Mapped[NivelCapitalizacion | None] = mapped_column(String(4), nullable=True)
+    nicap_nivel: Mapped[NivelCapitalizacion | None] = mapped_column(
+        EnumText(NivelCapitalizacion, 4), nullable=True
+    )
     captacion: Mapped[Decimal | None] = mapped_column(Dinero, nullable=True)
     cartera_total: Mapped[Decimal | None] = mapped_column(Dinero, nullable=True)
     capital_contable: Mapped[Decimal | None] = mapped_column(Dinero, nullable=True)
@@ -248,8 +289,8 @@ class Bandera(TimestampMixin, Base):
     institucion_id: Mapped[int] = mapped_column(
         ForeignKey("instituciones.id", ondelete="CASCADE"), nullable=False
     )
-    tipo: Mapped[TipoBandera] = mapped_column(String(28), nullable=False)
-    severidad: Mapped[Severidad] = mapped_column(String(10), nullable=False)
+    tipo: Mapped[TipoBandera] = mapped_column(EnumText(TipoBandera, 28), nullable=False)
+    severidad: Mapped[Severidad] = mapped_column(EnumText(Severidad, 10), nullable=False)
     motivo: Mapped[str] = mapped_column(Text, nullable=False)
     #: Periodo del dato que la originó. §11 obliga a mostrarlo siempre: una
     #: bandera de la CNBV puede venir con tres meses de rezago.
@@ -369,7 +410,7 @@ class RevisionTasa(TimestampMixin, Base):
     valor_anterior: Mapped[Decimal | None] = mapped_column(Porcentaje, nullable=True)
     valor_nuevo: Mapped[Decimal] = mapped_column(Porcentaje, nullable=False)
     estado: Mapped[EstadoRevision] = mapped_column(
-        String(12), nullable=False, default=EstadoRevision.PENDIENTE
+        EnumText(EstadoRevision, 12), nullable=False, default=EstadoRevision.PENDIENTE
     )
     revisor: Mapped[str | None] = mapped_column(String(80), nullable=True)
     resuelto_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -436,7 +477,7 @@ class JobRun(Base):
     )
     fin: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     estado: Mapped[EstadoJob] = mapped_column(
-        String(12), nullable=False, default=EstadoJob.EN_CURSO
+        EnumText(EstadoJob, 12), nullable=False, default=EstadoJob.EN_CURSO
     )
     metricas: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
