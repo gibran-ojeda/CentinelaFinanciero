@@ -50,7 +50,7 @@ flowchart TD
 
 - **Idioma:** código, identificadores y commits en **inglés**; documentación, UI y vocabulario de dominio financiero mexicano (GAT, NICAP, PRLV, SOFIPO) en **español**. Los nombres de tablas usan el término de dominio en español cuando es un concepto regulatorio mexicano sin traducción natural.
 - **Monorepo:** backend (`src/`), frontend (`frontend/`), infraestructura (`docker/`), datos semilla (`seeds/`) y prompts (`prompts/`) viven en este repo.
-- **Servicios Docker:** `caddy`, `web`, `api`, `scheduler`, `db`, `redis`, `searxng`, `mcp` (ver §14 del foundation).
+- **Servicios Docker:** `web`, `api`, `scheduler`, `db`, `redis` y `mcp` (opcional, fase 10). El edge TLS (Caddy) es compartido con NarrativeAlpha y no forma parte de este stack — ver §14 del foundation y la fase 06.
 - **Ramas:** trabajo en `feature/*`, PR a `main`; `main` siempre desplegable a partir de la fase 6.
 - **Stack de referencia:** las decisiones de §13–§18 del foundation son vinculantes para todas las fases; los patrones (config de dos capas, doble gate de jobs, locks Redis, imagen Docker única) provienen de NarrativeAlpha y no se re-litigan por fase.
 
@@ -60,7 +60,7 @@ Tres niveles en orden estricto de preferencia — detalle completo en §15 del f
 
 1. **API oficial** (Banxico SIE, CNBV datos abiertos) → fases 07 y 08. Sin LLM ni scraping.
 2. **Fetch dirigido + extracción LLM** (httpx/trafilatura + DeepSeek → JSON validado) → fase 09, primario para tasas sin API.
-3. **Búsqueda abierta con agente LLM** (tool-use + SearXNG/ddgs, invariante `allowed_urls`) → fase 09, solo descubrimiento y verificación.
+3. **Búsqueda abierta con agente LLM** (tool-use + `ddgs`, invariante `allowed_urls`) → fase 09, solo descubrimiento y verificación.
 
 Se descarta el scraping clásico por selectores CSS. Toda tasa de origen LLM fuera de tolerancia pasa por cola de revisión humana antes de publicarse.
 
@@ -68,13 +68,23 @@ Se descarta el scraping clásico por selectores CSS. Toda tasa de origen LLM fue
 
 | # | Decisión | Estado | Afecta a |
 |---|---|---|---|
-| D1 | Dominio y hosting (¿VPS propio nuevo o compartir el de NarrativeAlpha? ¿brujulafinanciera.mx?) | **Abierta** — resolver antes de fase 6 | 06 |
-| D2 | API key de DeepSeek y límite diario del CostTracker (sugerido: $1 USD/día) | **Abierta** — resolver antes de fase 9 | 09 |
-| D3 | Alcance del seed inicial: arrancar con 5 SOFIPOs + 5 neobancos + CETES + BONDDIA y crecer, o los "top 10 + top 5" completos de F1 | **Abierta** — resolver en fase 2; sugerencia: arrancar con 5+5 | 02 |
-| D4 | Cola de revisión de tasas: ¿basta CLI + endpoints admin, o mini-UI admin? | **Abierta** — CLI al inicio; UI si la carga lo justifica | 09 |
-| D5 | Revisión de redacción legal de banderas y disclaimers antes del lanzamiento público | **Abierta** — obligatoria antes de cerrar fase 6 | 06 |
+| D1 | Dominio y hosting | **Resuelta** — **co-hosting en el VPS de NarrativeAlpha**, aislado en su propio stack Docker (proyecto `brujula`, contenedores y volúmenes con prefijo propio, puertos distintos). Dominio: `brujula-financiera.cloud` (verificar ortografía y disponibilidad al registrar). Implicaciones detalladas en la fase 06 | 06 |
+| D2 | API key de DeepSeek y límite diario del CostTracker | **Resuelta** — límite duro **$1 USD/día** (`LLM_COST_DAILY_LIMIT_USD=1.0`) | 09 |
+| D3 | Alcance del seed inicial | **Resuelta** — catálogo **completo de F1**: top 10 SOFIPOs + top 5 neobancos + CETES + BONDDIA | 02 |
+| D4 | Cola de revisión de tasas: ¿CLI o UI admin? | **Resuelta** — **CLI + endpoints admin** al inicio; mini-UI solo si el volumen de revisión lo justifica | 09 |
+| D5 | Revisión de redacción legal de banderas y disclaimers antes del lanzamiento público | **Abierta** — bloqueante para cerrar la fase 6 (el resto de la fase puede avanzar) | 06 |
 | D6 | Frontend | **Resuelta** — Astro SSR + islas React (SEO primero) | 05 |
 | D7 | Nomenclatura de métrica de rendimiento | **Resuelta** — GAT (corrección aplicada al foundation v1.3); NICAP queda como indicador de salud | todas |
+
+### Convivencia con NarrativeAlpha en el mismo VPS (consecuencia de D1)
+
+Brújula **no comparte base de datos, Redis ni imagen** con NarrativeAlpha: son dos stacks Docker independientes en la misma máquina. Reglas que aplican a todas las fases:
+
+- **Proyecto Docker propio**: `COMPOSE_PROJECT_NAME=brujula`; contenedores `brujula-*`, volúmenes `brujula-*`, red propia. Cero colisión de nombres con `narrativealpha-*`.
+- **Puertos**: todo publicado **solo en `127.0.0.1`** y fuera del rango que ya ocupa NarrativeAlpha (5432, 6379, 8000, 8001, 8002, 8080 y 8899 del motor Vibe-Trading). Asignación de Brújula: `db` 5433, `redis` 6380, `api` 8010, `web` 8011.
+- **Caddy es infraestructura compartida**: NarrativeAlpha ya corre el único Caddy del VPS en `network_mode: host` ocupando 80/443. Brújula **no levanta un Caddy propio** — se añade un site block al Caddyfile existente. Ver fase 06.
+- **Sin `network_mode: host`** en los servicios de Brújula: el dashboard de NarrativeAlpha lo usa por el motor Vibe-Trading en `127.0.0.1:8899`, restricción que Brújula no tiene. Bridge con puertos publicados en loopback es suficiente y más limpio (Caddy en host mode los alcanza por `127.0.0.1`).
+- **Cuidado con `ufw`**: en ese VPS el firewall dropea el tráfico `docker0 → host`, así que un contenedor de Brújula en bridge **no** alcanza servicios publicados en el loopback del host. Si Brújula necesitara consumir un servicio de NarrativeAlpha (p. ej. su SearXNG), la vía es adjuntar ese contenedor a la red bridge de NarrativeAlpha como red externa, no pasar por la gateway de Docker.
 
 ## Índice de fases
 

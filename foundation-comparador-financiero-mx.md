@@ -412,8 +412,8 @@ Para mantener el enfoque, definir explícitamente lo que queda fuera del alcance
 | Observabilidad | structlog (JSON en prod, pretty en dev) + tabla `job_runs` | Trazabilidad de cada corrida de ingesta |
 | LLM | Cliente router con tiers y fallback; `OpenAICompatProvider` con **DeepSeek** como primario; `CostTracker` con límite diario; prompts como plantillas `.md` externas; parsers JSON robustos | Costo mínimo, proveedor intercambiable vía `base_url`, gasto acotado |
 | Frontend | **Astro SSR + islas React** (TanStack Query solo en calculadora y filtros) | Un comparador público vive del SEO; SSR para páginas indexables, interactividad como islas |
-| Edge | Caddy 2 (TLS automático) | El navegador solo llega al servicio `web`; la API interna nunca se expone |
-| Contenedores | Docker Compose; imagen única `python:3.12-slim` diferenciada por `command` | Build una vez, deploy N servicios |
+| Edge | Caddy 2 (TLS automático), **compartido con NarrativeAlpha** en el mismo VPS | El navegador solo llega al servicio `web`; la API interna nunca se expone |
+| Contenedores | Docker Compose (proyecto `brujula`, aislado); imagen única `python:3.12-slim` diferenciada por `command` | Build una vez, deploy N servicios; cero colisión con el stack vecino |
 | Calidad | pytest (`asyncio_mode=auto`) + respx + testcontainers; ruff + black + mypy strict; pre-commit; GitHub Actions | CI bloqueante en lint y tests |
 
 **Doble gate por módulo** (patrón heredado de NarrativeAlpha): cada job de ingesta tiene un flag *env-only* que decide si se registra en el scheduler (ej. `SCHEDULER_BANXICO_ENABLED`) y un kill-switch *caliente* en ConfigStore que lo hace no-operar sin reiniciar (ej. `BANXICO_SYNC_ENABLED`).
@@ -424,30 +424,30 @@ Para mantener el enfoque, definir explícitamente lo que queda fuera del alcance
 
 ```mermaid
 flowchart LR
-    U((Usuario)) --> C[caddy<br/>edge TLS]
+    U((Usuario)) --> C["caddy — edge TLS<br/>(compartido en el VPS)"]
     C --> W[web<br/>Astro SSR + BFF]
     W -->|X-API-Key| A[api<br/>FastAPI interna]
     A --> D[(db<br/>PostgreSQL 16)]
     A --> R[(redis)]
     S[scheduler<br/>APScheduler] --> D
     S --> R
-    S --> X[searxng<br/>metabuscador]
     S -.->|extracción / research| L[DeepSeek API]
+    S -.->|búsqueda nivel 3| B[ddgs]
     M[mcp<br/>opcional, fase 10] -->|HTTP| A
 ```
 
 | Servicio | Imagen | Expuesto | Función |
 |---|---|---|---|
-| `caddy` | `caddy:2-alpine` | 80/443 | Edge TLS; rutea todo a `web` |
-| `web` | node/astro | interno | SSR de páginas públicas + BFF; único que habla con el navegador |
-| `api` | compartida | interno | FastAPI; única capa de acceso a datos; autenticación `X-API-Key` para el BFF y admin |
+| `web` | node/astro | `127.0.0.1:8011` | SSR de páginas públicas + BFF; único que habla con el navegador |
+| `api` | compartida | `127.0.0.1:8010` | FastAPI; única capa de acceso a datos; autenticación `X-API-Key` para el BFF y admin |
 | `scheduler` | compartida | — | Jobs de ingesta, recomputo de banderas y frescura |
-| `db` | `postgres:16` | interno | Datos + ConfigStore |
-| `redis` | `redis:7-alpine` | interno | Cache L2, locks, cooldowns |
-| `searxng` | `searxng/searxng` | interno | Metabuscador self-hosted para el agente LLM (nivel 3) |
+| `db` | `postgres:16` | `127.0.0.1:5433` | Datos + ConfigStore |
+| `redis` | `redis:7-alpine` | `127.0.0.1:6380` | Cache L2, locks, cooldowns |
 | `mcp` | compartida | opcional | FastMCP solo-lectura, cliente HTTP de la API (fase 10) |
 
 **Patrón BFF:** el navegador solo habla con `web`; `web` consume la API por red interna inyectando `X-API-Key`. La API nunca se expone a internet.
+
+**Co-hosting con NarrativeAlpha:** Brújula corre en el **mismo VPS** que NarrativeAlpha, como stack Docker independiente (proyecto `brujula`, base de datos, Redis e imagen propias — no se comparte estado). El **único recurso compartido es el Caddy del host**, que ya ocupa 80/443 en `network_mode: host`: Brújula no levanta su propio edge, se le añade un site block para `brujula-financiera.cloud` que apunta a `127.0.0.1:8011`. Todos los puertos de Brújula se publican solo en loopback y fuera del rango que NarrativeAlpha ya usa (5432, 6379, 8000, 8001, 8002, 8080, 8899). El detalle operativo —incluida la restricción de `ufw` sobre el tráfico `docker0 → host`— está en la [fase 06 del plan](plan-de-implementacion/06-fase-6-despliegue-mvp.md).
 
 ---
 
@@ -459,7 +459,7 @@ flowchart LR
 
 **Nivel 2 — Fetch dirigido + extracción LLM (primario para tasas sin API).** Las tasas de SOFIPOs, neobancos, PRLV y BONDDIA no tienen API: se publican en la página oficial de cada institución. Se mantiene una lista curada de URLs (~15–25 páginas, tabla `fuentes_tasas`); un fetcher determinista (httpx + trafilatura; Playwright solo para las pocas que renderizan por JavaScript) descarga el contenido y un LLM económico (DeepSeek) extrae producto, tasa, GAT, plazo y condiciones como JSON validado contra esquema pydantic. La parte frágil (obtener la página) es determinista; la parte cambiante (el layout) la absorbe el LLM, que tolera rediseños que romperían cualquier selector CSS.
 
-**Nivel 3 — Búsqueda abierta con agente LLM (descubrimiento y fallback).** Un *tool-use loop* donde el LLM formula queries y un ejecutor determinista las corre contra SearXNG self-hosted y/o la librería `ddgs` (costo $0, sin API keys), con retry → cadena de fallbacks → circuit breaker, e **invariante anti-alucinación**: todo hallazgo debe citar una URL surgida de resultados reales de búsqueda o se descarta. Se usa solo para descubrir instituciones nuevas, detectar cambios de URL y verificar valores anómalos del nivel 2 — nunca como fuente primaria rutinaria.
+**Nivel 3 — Búsqueda abierta con agente LLM (descubrimiento y fallback).** Un *tool-use loop* donde el LLM formula queries y un ejecutor determinista las corre contra la librería `ddgs` (costo $0, sin API keys ni infraestructura), con retry → cadena de fallbacks entre engines → circuit breaker, e **invariante anti-alucinación**: todo hallazgo debe citar una URL surgida de resultados reales de búsqueda o se descarta. Se usa solo para descubrir instituciones nuevas, detectar cambios de URL y verificar valores anómalos del nivel 2 — nunca como fuente primaria rutinaria. El backend de búsqueda es intercambiable por configuración: si `ddgs` resulta insuficiente, se reutiliza el SearXNG que ya corre en el VPS en lugar de levantar uno propio.
 
 **Control de calidad transversal:** ninguna tasa proveniente de LLM se publica automáticamente si difiere de la vigente más allá de una tolerancia configurable: entra a una cola de revisión humana (`revisiones_tasas`). Como las tasas cambian poco (ciclo semanal), la carga de revisión es de minutos por semana. Toda tasa publicada conserva URL fuente y fecha del dato. Costo estimado del pipeline LLM: centavos de USD por semana, acotado por el `CostTracker`.
 
@@ -504,7 +504,7 @@ brujula-financiera/
 ├── plan-de-implementacion/        # este plan, fase por fase
 ├── pyproject.toml                 # único, con extras por módulo
 ├── docker-compose.yml
-├── docker/                        # Dockerfiles (app, web, caddy)
+├── docker/                        # Dockerfiles (app, web) — el edge Caddy es compartido, ver §14
 ├── .github/workflows/             # CI (test.yml) y CD (deploy.yml)
 ├── prompts/                       # plantillas .md de LLM (extracción, research)
 ├── seeds/                         # instituciones.yaml, productos.yaml, tasas.csv

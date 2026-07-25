@@ -40,7 +40,7 @@ Bloques de valor **independientes entre sí**, priorizables por separado una vez
 
 **Qué:** exponer el comparador a asistentes LLM (Claude, etc.) como servidor MCP — mismo patrón que NarrativeAlpha: `src/mcp_server/` con FastMCP sobre HTTP, **cliente HTTP de la API interna** (no toca la BD), solo lectura.
 
-**Tareas:** tools `comparar_instrumentos`, `detalle_institucion`, `calcular_rendimiento_real`, `frescura_datos`; instrucciones del servidor con el disclaimer (no es asesoría); servicio `mcp` en compose ruteado por Caddy; auth por bearer token.
+**Tareas:** tools `comparar_instrumentos`, `detalle_institucion`, `calcular_rendimiento_real`, `frescura_datos`; instrucciones del servidor con el disclaimer (no es asesoría); servicio `mcp` en el compose de Brújula (puerto propio en loopback, p. ej. 8012 — el 8001 lo ocupa el MCP de NarrativeAlpha) más una ruta `handle /mcp*` en el site block compartido de `brujula-financiera.cloud`; auth por bearer token.
 
 **Aceptación:** desde un cliente MCP externo se puede preguntar "¿dónde rinde más $50,000 a 91 días con cobertura IPAB?" y la respuesta sale de la API con datos vigentes y disclaimer.
 

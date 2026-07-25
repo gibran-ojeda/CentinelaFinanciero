@@ -37,7 +37,7 @@ Reglas de diseño (de §16 del foundation): límites de seguro **en UDIs** (cons
 
 1. Escribir enums y ORM; generar la migración inicial con Alembic y verificarla desde BD vacía.
 2. Implementar ConfigStore: registry inicial con los parámetros de banderas (umbral_imor_amarilla=3.0, umbral_imor_roja=6.0, umbral_icap_amarilla=15.0, umbral_icap_roja=10.5, umbral_cobertura_amarilla=100.0, umbral_cobertura_roja=70.0, umbral_gat_inconsistencia_pp=1.5) y tolerancias de revisión (fase 9). Grupos: `banderas`, `fiscal`, `revision`, `scheduler`.
-3. Poblar `seeds/` con el catálogo MVP (decisión D3 del overview: sugerido 5 SOFIPOs + 5 neobancos + CETES + BONDDIA) con datos reales al día de la carga.
+3. Poblar `seeds/` con el **catálogo MVP completo** (decisión D3 resuelta): **top 10 SOFIPOs** (DiDi, FinSUS, Kubo Financiero, Libertad, Caja Pop Mexicana, Te Creemos y las demás con operación activa), **top 5 neobancos con licencia bancaria** (de la tabla de §3.3: Nu México, Revolut, Ualá, OpenBank, Hey Banco, Bineo, Plata — seleccionar 5 por relevancia de captación), **CETES** (28/91/182/364 días) y **BONDDIA**. Datos reales al día de la carga, cada tasa con su `fuente_url` y `fecha_dato`.
 4. Implementar la CLI con carga idempotente (upsert por clave natural: nombre de institución, producto+plazo).
 5. Registrar en `job_runs` la ejecución del `heartbeat` de fase 1 (cerrar el pendiente).
 6. Tests: modelos y constraints con testcontainers (Postgres real); ConfigStore (snapshot, TTL, proxy `effective`, fallback a `Settings`); CLI idempotente (correr seed dos veces no duplica).
