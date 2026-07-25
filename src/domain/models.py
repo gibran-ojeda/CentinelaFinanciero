@@ -168,6 +168,13 @@ class ParametrosFiscales(DomainModel):
     vigente_desde: date
     fuente_url: str | None = None
 
+    #: Retención sobre el interés generado, para instrumentos de base GANANCIA
+    #: (§4.2). No se persiste todavía porque ningún instrumento del catálogo la
+    #: usa: los fondos de deuda tributan sobre capital vía art. 87 → art. 54 de
+    #: la LISR. Cuando la fase 10 incorpore una estructura que sí retenga sobre
+    #: ganancia, esto pasa a ser columna de `parametros_fiscales`.
+    tasa_retencion_ganancia: Decimal = Decimal("0")
+
     @property
     def nota_fiscal(self) -> str:
         """Texto que §6 obliga a mostrar junto a cualquier cálculo."""
