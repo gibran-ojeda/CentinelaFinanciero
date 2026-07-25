@@ -94,8 +94,10 @@ line-length = 99
 select = ["E", "F", "I", "UP", "B", "W"]
 
 [tool.ruff.lint.per-file-ignores]
-# Migraciones autogeneradas: se revisan, no se reformatean. Reescribirlas a
-# mano para pasar el linter invita a introducir errores en DDL ya verificado.
+# Migraciones autogeneradas. black sí las formatea (no cambia semántica), pero
+# no se reescriben a mano sólo para acortar líneas: el DDL de un CHECK con
+# quince valores de enum no cabe en 99 columnas y partirlo invitaría a
+# introducir errores en SQL ya verificado contra la base.
 "alembic/versions/*.py" = ["E501", "W291"]
 
 [tool.ruff.lint.isort]
