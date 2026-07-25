@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from api.routers import comparador, health, instituciones, meta
+from api.routers import calculadora, comparador, health, instituciones, meta
 from core import db, redis
 from core.logging import configure_logging, get_logger
 from core.settings import settings
@@ -62,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(meta.router)
     app.include_router(instituciones.router)
     app.include_router(comparador.router)
+    app.include_router(calculadora.router)
 
     return app
 
