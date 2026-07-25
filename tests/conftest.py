@@ -214,6 +214,20 @@ async def real_db(postgres_container_url: str) -> Iterator[None]:
 
 
 @pytest.fixture
+async def catalogo_cargado(real_db: None) -> None:
+    """Base con el catálogo y las tasas del seed, como en producción.
+
+    Depende de `real_db` de forma explícita: sin esa dependencia pytest podría
+    ordenarla antes y la carga acabaría contra la base por defecto.
+    """
+    from cli.seed import DEFAULT_SEEDS_DIR, run_seed
+    from cli.tasas import import_csv
+
+    await run_seed()
+    await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
+
+
+@pytest.fixture
 async def real_redis(redis_container_url: str) -> Iterator[None]:
     """Apunta `core.redis` al contenedor durante el test."""
     from redis.asyncio import Redis

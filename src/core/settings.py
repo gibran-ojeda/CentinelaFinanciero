@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     # del foundation, patrón de doble gate.
     scheduler_heartbeat_enabled: bool = True
     scheduler_heartbeat_interval_seconds: int = 60
+    scheduler_banderas_enabled: bool = True
     scheduler_lock_ttl_seconds: int = 300
     scheduler_timezone: str = "America/Mexico_City"
 

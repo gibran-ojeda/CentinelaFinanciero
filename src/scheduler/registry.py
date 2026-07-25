@@ -19,10 +19,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from apscheduler.triggers.base import BaseTrigger
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from core.settings import settings
-from scheduler.jobs import heartbeat
+from scheduler.jobs import banderas, heartbeat
 
 JobFunc = Callable[[], Awaitable[None]]
 
@@ -64,6 +65,19 @@ def build_registry() -> tuple[JobSpec, ...]:
             name="Latido del scheduler",
             enabled=settings.scheduler_heartbeat_enabled,
             tags=("infra",),
+        ),
+        JobSpec(
+            id=banderas.JOB_ID,
+            func=banderas.banderas_recompute,
+            # Diario y de madrugada: los boletines de la CNBV llegan una vez al
+            # mes, así que recomputar más seguido sólo serviría para recoger
+            # cambios de umbral, y para eso está la ejecución manual.
+            trigger=CronTrigger(hour=4, minute=30),
+            name="Recomputo de banderas de riesgo",
+            enabled=settings.scheduler_banderas_enabled,
+            # Recorre todo el catálogo: puede tardar más que el default.
+            lock_ttl_seconds=900,
+            tags=("dominio",),
         ),
     )
 
