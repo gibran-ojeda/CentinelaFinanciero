@@ -13,8 +13,9 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from domain import orm
 from domain.enums import (
@@ -48,6 +49,18 @@ class Institucion(DomainModel):
     url_sitio: str | None = None
     activa: bool = True
     es_demostracion: bool = False
+
+    @field_validator("es_demostracion", mode="before")
+    @classmethod
+    def _unset_means_real(cls, value: Any) -> Any:
+        """Una fila ORM todavía sin insertar trae `None`, no `False`.
+
+        Los defaults de columna se aplican en el INSERT, así que mapear un
+        objeto transitorio —cosa que los tests de `metrics/` hacen a propósito,
+        para no necesitar base de datos— reventaba la validación. Para una
+        marca cuyo valor seguro es "no", ausente y falso son lo mismo.
+        """
+        return False if value is None else value
 
 
 class Producto(DomainModel):

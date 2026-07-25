@@ -43,9 +43,9 @@ async def test_imports_the_full_seed_dataset() -> None:
     await run_seed()
     report = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
-    assert report.creadas == 35
+    assert report.creadas == 37
     assert report.errores == []
-    assert await _contar_tasas() == 35
+    assert await _contar_tasas() == 37
 
 
 async def test_seed_dataset_publishes_only_verified_rates() -> None:
@@ -53,7 +53,10 @@ async def test_seed_dataset_publishes_only_verified_rates() -> None:
     await run_seed()
     report = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
-    assert report.por_estado["VIGENTE"] == 5
+    # Siete VIGENTE: las cinco gubernamentales verificadas contra el SIE de
+    # Banxico y cetesdirecto, más las dos de instituciones ficticias — que no
+    # tienen fuente que verificar porque no existen, y van marcadas con ◆.
+    assert report.por_estado["VIGENTE"] == 7
     assert report.por_estado["PENDIENTE_REVISION"] == 30
 
     async with session_scope() as session:
@@ -70,7 +73,15 @@ async def test_seed_dataset_publishes_only_verified_rates() -> None:
             .all()
         )
 
-    assert set(vigentes) == {"bonddia", "cetes-182", "cetes-28", "cetes-364", "cetes-91"}
+    assert set(vigentes) == {
+        "bonddia",
+        "cetes-182",
+        "cetes-28",
+        "cetes-364",
+        "cetes-91",
+        "ahorra-mas-plazo-364",
+        "alcancia-plazo-182",
+    }
 
 
 async def test_reimporting_the_same_file_creates_nothing() -> None:
@@ -81,8 +92,8 @@ async def test_reimporting_the_same_file_creates_nothing() -> None:
     segundo = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
     assert segundo.creadas == 0
-    assert segundo.duplicadas == 35
-    assert await _contar_tasas() == 35
+    assert segundo.duplicadas == 37
+    assert await _contar_tasas() == 37
 
 
 async def test_a_new_observation_supersedes_without_deleting(tmp_path: Path) -> None:

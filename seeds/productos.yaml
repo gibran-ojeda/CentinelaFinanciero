@@ -382,3 +382,26 @@ productos:
     liquidez: INMEDIATA
     penalizacion_retiro: >-
       La tasa aplica sólo hasta cierto saldo. Sin cobertura IPAB ni PROSOFIPO.
+
+  # ─── Productos de las instituciones ILUSTRATIVAS ────────────
+  # Ver la nota en instituciones.yaml: son ficticias y van marcadas con ◆.
+  - institucion: Ahorra+ Capital
+    nombre: PRLV 364 días
+    slug: ahorra-mas-plazo-364
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 364
+    monto_minimo: 5000.00
+    liquidez: AL_VENCIMIENTO
+    penalizacion_retiro: >-
+      Sin disposición anticipada. El retiro antes del vencimiento cancela el
+      rendimiento del periodo.
+
+  - institucion: Alcancía Fuerte
+    nombre: PRLV 182 días
+    slug: alcancia-plazo-182
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 182
+    monto_minimo: 10000.00
+    liquidez: AL_VENCIMIENTO

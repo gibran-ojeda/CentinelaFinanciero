@@ -152,6 +152,7 @@ async def _seed_instituciones(
             "estatus_regulatorio": entrada.get("estatus_regulatorio"),
             "url_sitio": entrada.get("url_sitio"),
             "activa": entrada.get("activa", True),
+            "es_demostracion": entrada.get("es_demostracion", False),
             "notas": entrada.get("notas"),
         }
         if (actual := existentes.get(nombre)) is None:

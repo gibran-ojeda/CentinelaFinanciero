@@ -1,21 +1,45 @@
 institucion,periodo,imor,icap,icor,nicap_nivel,captacion,cartera_total,capital_contable,pasivo_total,fuente_url
-# Este archivo se queda VACIO a proposito.
+# Este archivo contiene SOLO instituciones FICTICIAS (es_demostracion).
 #
 # Los indicadores de salud institucional (IMOR, ICAP, ICOR, NICAP) son los que
 # disparan las banderas de riesgo que el comparador muestra junto al nombre de
-# una institucion real. Inventar esos numeros seria fabricar informacion
-# financiera sobre empresas concretas: exactamente lo contrario de lo que este
-# producto existe para hacer.
+# una institucion. Inventar esos numeros para una institucion REAL seria
+# fabricar informacion financiera sobre una empresa concreta: exactamente lo
+# contrario de lo que este producto existe para hacer. Esa regla no cambia.
 #
-# Se pueblan en la fase 8, leyendo los boletines mensuales del Portafolio de
-# Informacion de la CNBV (nivel 1: ETL determinista sobre CSV/XLSX, sin LLM ni
-# scraping). Hasta entonces ninguna institucion lleva banderas de salud, que es
-# la respuesta correcta cuando no hay dato: §11 pide contexto de riesgo visible
-# sin alarmismo, no banderas sin evidencia.
+# Lo que si es legitimo es inventarlos para instituciones que tambien son
+# inventadas. Sin ellas, el motor de banderas no tendria un solo caso real que
+# evaluar hasta la fase 8 y el camino completo -indicador, regla, bandera, API,
+# UI- no seria comprobable de punta a punta.
 #
-# El motor de banderas de la fase 3 se prueba con datos sinteticos en sus
-# tests, que es donde corresponde probar reglas.
+# Las instituciones REALES se pueblan en la fase 8, leyendo los boletines
+# mensuales del Portafolio de Informacion de la CNBV (nivel 1: ETL determinista
+# sobre CSV/XLSX, sin LLM ni scraping). Hasta entonces ninguna lleva banderas de
+# salud, que es la respuesta correcta cuando no hay dato: §11 pide contexto de
+# riesgo visible sin alarmismo, no banderas sin evidencia.
 #
-# Formato de las filas cuando se carguen (las lineas que empiezan con # se
-# ignoran):
-# Finsus,2026-03-31,4.20,13.50,95.00,N2,1500000000.00,900000000.00,180000000.00,1400000000.00,https://www.gob.mx/cnbv
+# El motor de banderas de la fase 3 se sigue probando con datos sinteticos en
+# sus tests, que es donde corresponde probar reglas.
+#
+# ─── Ahorra+ Capital: ilustra la bandera AMARILLA de GAT ────────────────────
+# Salud en rango a proposito: IMOR 2.60 < 3.0, NICAP N1, ICOR 118 > 100, asi
+# que ninguna regla individual dispara. Lo unico que falla es que la GAT que
+# publica (18.40%) se aleja 2.65 pp de su tasa nominal (15.75%), por encima del
+# umbral de 1.5. Ese es justo el caso que justifica la regla: la institucion
+# esta bien, lo que anuncia no cuadra.
+#
+# Su IMOR se deja por debajo del umbral amarillo deliberadamente: si estuviera
+# en alerta saltaria la compuesta ROJA por tasa sobre mercado, que suprimiria
+# la amarilla y dejaria sin ilustrar el caso que esta institucion existe para
+# ilustrar. ICAP va vacio porque las SOFIPOs reportan NICAP, no ICAP.
+Ahorra+ Capital,2026-05-31,2.60,,118.00,N1,2100000000.00,1450000000.00,310000000.00,1830000000.00,
+# ─── Alcancia Fuerte: ilustra la bandera ROJA compuesta ─────────────────────
+# El patron que describe §5.2: la tasa mas alta del mercado (16.50% a 182 dias,
+# contra una mediana muy por debajo) junto a morosidad en alerta (IMOR 8.40 >=
+# 6.0) y capitalizacion deteriorada (NICAP N3, ICOR 61 < 70). Captar caro para
+# tapar un agujero.
+#
+# Las individuales que emitiria -IMOR roja, NICAP roja, ICOR roja- quedan
+# suprimidas por la compuesta. Es el comportamiento correcto y esta institucion
+# tambien sirve para verificarlo: es un solo hallazgo, no cuatro.
+Alcancía Fuerte,2026-05-31,8.40,,61.00,N3,860000000.00,540000000.00,52000000.00,808000000.00,

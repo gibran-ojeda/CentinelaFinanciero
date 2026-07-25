@@ -27,9 +27,17 @@ pytestmark = [
 
 RUTA = "/api/v1/comparador"
 
-#: Lo que el seed real publica: gubernamental y verificado contra Banxico. El
-#: resto de las filas del comparador de prueba las añade `comparador_poblado`.
-SLUGS_DEL_SEED = frozenset({"cetes-28", "cetes-91", "cetes-182", "cetes-364", "bonddia"})
+#: Lo único verificado contra fuente primaria: deuda gubernamental leída del
+#: SIE de Banxico y de cetesdirecto.
+SLUGS_VERIFICADOS = frozenset({"cetes-28", "cetes-91", "cetes-182", "cetes-364", "bonddia"})
+
+#: Las dos instituciones ficticias (◆), que existen para que el motor de
+#: banderas tenga casos que evaluar mientras la CNBV no llega (fase 8).
+SLUGS_DEMO = frozenset({"ahorra-mas-plazo-364", "alcancia-plazo-182"})
+
+#: Todo lo que el seed publica. El resto de las filas del comparador de prueba
+#: las añade `comparador_poblado`.
+SLUGS_DEL_SEED = SLUGS_VERIFICADOS | SLUGS_DEMO
 
 
 async def _slugs(api: AsyncClient, **params: object) -> set[str]:
@@ -112,7 +120,7 @@ async def test_term_filter_includes_and_excludes(api_lectura: AsyncClient) -> No
 async def test_one_year_filter_includes_and_excludes(api_lectura: AsyncClient) -> None:
     """§7 distingue "1 año" (364 días, el plazo de CETES) de "más de 1 año"."""
     slugs = await _slugs(api_lectura, plazo="364")
-    assert slugs == {"cetes-364", "libertad-plazo-364"}
+    assert slugs == {"cetes-364", "libertad-plazo-364", "ahorra-mas-plazo-364"}
     assert "cetes-182" not in slugs
 
 
@@ -142,7 +150,7 @@ async def test_invalid_term_fails_instead_of_returning_nothing(
 
 async def test_category_filter_includes_and_excludes(api_lectura: AsyncClient) -> None:
     slugs = await _slugs(api_lectura, categoria="SOFIPO")
-    assert slugs == {"finsus-plazo-91", "klar-vista", "libertad-plazo-364"}
+    assert slugs == {"finsus-plazo-91", "klar-vista", "libertad-plazo-364"} | SLUGS_DEMO
     assert "cetes-28" not in slugs
     assert "nu-cajita-turbo" not in slugs
 
@@ -196,8 +204,11 @@ async def test_ipab_only_includes_and_excludes(api_lectura: AsyncClient) -> None
 
 async def test_government_only_includes_and_excludes(api_lectura: AsyncClient) -> None:
     slugs = await _slugs(api_lectura, seguro="solo_gobierno")
-    assert slugs == set(SLUGS_DEL_SEED)
+    # Los gubernamentales son hoy exactamente los verificados: lo que se pudo
+    # confirmar contra fuente primaria fue el SIE de Banxico y cetesdirecto.
+    assert slugs == set(SLUGS_VERIFICADOS)
     assert "klar-vista" not in slugs
+    assert not slugs & SLUGS_DEMO
 
 
 async def test_with_coverage_excludes_only_the_unprotected(
@@ -286,7 +297,9 @@ async def test_orders_by_nominal_rate(api_lectura: AsyncClient) -> None:
     cuerpo = (await api_lectura.get(RUTA, params={"orden": "tasa_nominal"})).json()
     tasas = [Decimal(f["tasa_nominal"]) for f in cuerpo["filas"]]
     assert tasas == sorted(tasas, reverse=True)
-    assert cuerpo["filas"][0]["producto_slug"] == "nu-cajita-turbo"
+    # La tasa más alta del catálogo es la de la institución ficticia que
+    # existe justamente para ilustrar que la tasa más alta no es la mejor.
+    assert cuerpo["filas"][0]["producto_slug"] == "alcancia-plazo-182"
 
 
 async def test_ascending_order_is_supported(api_lectura: AsyncClient) -> None:
@@ -302,7 +315,9 @@ async def test_coverage_order_puts_sovereign_debt_first(
 ) -> None:
     """Sin límite es más cobertura, no menos: no puede hundirse al final."""
     orden = await _orden(api_lectura, orden="cobertura")
-    assert set(orden[: len(SLUGS_DEL_SEED)]) == set(SLUGS_DEL_SEED)
+    # Arriba, la deuda soberana (sin límite); abajo del todo, el IFPE, que no
+    # tiene fondo de protección de ningún tipo.
+    assert set(orden[: len(SLUGS_VERIFICADOS)]) == set(SLUGS_VERIFICADOS)
     assert orden[-1] == "mercado-pago-vista"
 
 
@@ -313,9 +328,19 @@ async def test_gat_order_uses_published_and_falls_back_to_computed(
 
     gats = [Decimal(f["gat"]["nominal"]) for f in cuerpo["filas"]]
     assert gats == sorted(gats, reverse=True)
-    # Ninguna institución del catálogo publica GAT todavía: todas calculadas,
-    # y cada fila lo declara.
-    assert all(f["gat"]["es_calculada"] for f in cuerpo["filas"])
+
+    por_slug = {f["producto_slug"]: f["gat"] for f in cuerpo["filas"]}
+
+    # La única del catálogo que publica GAT es la ficticia de demostración, y
+    # el orden usa la publicada tal cual: 18.40, muy por encima de lo que su
+    # tasa nominal daría. Es lo que hace visible la bandera de inconsistencia.
+    assert por_slug["ahorra-mas-plazo-364"]["origen"] == "PUBLICADA"
+    assert por_slug["ahorra-mas-plazo-364"]["es_calculada"] is False
+    assert Decimal(por_slug["ahorra-mas-plazo-364"]["nominal"]) == Decimal("18.40")
+
+    # Ninguna institución real publica GAT todavía: se cae al equivalente
+    # calculado, y cada fila lo declara.
+    assert all(por_slug[slug]["es_calculada"] for slug in SLUGS_VERIFICADOS)
 
 
 async def test_ordering_is_stable_for_equal_values(api_lectura: AsyncClient) -> None:

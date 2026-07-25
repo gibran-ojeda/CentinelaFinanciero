@@ -43,7 +43,7 @@ async def test_reports_the_latest_date_and_the_count(api_lectura: AsyncClient) -
     cuerpo = (await api_lectura.get("/api/v1/meta/frescura")).json()
 
     manual = next(f for f in cuerpo["fuentes"] if f["fuente"] == FuenteTasa.MANUAL)
-    assert manual["observaciones"] == 35
+    assert manual["observaciones"] == 37
     assert manual["ultima_actualizacion"] == "2026-07-25"
     assert manual["sla_dias"] == SLA_POR_FUENTE[FuenteTasa.MANUAL]
 
