@@ -35,7 +35,7 @@ def create_app() -> FastAPI:
     configure_logging()
 
     app = FastAPI(
-        title="Brújula Financiera — API",
+        title="Centinela Financiero — API",
         description=(
             "Comparador de instrumentos de ahorro e inversión en México. "
             "API interna: la consumen el BFF y el admin, nunca el navegador."

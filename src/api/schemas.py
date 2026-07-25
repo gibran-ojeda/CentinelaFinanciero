@@ -33,7 +33,7 @@ from domain.enums import (
 )
 
 DISCLAIMER = (
-    "Brújula Financiera no es asesor financiero ni intermediario. La información "
+    "Centinela Financiero no es asesor financiero ni intermediario. La información "
     "se publica con fines comparativos, proviene de fuentes públicas y puede "
     "contener errores o estar desactualizada. Verifica siempre las condiciones "
     "directamente con la institución antes de invertir."

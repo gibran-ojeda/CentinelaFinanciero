@@ -76,5 +76,5 @@ def test_json_renderer_in_production(capsys: Any) -> None:
 
 
 def test_get_logger_returns_usable_logger() -> None:
-    logger = get_logger("brujula.test")
+    logger = get_logger("centinela.test")
     logger.info("evento_de_prueba", detalle="ok")

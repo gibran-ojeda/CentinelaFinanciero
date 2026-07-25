@@ -23,7 +23,7 @@ log = get_logger(__name__)
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m cli",
-        description="Herramientas de operación de Brújula Financiera.",
+        description="Herramientas de operación de Centinela Financiero.",
     )
     sub = parser.add_subparsers(dest="comando", required=True)
 

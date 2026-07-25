@@ -1,5 +1,5 @@
 [project]
-name = "brujula-financiera"
+name = "centinela-financiero"
 version = "0.1.0"
 description = "Comparador de herramientas financieras en México — tasas, GAT, ganancia real y salud institucional"
 readme = "README.md"
@@ -60,7 +60,7 @@ mcp = [
 ]
 # Conjunto que instala la imagen Docker única: api + scheduler + cli.
 app = [
-    "brujula-financiera[api,scheduler]",
+    "centinela-financiero[api,scheduler]",
 ]
 dev = [
     "pytest>=8.0",
