@@ -68,7 +68,7 @@ Se descarta el scraping clásico por selectores CSS. Toda tasa de origen LLM fue
 
 | # | Decisión | Estado | Afecta a |
 |---|---|---|---|
-| D1 | Dominio y hosting | **Resuelta** — **co-hosting en el VPS de NarrativeAlpha**, aislado en su propio stack Docker (proyecto `brujula`, contenedores y volúmenes con prefijo propio, puertos distintos). Dominio: `brujula-financiera.cloud` (verificar ortografía y disponibilidad al registrar). Implicaciones detalladas en la fase 06 | 06 |
+| D1 | Dominio y hosting | **Resuelta** — **co-hosting en el VPS de NarrativeAlpha**, aislado en su propio stack Docker (proyecto `brujula`, contenedores y volúmenes con prefijo propio, puertos distintos). Dominio: **`brujulafinanciera.cloud`** (sin guion). Sin PaaS de pago — todo en el VPS. Implicaciones en la fase 06 | 06 |
 | D2 | API key de DeepSeek y límite diario del CostTracker | **Resuelta** — límite duro **$1 USD/día** (`LLM_COST_DAILY_LIMIT_USD=1.0`) | 09 |
 | D3 | Alcance del seed inicial | **Resuelta** — catálogo **completo de F1**: top 10 SOFIPOs + top 5 neobancos + CETES + BONDDIA | 02 |
 | D4 | Cola de revisión de tasas: ¿CLI o UI admin? | **Resuelta** — **CLI + endpoints admin** al inicio; mini-UI solo si el volumen de revisión lo justifica | 09 |

@@ -2,9 +2,9 @@
 
 ## Objetivo
 
-El MVP en producción con actualización **manual semanal** de tasas — exactamente la Fase conceptual F1 del foundation. Al cerrar esta fase hay un sitio público en `brujula-financiera.cloud` con TLS, sirviendo el comparador y la calculadora con el catálogo seed completo, y un runbook para mantener los datos frescos a mano mientras las fases 7–9 automatizan.
+El MVP en producción con actualización **manual semanal** de tasas — exactamente la Fase conceptual F1 del foundation. Al cerrar esta fase hay un sitio público en `brujulafinanciera.cloud` con TLS, sirviendo el comparador y la calculadora con el catálogo seed completo, y un runbook para mantener los datos frescos a mano mientras las fases 7–9 automatizan.
 
-**Hosting (decisión D1):** Brújula convive con NarrativeAlpha en el **mismo VPS**, como un stack Docker **completamente independiente** (base de datos, Redis e imagen propias). El único recurso compartido es el **Caddy** del host, que ya ocupa 80/443.
+**Hosting (decisión D1):** Brújula convive con NarrativeAlpha en el **mismo VPS**, como un stack Docker **completamente independiente** (base de datos, Redis e imagen propias). El único recurso compartido es el **Caddy** del host, que ya ocupa 80/443. Sin PaaS de pago: el despliegue es íntegro en el VPS y el costo marginal del proyecto es ~$0.
 
 ---
 
@@ -46,7 +46,7 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 - **Site block en el Caddyfile compartido** (en el repo de NarrativeAlpha, `docker/caddy/Caddyfile`):
 
   ```
-  brujula-financiera.cloud {
+  brujulafinanciera.cloud {
       encode zstd gzip
       # Stack Brújula: bridge con puerto publicado en loopback.
       # 127.0.0.1 explícito (no `localhost`): puede resolver a ::1 y fallar.
@@ -80,7 +80,7 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 ## Tareas
 
 1. **Antes de nada, verificar capacidad del VPS**: `free -h`, `df -h`, `docker stats`. Si la RAM libre no sostiene un Postgres más, decidir límites o ampliar el VPS — no descubrirlo a mitad del deploy.
-2. Registrar el dominio y apuntar el DNS al VPS. ⚠️ **Confirmar la ortografía**: `brujula-financiera.cloud` (con "n"), no "finaciera".
+2. Registrar el dominio `brujulafinanciera.cloud` (sin guion, confirmado) y apuntar el DNS al VPS.
 3. Escribir el compose de producción con la asignación de puertos y los límites de memoria; levantar el stack en el VPS **sin** tocar Caddy todavía y verificar por túnel SSH que el sitio responde en `127.0.0.1:8011`.
 4. Añadir el site block al Caddyfile de NarrativeAlpha, recargar Caddy y verificar que **ambos** dominios responden.
 5. Escribir el workflow de CD con los gates (incluido el de no-interferencia); probar un deploy completo y un rollback simulado.
@@ -91,7 +91,7 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 
 ## Criterios de aceptación
 
-- [ ] `https://brujula-financiera.cloud` responde con TLS válido; la API interna (8010) no es alcanzable desde internet.
+- [ ] `https://brujulafinanciera.cloud` responde con TLS válido; la API interna (8010) no es alcanzable desde internet.
 - [ ] `https://narrative-alpha.cloud` sigue respondiendo 200 y todos los contenedores `narrativealpha-*` siguen `healthy` — cero regresión en el vecino.
 - [ ] Ningún puerto de Brújula colisiona con los de NarrativeAlpha (verificar con `ss -tlnp`).
 - [ ] Los volúmenes y contenedores de Brújula llevan prefijo propio; `docker volume ls` no muestra ambigüedad.

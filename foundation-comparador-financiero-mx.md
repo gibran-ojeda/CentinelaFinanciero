@@ -447,7 +447,7 @@ flowchart LR
 
 **Patrón BFF:** el navegador solo habla con `web`; `web` consume la API por red interna inyectando `X-API-Key`. La API nunca se expone a internet.
 
-**Co-hosting con NarrativeAlpha:** Brújula corre en el **mismo VPS** que NarrativeAlpha, como stack Docker independiente (proyecto `brujula`, base de datos, Redis e imagen propias — no se comparte estado). El **único recurso compartido es el Caddy del host**, que ya ocupa 80/443 en `network_mode: host`: Brújula no levanta su propio edge, se le añade un site block para `brujula-financiera.cloud` que apunta a `127.0.0.1:8011`. Todos los puertos de Brújula se publican solo en loopback y fuera del rango que NarrativeAlpha ya usa (5432, 6379, 8000, 8001, 8002, 8080, 8899). El detalle operativo —incluida la restricción de `ufw` sobre el tráfico `docker0 → host`— está en la [fase 06 del plan](plan-de-implementacion/06-fase-6-despliegue-mvp.md).
+**Co-hosting con NarrativeAlpha:** Brújula corre en el **mismo VPS** que NarrativeAlpha, como stack Docker independiente (proyecto `brujula`, base de datos, Redis e imagen propias — no se comparte estado). El **único recurso compartido es el Caddy del host**, que ya ocupa 80/443 en `network_mode: host`: Brújula no levanta su propio edge, se le añade un site block para `brujulafinanciera.cloud` que apunta a `127.0.0.1:8011`. Todos los puertos de Brújula se publican solo en loopback y fuera del rango que NarrativeAlpha ya usa (5432, 6379, 8000, 8001, 8002, 8080, 8899). El detalle operativo —incluida la restricción de `ufw` sobre el tráfico `docker0 → host`— está en la [fase 06 del plan](plan-de-implementacion/06-fase-6-despliegue-mvp.md).
 
 ---
 
@@ -532,7 +532,8 @@ brujula-financiera/
 - **Tests:** pytest con `asyncio_mode=auto`; respx para mockear httpx (fixtures reales de Banxico/CNBV); testcontainers para tests con Postgres real; los ejemplos numéricos de la sección 4.5 son casos de test obligatorios del motor de métricas.
 - **Estática:** ruff + black + mypy strict vía pre-commit.
 - **CI (GitHub Actions):** lint bloqueante, mypy informativo, tests bloqueantes en cada PR.
-- **CD:** push a `main` → SSH al VPS → `git reset --hard` + build + **gates duros**: migraciones Alembic aplicadas, verificación de deriva de esquema derivada del ORM (no de una lista a mano), smoke tests HTTP post-deploy. Rollback documentado.
+- **CD:** push a `main` → SSH al VPS → `git reset --hard` + build + **gates duros**: migraciones Alembic aplicadas, verificación de deriva de esquema derivada del ORM (no de una lista a mano), smoke tests HTTP post-deploy y verificación de no-interferencia con el stack vecino. Rollback documentado.
+- **Hosting:** despliegue íntegro en el VPS propio, sin PaaS de pago. El VPS ya está operando y el costo marginal de Brújula es ~$0.
 - **Backups:** `pg_dump` programado con retención.
 
 ---
