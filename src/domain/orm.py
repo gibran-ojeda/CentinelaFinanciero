@@ -144,6 +144,12 @@ class Institucion(TimestampMixin, Base):
     estatus_regulatorio: Mapped[str | None] = mapped_column(String(200), nullable=True)
     url_sitio: Mapped[str | None] = mapped_column(Text, nullable=True)
     activa: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: Institución **ficticia**, sembrada para ilustrar el comportamiento del
+    #: producto (sobre todo las banderas, que sin datos de la CNBV no tendrían
+    #: de dónde salir). No es lo mismo que una tasa sin verificar: aquélla es
+    #: de una institución real y se marca por el estado de la tasa. La UI las
+    #: distingue con un ◆ y nunca las presenta como reales.
+    es_demostracion: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     notas: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     productos: Mapped[list[Producto]] = relationship(

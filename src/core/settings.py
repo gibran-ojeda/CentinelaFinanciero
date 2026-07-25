@@ -99,6 +99,17 @@ class Settings(BaseSettings):
     inflacion_anual_fallback: Decimal = Decimal("3.37")
 
     tolerancia_revision_pp: Decimal = Decimal("0.5")
+
+    #: Publica las instituciones ilustrativas (◆) y las tasas que siguen en
+    #: PENDIENTE_REVISION, siempre marcadas como tales.
+    #:
+    #: El valor por defecto es `True` y es una decisión deliberada: sin él, un
+    #: clon nuevo levanta un comparador con cinco filas de CETES y parece roto.
+    #: Lo que impide que se escape a producción no es el default sino que la
+    #: API avisa por log en cada arranque, `/api/v1/meta/frescura` lo publica
+    #: en `modo_demo`, y la checklist de la fase 6 lo apaga explícitamente.
+    mostrar_datos_demo: bool = True
+
     cache_comparador_ttl_seconds: int = 300
     banderas_recompute_enabled: bool = True
     config_cache_ttl_seconds: int = 60

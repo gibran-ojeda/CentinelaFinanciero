@@ -14,6 +14,7 @@ from fastapi import FastAPI
 
 from api.routers import admin, calculadora, comparador, health, instituciones, meta
 from core import db, redis
+from core.config_store import effective
 from core.logging import configure_logging, get_logger
 from core.settings import settings
 
@@ -24,6 +25,19 @@ log = get_logger(__name__)
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     log.info("api_startup", entorno=settings.environment, puerto=settings.api_port)
+    if effective.mostrar_datos_demo:
+        # Ruidoso a propósito: es la diferencia entre servir un catálogo
+        # verificado y servir uno que incluye instituciones ficticias y tasas
+        # sin confirmar. Van marcadas en cada respuesta, pero nadie debería
+        # descubrir que el modo está activo mirando la UI.
+        log.warning(
+            "modo_demo_activo",
+            detalle=(
+                "se publican instituciones ilustrativas y tasas sin verificar, marcadas. "
+                "Apagar con `python -m cli config set mostrar_datos_demo false` antes de "
+                "exponer el sitio a internet."
+            ),
+        )
     yield
     await db.dispose_engine()
     await redis.close()

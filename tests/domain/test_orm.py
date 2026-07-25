@@ -96,6 +96,16 @@ async def test_schema_creates_every_table(session: AsyncSession) -> None:
     assert esperadas <= set(Base.metadata.tables)
 
 
+async def test_institutions_are_real_unless_marked_otherwise(session: AsyncSession) -> None:
+    """El default seguro es "no es demo": olvidar la columna no inventa nada."""
+    institucion = _institucion()
+    session.add(institucion)
+    await session.commit()
+    await session.refresh(institucion)
+
+    assert institucion.es_demostracion is False
+
+
 async def test_institution_name_is_unique(session: AsyncSession) -> None:
     session.add(_institucion())
     await session.commit()

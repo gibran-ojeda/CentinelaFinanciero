@@ -163,6 +163,15 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         "revision",
         "Desviación respecto a la tasa vigente que manda a revisión humana (pp)",
     ),
+    ConfigKeySpec(
+        "mostrar_datos_demo",
+        "bool",
+        "revision",
+        (
+            "Publica instituciones ilustrativas y tasas sin verificar, marcadas. "
+            "Apagar antes de exponer el sitio a internet (fase 6)"
+        ),
+    ),
     # Operación.
     ConfigKeySpec(
         "cache_comparador_ttl_seconds", "int", "scheduler", "TTL del cache del comparador"

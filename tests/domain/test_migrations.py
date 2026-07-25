@@ -82,13 +82,42 @@ def test_upgrade_builds_the_whole_schema_from_an_empty_database(sync_url: str) -
     assert "alembic_version" in tablas
 
 
-def test_downgrade_is_reversible(sync_url: str) -> None:
+def test_downgrade_to_base_leaves_nothing_behind(sync_url: str) -> None:
     config = _alembic_config(sync_url)
     command.upgrade(config, "head")
-    command.downgrade(config, "-1")
+    command.downgrade(config, "base")
 
     # Sólo debe sobrevivir la bitácora de Alembic.
     assert _tablas(sync_url) == {"alembic_version"}
+
+
+def test_the_last_migration_is_reversible_on_its_own(sync_url: str) -> None:
+    """Un paso atrás deshace **ese** paso, no el esquema entero.
+
+    Es el escenario de un rollback en producción: se despliega una revisión,
+    algo falla y se retrocede una sola. Este test valía `== {alembic_version}`
+    cuando sólo existía la migración inicial; con una cadena, esa aserción
+    dejaba de comprobar la reversibilidad y pasaba a comprobar que no hubiera
+    más de una migración.
+    """
+    config = _alembic_config(sync_url)
+    command.upgrade(config, "head")
+
+    engine = create_engine(sync_url)
+    try:
+        antes = {c["name"] for c in inspect(engine).get_columns("instituciones")}
+        assert "es_demostracion" in antes
+
+        command.downgrade(config, "-1")
+
+        despues = {c["name"] for c in inspect(engine).get_columns("instituciones")}
+        assert "es_demostracion" not in despues
+        assert antes - despues == {"es_demostracion"}
+    finally:
+        engine.dispose()
+
+    # El resto del esquema sigue en pie: un paso atrás no es un `downgrade base`.
+    assert TABLAS_ESPERADAS <= _tablas(sync_url)
 
 
 def test_upgrade_is_reapplicable_after_a_downgrade(sync_url: str) -> None:

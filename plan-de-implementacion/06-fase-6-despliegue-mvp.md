@@ -87,11 +87,13 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 6. Programar backups y probar un restore en local desde el dump.
 7. Ejecutar el primer ciclo del runbook manual completo (buscar tasas → CSV → import → verificar en sitio).
 8. Configurar el uptime monitor.
-9. Resolver **D5** (revisión de redacción legal de banderas y disclaimers) — bloqueante para el lanzamiento público, no para tener el stack corriendo.
+9. **Apagar el modo demo**: `python -m cli config set mostrar_datos_demo false --motivo "lanzamiento público"`. Mientras esté encendido, el comparador publica las instituciones ilustrativas (◆) y las tasas en `PENDIENTE_REVISION` — marcadas, pero publicadas. Un sitio abierto a internet sólo debe servir lo verificado. Verificar después que `/api/v1/meta/frescura` devuelve `modo_demo: false`.
+10. Resolver **D5** (revisión de redacción legal de banderas y disclaimers) — bloqueante para el lanzamiento público, no para tener el stack corriendo.
 
 ## Criterios de aceptación
 
 - [ ] `https://centinelafinanciero.cloud` responde con TLS válido; la API interna (8010) no es alcanzable desde internet.
+- [ ] `mostrar_datos_demo` está en `false`: ninguna institución ◆ ni ninguna tasa sin verificar aparece en el sitio público.
 - [ ] `https://narrative-alpha.cloud` sigue respondiendo 200 y todos los contenedores `narrativealpha-*` siguen `healthy` — cero regresión en el vecino.
 - [ ] Ningún puerto de Centinela colisiona con los de NarrativeAlpha (verificar con `ss -tlnp`).
 - [ ] Los volúmenes y contenedores de Centinela llevan prefijo propio; `docker volume ls` no muestra ambigüedad.

@@ -59,6 +59,12 @@ def test_registry_covers_the_flag_thresholds_of_the_plan() -> None:
     assert esperadas <= set(REGISTRY_BY_KEY)
 
 
+def test_the_demo_switch_is_hot_configurable() -> None:
+    """Se apaga en producción sin desplegar (paso 9 de la fase 6)."""
+    assert "mostrar_datos_demo" in REGISTRY_BY_KEY
+    assert REGISTRY_BY_KEY["mostrar_datos_demo"].value_type == "bool"
+
+
 def test_registry_groups_are_the_four_of_the_plan() -> None:
     assert {spec.grupo for spec in CONFIG_REGISTRY} == {
         "banderas",

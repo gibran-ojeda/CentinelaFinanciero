@@ -47,6 +47,7 @@ class Institucion(DomainModel):
     estatus_regulatorio: str | None = None
     url_sitio: str | None = None
     activa: bool = True
+    es_demostracion: bool = False
 
 
 class Producto(DomainModel):
