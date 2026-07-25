@@ -219,6 +219,18 @@ def test_priority_resolution_of_an_empty_list() -> None:
     assert resolver_prioridad([]) == []
 
 
+def test_a_healthy_ifpe_shows_only_its_structural_flag(
+    umbrales: UmbralesBanderas,
+) -> None:
+    """Sin hallazgos de salud, sobrevive sola la bandera permanente."""
+    banderas = evaluar_banderas(
+        _indicadores(imor=Decimal("1.0"), icap=Decimal("25.0")),
+        umbrales,
+        tipo_seguro=TipoSeguro.NINGUNO,
+    )
+    assert [b.tipo for b in banderas] == [TipoBandera.SIN_COBERTURA]
+
+
 # ─── Invariante global ───────────────────────────────────────
 
 

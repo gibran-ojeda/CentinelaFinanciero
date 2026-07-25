@@ -160,6 +160,57 @@ def test_gain_based_withholding_scales_with_the_yield(
     assert isr == Decimal("2000.00")
 
 
+# ─── Sin retención ────────────────────────────────────────────
+
+
+def test_instruments_without_withholding_deduct_nothing(
+    monkeypatch: pytest.MonkeyPatch, fiscal_2026: ParametrosFiscales
+) -> None:
+    """Base NINGUNA: la rama que cubre instrumentos exentos.
+
+    Ninguno del catálogo actual lo está, pero la fase 10 incorpora
+    instrumentos cuya retención puede no aplicar en la fuente.
+    """
+    monkeypatch.setitem(
+        TRATAMIENTO_POR_INSTRUMENTO,
+        TipoInstrumento.BONOS_M,
+        TratamientoFiscal(BaseRetencion.NINGUNA),
+    )
+
+    isr = retencion_isr(
+        TipoInstrumento.BONOS_M, Decimal("100000"), Decimal("8.0"), 360, fiscal_2026
+    )
+    resta = tasa_retencion_efectiva_anual(TipoInstrumento.BONOS_M, Decimal("8.0"), fiscal_2026)
+    nota = nota_fiscal(TipoInstrumento.BONOS_M, fiscal_2026)
+
+    assert isr == Decimal("0.00")
+    assert resta == Decimal("0.0000")
+    assert "no causa retención" in nota
+
+
+def test_gain_based_note_describes_its_own_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    params = ParametrosFiscales(
+        anio=2026,
+        tasa_retencion_capital=Decimal("0.90"),
+        tasa_retencion_ganancia=Decimal("20.0"),
+        vigente_desde=date(2026, 1, 1),
+    )
+    monkeypatch.setitem(
+        TRATAMIENTO_POR_INSTRUMENTO,
+        TipoInstrumento.FONDO_DEUDA,
+        TratamientoFiscal(BaseRetencion.GANANCIA),
+    )
+
+    nota = nota_fiscal(TipoInstrumento.FONDO_DEUDA, params)
+    assert "20.0" in nota
+    assert "sobre el rendimiento generado" in nota
+
+    resta = tasa_retencion_efectiva_anual(TipoInstrumento.FONDO_DEUDA, Decimal("10.0"), params)
+    assert resta == Decimal("2.0000")
+
+
 # ─── Tasa efectiva de retención ───────────────────────────────
 
 
