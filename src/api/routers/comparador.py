@@ -11,10 +11,11 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from api.dependencies import ContextoDep, LecturaDep, SessionDep
 from api.schemas import RespuestaComparador
+from api.services import cache
 from api.services.comparador import (
     FiltrosComparador,
     FiltroSeguro,
@@ -56,29 +57,34 @@ async def comparador(
     ] = False,
     orden: Annotated[OrdenComparador, Query()] = OrdenComparador.TEN,
     descendente: Annotated[bool, Query()] = True,
-) -> RespuestaComparador:
+    # `Response` es el camino de cache hit: se devuelve el JSON guardado sin
+    # revalidarlo. El `response_model` del decorador mantiene el OpenAPI.
+) -> RespuestaComparador | Response:
     if plazo is not None and plazo.upper() not in {p.upper() for p in PLAZOS_VALIDOS}:
         raise HTTPException(
             status_code=422,
             detail=f"Plazo no válido. Valores aceptados: {sorted(PLAZOS_VALIDOS)}",
         )
 
-    filas = await construir_comparador(
-        session,
-        contexto,
-        FiltrosComparador(
-            plazo=plazo,
-            categoria=categoria,
-            monto=monto,
-            seguro=seguro,
-            liquidez=liquidez,
-            sin_banderas=sin_banderas,
-            orden=orden,
-            descendente=descendente,
-        ),
+    filtros = FiltrosComparador(
+        plazo=plazo,
+        categoria=categoria,
+        monto=monto,
+        seguro=seguro,
+        liquidez=liquidez,
+        sin_banderas=sin_banderas,
+        orden=orden,
+        descendente=descendente,
     )
 
-    return RespuestaComparador(
+    clave = cache.llave(filtros, contexto)
+    if (cacheado := await cache.obtener(clave)) is not None:
+        # Se devuelve tal cual: revalidarlo contra el esquema costaría casi lo
+        # mismo que recalcular, y la llave ya incluye la versión del contrato.
+        return Response(content=cacheado, media_type="application/json")
+
+    filas = await construir_comparador(session, contexto, filtros)
+    respuesta = RespuestaComparador(
         filas=filas,
         total=len(filas),
         inflacion_anual=contexto.inflacion_anual,
@@ -86,6 +92,9 @@ async def comparador(
         tasa_retencion_capital=contexto.params_fiscales.tasa_retencion_capital,
         generado_en=datetime.now(UTC),
     )
+
+    await cache.guardar(clave, respuesta.model_dump_json())
+    return respuesta
 
 
 __all__ = ["PLAZOS_VALIDOS", "router"]

@@ -32,6 +32,7 @@ for _key, _value in _TEST_ENV.items():
 # que el `.env`, así que estos valores ganan sobre el `.env` del desarrollador
 # (y sobre el `cp .env.example .env` que hace el CI) sin necesidad de borrarlo.
 
+import contextlib  # noqa: E402
 import socket  # noqa: E402
 import subprocess  # noqa: E402
 from collections.abc import Iterator  # noqa: E402
@@ -73,6 +74,29 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if "requires_docker" in item.keywords:
             item.add_marker(skip)
+
+
+@pytest.fixture(autouse=True)
+async def _cliente_redis_por_test() -> Iterator[None]:
+    """Impide que el cliente Redis del módulo cruce event loops.
+
+    `core.redis` cachea el cliente a nivel de módulo y pytest-asyncio crea un
+    loop por test. Sin esto, el segundo test que toque Redis hereda conexiones
+    creadas en un loop ya cerrado y falla con "Future attached to a different
+    loop" — un error que no dice nada sobre el código bajo prueba.
+
+    Las fixtures `real_redis` y `dead_redis` se desmontan antes que ésta, así
+    que aquí sólo queda el cliente ambiental, si lo hubo.
+    """
+    yield
+
+    import core.redis as redis_module
+
+    cliente = redis_module._client
+    redis_module._client = None
+    if cliente is not None:
+        with contextlib.suppress(Exception):
+            await cliente.aclose()
 
 
 def closed_port() -> int:

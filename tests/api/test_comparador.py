@@ -18,7 +18,12 @@ from core.db import session_scope
 from domain.enums import Severidad, TipoBandera
 from domain.orm import Bandera, Institucion
 
-pytestmark = [pytest.mark.requires_docker, pytest.mark.usefixtures("comparador_poblado")]
+#: `real_redis` da un Redis efímero y vacío por test. Sin él, el cache del
+#: comparador serviría a un test la respuesta que dejó el anterior.
+pytestmark = [
+    pytest.mark.requires_docker,
+    pytest.mark.usefixtures("comparador_poblado", "real_redis"),
+]
 
 RUTA = "/api/v1/comparador"
 
