@@ -1,0 +1,11 @@
+# El código se ejecuta en Linux (WSL en desarrollo, Docker en producción).
+# Forzar LF evita que un CRLF de Windows rompa entrypoints, scripts y heredocs
+# dentro de los contenedores.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.xlsx binary
