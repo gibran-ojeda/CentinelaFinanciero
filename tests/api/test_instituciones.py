@@ -32,8 +32,30 @@ async def test_unknown_institution_returns_404(api_lectura: AsyncClient) -> None
     assert respuesta.status_code == 404
 
 
-async def test_invalid_id_is_rejected(api_lectura: AsyncClient) -> None:
-    assert (await api_lectura.get("/api/v1/instituciones/0")).status_code == 422
+async def test_a_nonexistent_reference_is_a_404_not_a_422(api_lectura: AsyncClient) -> None:
+    """Desde que la ruta acepta slugs, `0` es una referencia con forma válida.
+
+    Antes el path estaba tipado como `int(gt=0)` y el 0 se rechazaba en la
+    validación. Ahora cualquier cadena es sintácticamente aceptable y lo único
+    que se puede decir de una que no está en el catálogo es que no existe.
+    """
+    assert (await api_lectura.get("/api/v1/instituciones/0")).status_code == 404
+    assert (await api_lectura.get("/api/v1/instituciones/no-existe")).status_code == 404
+
+
+async def test_resolves_by_slug(api_lectura: AsyncClient) -> None:
+    """La URL indexable del frontend es `/institucion/{slug}`."""
+    respuesta = await api_lectura.get("/api/v1/instituciones/finsus")
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["nombre"] == "Finsus"
+
+
+async def test_slug_and_id_return_the_same_institution(api_lectura: AsyncClient) -> None:
+    por_id = (await api_lectura.get(f"/api/v1/instituciones/{await _id_de('Finsus')}")).json()
+    por_slug = (await api_lectura.get("/api/v1/instituciones/finsus")).json()
+
+    assert por_id == por_slug
 
 
 async def test_returns_the_full_detail(api_lectura: AsyncClient) -> None:

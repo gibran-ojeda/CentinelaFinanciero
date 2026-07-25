@@ -37,30 +37,44 @@ router = APIRouter(prefix="/api/v1/instituciones", tags=["instituciones"])
 
 
 @router.get(
-    "/{institucion_id}",
+    "/{referencia}",
     response_model=DetalleInstitucion,
-    summary="Detalle completo de una institución",
+    summary="Detalle completo de una institución, por id o por slug",
     responses={
         401: {"description": "Falta la X-API-Key o no es válida"},
-        404: {"description": "No existe una institución con ese id"},
+        404: {"description": "No existe una institución con esa referencia"},
     },
 )
 async def detalle(
     session: SessionDep,
     contexto: ContextoDep,
     _nivel: LecturaDep,
-    institucion_id: int = Path(gt=0),
+    referencia: str = Path(
+        min_length=1,
+        description=(
+            "Id numérico o slug. El frontend usa el slug porque su URL "
+            "(`/institucion/nu-mexico`) tiene que ser legible e indexable; el "
+            "resto de la API sigue trabajando con ids."
+        ),
+    ),
 ) -> DetalleInstitucion:
+    # Todo dígito es un id; lo demás, un slug. Los slugs se generan a partir
+    # del nombre y ninguno puede quedar en sólo dígitos, así que la regla no
+    # es ambigua.
+    criterio = (
+        Institucion.id == int(referencia)
+        if referencia.isdigit()
+        else Institucion.slug == referencia
+    )
     institucion = await session.scalar(
-        select(Institucion)
-        .options(selectinload(Institucion.productos))
-        .where(Institucion.id == institucion_id)
+        select(Institucion).options(selectinload(Institucion.productos)).where(criterio)
     )
     if institucion is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No existe la institución {institucion_id}",
+            detail=f"No existe la institución '{referencia}'",
         )
+    institucion_id = institucion.id
 
     productos = sorted(
         institucion.productos, key=lambda p: (p.tipo.value, p.plazo_dias or 0, p.nombre)
