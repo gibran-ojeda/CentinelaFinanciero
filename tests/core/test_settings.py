@@ -54,6 +54,16 @@ def test_log_format_defaults_by_environment() -> None:
     assert Settings(environment="prod", log_format="pretty").effective_log_format == "pretty"
 
 
+def test_empty_log_format_means_unset() -> None:
+    """Un `.env` no distingue entre variable ausente y puesta a vacío.
+
+    `LOG_FORMAT=` es la forma documentada de decir "sin override"; sin esta
+    normalización el proceso no arranca dentro de Docker.
+    """
+    assert Settings(environment="prod", log_format="").effective_log_format == "json"
+    assert Settings(environment="dev", log_format="   ").effective_log_format == "pretty"
+
+
 def test_sensitive_patterns_are_normalized() -> None:
     s = Settings(log_sensitive_patterns=" Password , TOKEN ,, api_key ")
     assert s.sensitive_patterns == ("password", "token", "api_key")

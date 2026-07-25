@@ -11,9 +11,9 @@ consumidor de una capa a la otra es cambiar `settings.x` por `effective.x`.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["dev", "prod", "test"]
@@ -76,6 +76,19 @@ class Settings(BaseSettings):
     # ─── Fuentes de datos (fases 7 y 9) ───────────────────────
     banxico_token: SecretStr = SecretStr("")
     deepseek_api_key: SecretStr = SecretStr("")
+
+    @field_validator("log_format", mode="before")
+    @classmethod
+    def _empty_string_is_unset(cls, value: Any) -> Any:
+        """`LOG_FORMAT=` en el `.env` significa "sin override", no cadena vacía.
+
+        Un archivo `.env` no distingue entre una variable ausente y una puesta
+        a vacío: ambas llegan aquí, pero `""` no valida contra el `Literal`.
+        Documentamos la variable como opcional, así que la normalizamos.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     # Nota: estas URLs son `property` y NO `computed_field` a propósito. Un
     # computed_field entra en el repr y en `model_dump()`, lo que filtraría la
