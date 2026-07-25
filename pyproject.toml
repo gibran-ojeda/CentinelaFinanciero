@@ -68,6 +68,8 @@ dev = [
     "pytest-cov",
     "respx>=0.21",
     "testcontainers[postgres,redis]>=4.0",
+    # Alembic abre la conexión él mismo y no usa el driver async del runtime.
+    "psycopg2-binary>=2.9",
     "hypothesis>=6.100",
     "ruff",
     "black",
@@ -90,6 +92,16 @@ line-length = 99
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# Migraciones autogeneradas: se revisan, no se reformatean. Reescribirlas a
+# mano para pasar el linter invita a introducir errores en DDL ya verificado.
+"alembic/versions/*.py" = ["E501", "W291"]
+
+[tool.ruff.lint.isort]
+# Sin esto, el directorio local `alembic/` hace que ruff clasifique el paquete
+# `alembic` (que es una dependencia) como código propio.
+known-third-party = ["alembic"]
 
 [tool.black]
 target-version = ["py312"]

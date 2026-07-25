@@ -18,6 +18,11 @@ COPY pyproject.toml README.md ./
 COPY src/ ./src/
 RUN pip install --upgrade pip && pip install ".[app]"
 
+# Las migraciones viajan en la imagen: el deploy corre `alembic upgrade head`
+# dentro del contenedor, contra el mismo código que va a servir.
+COPY alembic.ini ./
+COPY alembic/ ./alembic/
+
 # Usuario sin privilegios: nada aquí necesita root en runtime.
 RUN useradd --create-home --uid 10001 brujula && chown -R brujula:brujula /app
 USER brujula
