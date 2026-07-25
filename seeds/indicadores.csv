@@ -1,0 +1,21 @@
+institucion,periodo,imor,icap,icor,nicap_nivel,captacion,cartera_total,capital_contable,pasivo_total,fuente_url
+# Este archivo se queda VACIO a proposito.
+#
+# Los indicadores de salud institucional (IMOR, ICAP, ICOR, NICAP) son los que
+# disparan las banderas de riesgo que el comparador muestra junto al nombre de
+# una institucion real. Inventar esos numeros seria fabricar informacion
+# financiera sobre empresas concretas: exactamente lo contrario de lo que este
+# producto existe para hacer.
+#
+# Se pueblan en la fase 8, leyendo los boletines mensuales del Portafolio de
+# Informacion de la CNBV (nivel 1: ETL determinista sobre CSV/XLSX, sin LLM ni
+# scraping). Hasta entonces ninguna institucion lleva banderas de salud, que es
+# la respuesta correcta cuando no hay dato: §11 pide contexto de riesgo visible
+# sin alarmismo, no banderas sin evidencia.
+#
+# El motor de banderas de la fase 3 se prueba con datos sinteticos en sus
+# tests, que es donde corresponde probar reglas.
+#
+# Formato de las filas cuando se carguen (las lineas que empiezan con # se
+# ignoran):
+# Finsus,2026-03-31,4.20,13.50,95.00,N2,1500000000.00,900000000.00,180000000.00,1400000000.00,https://www.gob.mx/cnbv

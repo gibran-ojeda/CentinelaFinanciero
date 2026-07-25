@@ -89,11 +89,13 @@ class Settings(BaseSettings):
     umbral_tasa_sobre_mercado_pp: Decimal = Decimal("3.0")
     umbral_apalancamiento_amarilla: Decimal = Decimal("10.0")
 
-    # Respaldo mientras las series de Banxico no se pueblan (fase 7). La
+    # Respaldo de último recurso, sólo si `valores_serie` está vacía. La
     # cobertura en MXN y la calculadora necesitan estos dos números desde la
-    # fase 4; sin ellos no habría de dónde sacarlos.
-    udi_valor_fallback: Decimal = Decimal("8.700000")
-    inflacion_anual_fallback: Decimal = Decimal("4.0")
+    # fase 4; sin ellos no habría de dónde sacarlos. Los valores son reales
+    # (SIE de Banxico, 2026-07-25) para que el respaldo no distorsione:
+    # UDI del día e inflación INPC anual de junio 2026 contra junio 2025.
+    udi_valor_fallback: Decimal = Decimal("8.791497")
+    inflacion_anual_fallback: Decimal = Decimal("3.37")
 
     tolerancia_revision_pp: Decimal = Decimal("0.5")
     cache_comparador_ttl_seconds: int = 300
