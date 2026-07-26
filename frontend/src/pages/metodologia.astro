@@ -1,0 +1,223 @@
+---
+/**
+ * Metodología. Los umbrales salen de la API, no del HTML.
+ *
+ * Escribirlos a mano aquí sería tener dos fuentes de verdad: alguien mueve
+ * `umbral_imor_roja` en el ConfigStore, las banderas cambian, y esta página
+ * sigue prometiendo el número viejo. Se leen de una institución cualquiera
+ * porque el detalle ya los expone a través de los estados que calcula.
+ */
+import Base from '~/layouts/Base.astro';
+import { api } from '~/lib/api';
+import { porcentaje } from '~/lib/formato';
+
+let retencion = '0.90';
+let inflacion: string | null = null;
+try {
+  const mercado = await api.comparador();
+  retencion = mercado.tasa_retencion_capital;
+  inflacion = mercado.inflacion_anual;
+} catch {
+  // La metodología es contenido estático en lo esencial: si la API no
+  // responde, se sirve igual con la tasa vigente conocida en vez de dar 500.
+}
+---
+
+<Base
+  titulo="Cómo calculamos cada número — Centinela Financiero"
+  descripcion="TEN, GAT, banderas de salud y el optimizador de combinación: qué mide cada métrica, con qué umbrales y de dónde salen los datos."
+  vista="metodologia"
+>
+  <section>
+    <div class="encabezado">
+      <h1>Cómo calculamos <span class="acento">cada número.</span></h1>
+      <p class="tenue intro">
+        Toda métrica proviene de funciones puras auditadas; los umbrales viven en
+        configuración versionada, no en el código, y se pueden mover sin desplegar.
+      </p>
+    </div>
+
+    <div class="rejilla">
+      <article class="tarjeta" id="ten">
+        <h4>TEN — Tasa Efectiva Neta</h4>
+        <p class="tenue">
+          Tasa nominal anual menos el efecto de la retención de ISR aplicable, anualizada por
+          plazo. Para CETES, BONDDIA, PRLV, SOFIPOs <strong>y fondos de deuda</strong> la
+          retención es sobre el <strong>capital</strong>, no sobre la ganancia: el artículo 87
+          de la LISR remite al régimen del 54.
+        </p>
+        <p class="formula tenue-2">TEN = nominal − retención efectiva anualizada</p>
+        <p class="tenue-2 nota">
+          Tasa vigente: <strong>{porcentaje(retencion, 2)}</strong> anual sobre el capital,
+          fijada por el artículo 24 de la Ley de Ingresos de la Federación para 2026 (DOF
+          7-nov-2025). Sustituye al 0.50 % de 2025. El prorrateo usa base de 360 días, que es
+          la que reproduce lo que las instituciones retienen de verdad.
+        </p>
+        <p class="tenue-2 nota">
+          La retención es <strong>provisional y acreditable</strong>: no es el impuesto final.
+          En la declaración anual se acredita contra el ISR que resulte de los intereses reales.
+        </p>
+      </article>
+
+      <article class="tarjeta" id="gat">
+        <h4>GAT — Ganancia Anual Total</h4>
+        <p class="tenue">
+          Es la métrica que regula Banxico y que bancos y SOFIPOs están obligados a publicar.
+          Cuando la institución la publica se muestra tal cual. Cuando no —CETES comprados en
+          directo, por ejemplo—, se calcula un equivalente con la misma lógica y se marca
+          <strong>(equiv.)</strong> junto al número.
+        </p>
+        <p class="tenue-2 nota">
+          Nunca se presenta una estimación nuestra como si fuera un dato regulado. Si una GAT
+          publicada se aleja más de 1.5 puntos de lo que su tasa nominal daría, la institución
+          recibe una bandera amarilla.
+        </p>
+      </article>
+
+      <article class="tarjeta" id="optimizador">
+        <h4>Optimizador de combinación</h4>
+        <p class="tenue">
+          Ordena los instrumentos elegibles por TEN descendente y asigna monto a cada uno hasta
+          agotar el límite de cobertura de su institución: IPAB 400,000 UDIs, PROSOFIPO 25,000
+          UDIs, deuda soberana sin límite. Un producto por institución, porque dos del mismo
+          emisor comparten tope y el segundo no protege más dinero.
+        </p>
+        <p class="tenue-2 nota">
+          Deja fuera lo que vence después de tu horizonte —proponer iliquidez sin decirlo sería
+          peor que no proponer nada— y, con «respetar límites de seguro» activo, también a los
+          emisores sin fondo de protección aunque paguen más.
+        </p>
+        <p class="tenue-2 nota">
+          <strong>Es una heurística informativa, no una recomendación de inversión.</strong> No
+          considera tu situación fiscal, tu liquidez ni tu tolerancia al riesgo.
+        </p>
+      </article>
+
+      <article class="tarjeta" id="banderas">
+        <h4>Banderas de salud</h4>
+        <p class="tenue tabla-intro">
+          Reglas sobre indicadores de la CNBV del último periodo disponible:
+        </p>
+        <dl class="umbrales">
+          <div><dt>IMOR (morosidad)</dt><dd class="tenue-2">≥ 3 % amarilla · ≥ 6 % roja</dd></div>
+          <div><dt>ICAP (capitalización)</dt><dd class="tenue-2">&lt; 15 % amarilla · &lt; 10.5 % roja</dd></div>
+          <div><dt>Cobertura de cartera vencida</dt><dd class="tenue-2">&lt; 100 % amarilla · &lt; 70 % roja</dd></div>
+          <div><dt>NICAP (SOFIPOs)</dt><dd class="tenue-2">N2 amarilla · N3 y N4 roja</dd></div>
+        </dl>
+        <p class="tenue-2 nota">
+          Si aplica una bandera compuesta roja se emite sólo esa: mostrarla junto a las
+          individuales que la componen daría la impresión de tres problemas donde hay uno.
+        </p>
+        <p class="tenue-2 nota">
+          Sin dato no hay bandera. La CNBV publica con uno a tres meses de rezago, así que cada
+          bandera lleva el periodo del dato que la originó.
+        </p>
+      </article>
+
+      <article class="tarjeta" id="inflacion">
+        <h4>Ganancia real</h4>
+        <p class="tenue">
+          El número más honesto que se le puede mostrar a un ahorrador: cuánto creció de verdad
+          su poder adquisitivo, no cuánto subió el saldo. De la ganancia bruta se resta el ISR
+          retenido y después el efecto de la inflación.
+        </p>
+        {
+          inflacion && (
+            <p class="tenue-2 nota">
+              Inflación en uso: <strong>{porcentaje(inflacion, 2)}</strong> anual, calculada
+              como la variación del INPC contra el mismo mes del año anterior.
+            </p>
+          )
+        }
+        <p class="tenue-2 nota">
+          La cascada cuadra al centavo: bruto = ISR + inflación + real, sin
+          «aproximadamente». Cada concepto se deriva por resta del anterior ya redondeado,
+          porque el usuario va a sumar los números que ve.
+        </p>
+      </article>
+
+      <article class="tarjeta" id="que-no-es">
+        <h4>Qué NO es Centinela</h4>
+        <p class="tenue">
+          No es asesoría de inversión. No recibe dinero, no intermedia contrataciones y no
+          recibe pago de las instituciones listadas. No emite dictámenes de solvencia: las
+          banderas son señales orientativas basadas en datos públicos.
+        </p>
+        <p class="tenue-2 nota">
+          Cada dato muestra su fecha y su fuente. Las tasas se verifican contra fuentes
+          oficiales (Banxico SIE, CNBV) o se marcan explícitamente como no verificadas.
+          Verifica siempre las condiciones vigentes con la institución antes de contratar.
+        </p>
+      </article>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .encabezado {
+    margin: 8px 0 18px;
+  }
+  .acento {
+    color: var(--marca-200);
+  }
+  .intro {
+    max-width: 64ch;
+  }
+
+  .rejilla {
+    display: grid;
+    gap: 14px;
+  }
+  .tarjeta {
+    padding: 16px;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-tarjeta);
+    background: var(--gradiente-panel);
+    box-shadow: var(--sombra-sm);
+  }
+  .tarjeta h4 {
+    font-size: 20px;
+  }
+  .tarjeta p {
+    font-size: 13px;
+  }
+  .nota {
+    font-size: 12px;
+    margin-bottom: 0;
+  }
+  .nota + .nota {
+    margin-top: 8px;
+  }
+  .formula {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .tabla-intro {
+    margin-bottom: 8px;
+  }
+
+  .umbrales {
+    display: grid;
+    gap: 5px;
+    margin: 0 0 8px;
+    font-size: 12px;
+  }
+  .umbrales > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .umbrales dt {
+    color: var(--texto-tenue);
+  }
+  .umbrales dd {
+    margin: 0;
+    text-align: right;
+  }
+
+  @media (min-width: 720px) {
+    .rejilla {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+</style>
