@@ -1,0 +1,170 @@
+# Stack de Centinela Financiero.
+#
+# Convive con NarrativeAlpha en el mismo VPS, así que todo lleva prefijo propio
+# y puertos fuera del rango que ese stack ya ocupa (5432, 6379, 8000, 8001,
+# 8002, 8080, 8899). Ver §14 del foundation y la fase 06 del plan.
+#
+#   COMPOSE_PROJECT_NAME=centinela   →  contenedores y volúmenes `centinela-*`
+#   Todo publicado sólo en 127.0.0.1: Caddy (compartido, en network_mode host)
+#   los alcanza por loopback. La API nunca se expone a internet.
+
+name: centinela
+
+x-app-image: &app-image
+  image: centinela:latest
+  build:
+    context: .
+    dockerfile: docker/app/Dockerfile
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-app-env: &app-env
+  ENVIRONMENT: ${ENVIRONMENT:-dev}
+  POSTGRES_HOST: db
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: ${POSTGRES_DB:-centinela}
+  POSTGRES_USER: ${POSTGRES_USER:-centinela}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatorio}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: ${LOG_FORMAT:-}
+
+services:
+  db:
+    image: postgres:16
+    container_name: centinela-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-centinela}
+      POSTGRES_USER: ${POSTGRES_USER:-centinela}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatorio}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-centinela} -d ${POSTGRES_DB:-centinela}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    <<: *logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: centinela-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    <<: *logging
+
+  api:
+    <<: [*app-image, *logging]
+    container_name: centinela-api
+    restart: unless-stopped
+    command: ["python", "-m", "api"]
+    environment:
+      <<: *app-env
+      API_PORT: 8000
+      API_READ_KEY: ${API_READ_KEY:-}
+      API_ADMIN_KEY: ${API_ADMIN_KEY:-}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-}
+    ports:
+      - "127.0.0.1:8010:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # -f falla con status >= 400, así que un 503 del /healthz marca unhealthy.
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/healthz > /dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  scheduler:
+    <<: [*app-image, *logging]
+    restart: unless-stopped
+    command: ["python", "-m", "scheduler"]
+    environment:
+      <<: *app-env
+      SCHEDULER_HEARTBEAT_ENABLED: ${SCHEDULER_HEARTBEAT_ENABLED:-true}
+      SCHEDULER_HEARTBEAT_INTERVAL_SECONDS: ${SCHEDULER_HEARTBEAT_INTERVAL_SECONDS:-60}
+      SCHEDULER_LOCK_TTL_SECONDS: ${SCHEDULER_LOCK_TTL_SECONDS:-300}
+      SCHEDULER_TIMEZONE: ${SCHEDULER_TIMEZONE:-America/Mexico_City}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # No `pgrep`: no existe en python:3.12-slim, así que la sonda anterior
+      # devolvía 127 y marcaba unhealthy un servicio que funcionaba. Y aunque
+      # existiera, que el proceso viva no dice que esté planificando nada: la
+      # sonda comprueba que el heartbeat haya corrido hace poco, que es la
+      # pregunta que importa.
+      test: ["CMD", "python", "-m", "scheduler.health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+  web:
+    image: centinela-web:latest
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    container_name: centinela-web
+    restart: unless-stopped
+    environment:
+      # El único servicio que habla con el navegador, y el único que necesita
+      # la llave de **lectura**. Nunca la de admin: el BFF sólo consulta.
+      API_BASE_URL: http://api:8000
+      API_READ_KEY: ${API_READ_KEY:-}
+      API_TIMEOUT_SECONDS: ${API_TIMEOUT_SECONDS:-10}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://127.0.0.1:3010}
+    ports:
+      # Como el resto: sólo en loopback. En el VPS lo alcanza el Caddy
+      # compartido; a internet no se expone nada directamente (§14).
+      - "127.0.0.1:3010:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # La portada consulta la API: si responde 200, el camino completo
+      # navegador → web → api → db está vivo. Es el smoke test permanente.
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    <<: *logging
+
+volumes:
+  pgdata:
+    name: centinela-pgdata
+  redisdata:
+    name: centinela-redisdata
+
+networks:
+  default:
+    name: centinela-net

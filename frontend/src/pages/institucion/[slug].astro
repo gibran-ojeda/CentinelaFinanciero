@@ -1,0 +1,585 @@
+---
+/**
+ * Detalle de institución. Una URL indexable por institución.
+ *
+ * Es la capa de profundidad de §11: la vista principal muestra tasas limpias,
+ * aquí se enseña todo lo que hay debajo —indicadores con su periodo, banderas
+ * con su motivo completo, cobertura explicada en pesos— porque quien llega
+ * hasta aquí quiere esa historia.
+ */
+import Avatar from '~/components/Avatar.astro';
+import Icono from '~/components/Icono.astro';
+import MarcaDato from '~/components/MarcaDato.astro';
+import Base from '~/layouts/Base.astro';
+import { ApiError, api } from '~/lib/api';
+import { dinero, dineroCompacto, fecha, periodo, plazoLargo, porcentaje } from '~/lib/formato';
+import type { EstadoIndicador, IndicadorEvaluado } from '~/lib/tipos';
+
+const { slug } = Astro.params;
+
+if (!slug) return Astro.redirect('/', 302);
+
+let institucion = null;
+try {
+  institucion = await api.institucion(slug);
+} catch (error) {
+  if (error instanceof ApiError && error.status === 404) {
+    // 404 de verdad, no una página de error con estado 200: un slug que no
+    // existe no debe quedarse en el índice de nadie.
+    return new Response('Institución no encontrada', { status: 404 });
+  }
+  console.error('[institucion]', error);
+  return new Response('No se pudo cargar la institución', { status: 502 });
+}
+
+const ETIQUETA_CATEGORIA: Record<string, string> = {
+  GOBIERNO: 'Gobierno',
+  BANCO_TRADICIONAL: 'Banco',
+  BANCO_DIGITAL: 'Banco digital',
+  SOFIPO: 'SOFIPO',
+  IFPE: 'IFPE',
+};
+
+const COLOR_ESTADO: Record<EstadoIndicador, string> = {
+  EN_RANGO: 'var(--positivo)',
+  ATENCION: 'var(--aviso)',
+  ALERTA: 'var(--negativo)',
+  SIN_DATO: 'var(--texto-tenue-2)',
+  INFORMATIVO: 'var(--texto-tenue)',
+};
+
+const TEXTO_ESTADO: Record<EstadoIndicador, string> = {
+  EN_RANGO: 'En rango',
+  ATENCION: 'Atención',
+  ALERTA: 'Alerta',
+  SIN_DATO: 'Sin dato',
+  INFORMATIVO: 'Contexto',
+};
+
+function valorIndicador(indicador: IndicadorEvaluado): string {
+  if (indicador.valor_texto) return indicador.valor_texto;
+  if (indicador.valor === null) return '—';
+  if (indicador.unidad === 'PORCENTAJE') return porcentaje(indicador.valor, 1);
+  if (indicador.unidad === 'MONEDA') return dineroCompacto(indicador.valor);
+  if (indicador.unidad === 'VECES') return `${Number(indicador.valor).toFixed(2)}×`;
+  return String(indicador.valor);
+}
+
+const EXPLICACION_COBERTURA: Record<string, string> = {
+  SOBERANO:
+    'Deuda directa del Gobierno Federal: no hay límite de seguro porque el obligado es el propio Estado mexicano.',
+  IPAB: `Depósitos protegidos por el IPAB hasta 400,000 UDIs por persona e institución (UDI = ${dinero(institucion.cobertura.valor_udi)}). Por encima de ese monto no hay garantía.`,
+  PROSOFIPO: `Ahorro protegido por el Fondo PROSOFIPO hasta 25,000 UDIs por persona e institución (UDI = ${dinero(institucion.cobertura.valor_udi)}). Es una cobertura mucho menor que la del IPAB: conviene no concentrar por encima del límite.`,
+  NINGUNO:
+    'Este instrumento no cuenta con seguro de depósito. Los fondos se mantienen en un fideicomiso segregado, que es una protección distinta y no equivalente.',
+};
+
+// Sólo los indicadores que la CNBV publica para esta figura. Un SIN_DATO por
+// cada métrica que no le corresponde llenaría la ficha de huecos que no
+// significan nada — una SOFIPO no reporta ICAP y eso no es una carencia.
+const indicadores = (institucion.indicadores_ultimo_periodo?.evaluados ?? []).filter(
+  (i) => i.estado !== 'SIN_DATO',
+);
+
+const conTasa = institucion.productos.filter((p) => p.tasa_nominal !== null);
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: institucion.nombre,
+  url: institucion.url_sitio ?? undefined,
+  description: institucion.estatus_regulatorio ?? undefined,
+};
+---
+
+<Base
+  titulo={`${institucion.nombre}: tasas, cobertura y salud financiera — Centinela Financiero`}
+  descripcion={`Tasas vigentes de ${institucion.nombre}, su tasa efectiva neta después de ISR, la cobertura del seguro de depósito y los indicadores de salud publicados por la CNBV.`}
+  vista="institucion"
+  jsonLd={jsonLd}
+>
+  <section>
+    <a class="volver" href="/">
+      <Icono nombre="flecha-izquierda" tamano={16} /> Volver al mercado
+    </a>
+
+    <header class="ficha">
+      <div class="ficha-titulo">
+        <Avatar nombre={institucion.nombre} slug={institucion.slug} tamano={46} />
+        <h1>{institucion.nombre}</h1>
+        <span class="pastilla">{ETIQUETA_CATEGORIA[institucion.categoria]}</span>
+        {
+          institucion.es_demostracion && (
+            <span class="pastilla demo">◆ institución de ejemplo</span>
+          )
+        }
+      </div>
+      {
+        institucion.notas && <p class="tenue descripcion">{institucion.notas}</p>
+      }
+      {
+        !institucion.notas && institucion.estatus_regulatorio && (
+          <p class="tenue descripcion">{institucion.estatus_regulatorio}</p>
+        )
+      }
+    </header>
+
+    <div class="superior">
+      <div>
+        {
+          institucion.banderas_activas.length > 0 ? (
+            <div class="banderas">
+              {institucion.banderas_activas.map((bandera) => (
+                <article class:list={['tarjeta-bandera', bandera.severidad.toLowerCase()]}>
+                  <div class="bandera-titulo">
+                    <Icono nombre="alerta" tamano={16} />
+                    Bandera {bandera.severidad === 'ROJA' ? 'roja' : 'amarilla'}
+                  </div>
+                  <p class="bandera-motivo">{bandera.motivo}</p>
+                  {bandera.periodo_dato && (
+                    <p class="bandera-periodo">Dato de {periodo(bandera.periodo_dato)}</p>
+                  )}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p class="sin-banderas">
+              <Icono nombre="escudo-ok" tamano={15} />
+              Sin banderas activas al último periodo evaluado.
+            </p>
+          )
+        }
+
+        {
+          institucion.banderas_historicas.length > 0 && (
+            <details class="historicas">
+              <summary>
+                {institucion.banderas_historicas.length} bandera
+                {institucion.banderas_historicas.length === 1 ? '' : 's'} que ya no aplica
+                {institucion.banderas_historicas.length === 1 ? '' : 'n'}
+              </summary>
+              <ul>
+                {institucion.banderas_historicas.map((bandera) => (
+                  <li class="tenue-2">{bandera.motivo}</li>
+                ))}
+              </ul>
+            </details>
+          )
+        }
+
+        <h2 class="etiqueta seccion">
+          Indicadores de salud
+          {
+            institucion.indicadores_ultimo_periodo &&
+              ` · ${periodo(institucion.indicadores_ultimo_periodo.periodo)}`
+          }
+        </h2>
+
+        {
+          indicadores.length > 0 ? (
+            <>
+              <div class="indicadores">
+                {indicadores.map((indicador) => (
+                  <article class="indicador">
+                    <div class="indicador-clave">{indicador.clave}</div>
+                    <div class="cifra indicador-valor">{valorIndicador(indicador)}</div>
+                    <div class="indicador-estado" style={`color:${COLOR_ESTADO[indicador.estado]}`}>
+                      <i aria-hidden="true" />
+                      {TEXTO_ESTADO[indicador.estado]}
+                    </div>
+                    <div class="tenue-2 indicador-desc">{indicador.descripcion}</div>
+                  </article>
+                ))}
+              </div>
+              <p class="tenue-2 fuente-cnbv">
+                Fuente: CNBV · cifras a{' '}
+                {periodo(institucion.indicadores_ultimo_periodo?.periodo)}. Los umbrales
+                vigentes están en <a href="/metodologia#banderas">Metodología</a>.
+              </p>
+            </>
+          ) : institucion.categoria === 'GOBIERNO' ? (
+            <p class="tenue">
+              Instrumento de deuda del Gobierno Federal: no aplican indicadores de la CNBV. El
+              respaldo es soberano.
+            </p>
+          ) : (
+            <p class="tenue">
+              Todavía no hay indicadores publicados para esta institución. Sin dato no se emiten
+              banderas de salud, que es la respuesta correcta cuando no hay evidencia.
+            </p>
+          )
+        }
+      </div>
+
+      <aside class="cobertura">
+        <div class="cobertura-cabecera">
+          <Icono nombre="escudo" tamano={26} />
+          <div>
+            <div class="cobertura-etiqueta">Cobertura de tu dinero</div>
+            <div class="cobertura-tipo">
+              {
+                institucion.cobertura.tipo === 'NINGUNO'
+                  ? 'Sin seguro de depósito'
+                  : institucion.cobertura.tipo === 'SOBERANO'
+                    ? 'Respaldo soberano'
+                    : institucion.cobertura.tipo
+              }
+            </div>
+          </div>
+        </div>
+        <div class="cifra cobertura-monto">
+          {
+            institucion.cobertura.sin_limite
+              ? 'Sin límite'
+              : dineroCompacto(institucion.cobertura.limite_mxn)
+          }
+        </div>
+        <p class="tenue cobertura-texto">
+          {EXPLICACION_COBERTURA[institucion.cobertura.tipo]}
+        </p>
+      </aside>
+    </div>
+
+    <h2 class="etiqueta seccion">Productos y tasas</h2>
+    <div class="productos">
+      {
+        conTasa.map((producto) => (
+          <div class="producto">
+            <span class="producto-nombre">{producto.nombre}</span>
+            <span class="tenue-2 producto-plazo">
+              {plazoLargo(producto.plazo_dias, producto.tipo)}
+            </span>
+            <span class="tenue">
+              Nominal <strong class="claro num">{porcentaje(producto.tasa_nominal)}</strong>
+            </span>
+            <span class="ten">
+              TEN <strong class="num">{porcentaje(producto.ten)}</strong>
+            </span>
+            <span class="tenue">
+              GAT <strong class="claro num">{porcentaje(producto.gat?.nominal)}</strong>
+              {producto.gat?.es_calculada && <span class="tenue-2 equiv">(equiv.)</span>}
+            </span>
+            <span class="tenue-2 producto-fuente">
+              {producto.procedencia?.fuente} · {fecha(producto.procedencia?.fecha_dato)}
+              <MarcaDato verificada={producto.procedencia?.verificada ?? true} />
+            </span>
+          </div>
+        ))
+      }
+      {
+        conTasa.length === 0 && (
+          <p class="tenue sin-productos">
+            No hay tasas publicables para esta institución en este momento.
+          </p>
+        )
+      }
+    </div>
+
+    <div class="acciones">
+      <a class="cta" href="/calculadora">Ir a la calculadora</a>
+      <a class="cta-secundaria" href="/">Ver el mercado</a>
+    </div>
+
+    <p class="tenue-2 disclaimer">{institucion.disclaimer}</p>
+  </section>
+</Base>
+
+<style>
+  .volver {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 2px 0 14px;
+    color: var(--marca-200);
+    font-family: var(--fuente-titulo);
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+  }
+
+  .ficha {
+    margin-bottom: 18px;
+  }
+  .ficha-titulo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+  .ficha-titulo h1 {
+    font-size: clamp(28px, 5.5vw, 40px);
+    margin: 0;
+  }
+  .pastilla {
+    padding: 3px 12px;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-pastilla);
+    background: rgba(167, 224, 219, 0.1);
+    color: var(--marca-200);
+    font-size: 11px;
+  }
+  .pastilla.demo {
+    background: transparent;
+    color: var(--texto-tenue-2);
+  }
+  .descripcion {
+    max-width: 70ch;
+    margin-top: 8px;
+  }
+
+  .superior {
+    display: grid;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .banderas {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .tarjeta-bandera {
+    padding: 14px 16px;
+    border-radius: 14px;
+  }
+  .tarjeta-bandera.amarilla {
+    background: var(--aviso-fondo);
+    border: 1px solid var(--aviso-borde);
+    color: var(--aviso);
+  }
+  .tarjeta-bandera.roja {
+    background: var(--negativo-fondo);
+    border: 1px solid var(--negativo-borde);
+    color: var(--negativo);
+  }
+  .bandera-titulo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--fuente-titulo);
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .bandera-motivo {
+    margin: 6px 0 0;
+    font-size: 13px;
+  }
+  .bandera-periodo {
+    margin: 6px 0 0;
+    font-size: 11px;
+    opacity: 0.8;
+  }
+
+  .sin-banderas {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--positivo);
+  }
+
+  .historicas {
+    margin-bottom: 16px;
+    font-size: 12px;
+  }
+  .historicas summary {
+    cursor: pointer;
+    color: var(--texto-tenue);
+  }
+  .historicas ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+  }
+
+  .seccion {
+    margin: 0 0 10px;
+  }
+
+  .indicadores {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .indicador {
+    padding: 13px 14px;
+    border: 1px solid var(--linea);
+    border-radius: 14px;
+    background: var(--gradiente-panel);
+    box-shadow: var(--sombra-sm);
+  }
+  .indicador-clave {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--texto-tenue-2);
+  }
+  .indicador-valor {
+    margin: 2px 0;
+    font-size: 26px;
+    color: var(--texto-fuerte);
+  }
+  .indicador-estado {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+  }
+  .indicador-estado i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .indicador-desc {
+    margin-top: 4px;
+    font-size: 11px;
+  }
+  .fuente-cnbv {
+    margin-top: 8px;
+    font-size: 11px;
+  }
+
+  .cobertura {
+    padding: 18px;
+    border: 1px solid rgba(95, 176, 201, 0.3);
+    border-radius: var(--radio-tarjeta);
+    background:
+      linear-gradient(160deg, rgba(95, 176, 201, 0.16), rgba(42, 47, 99, 0.4)), var(--panel);
+    box-shadow: var(--sombra-md);
+  }
+  .cobertura-cabecera {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    color: var(--marca-200);
+  }
+  .cobertura-etiqueta {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--texto-tenue);
+  }
+  .cobertura-tipo {
+    font-family: var(--fuente-titulo);
+    font-weight: 600;
+    font-size: 22px;
+    color: var(--texto-fuerte);
+  }
+  .cobertura-monto {
+    font-size: 34px;
+    color: var(--positivo);
+  }
+  .cobertura-texto {
+    margin: 8px 0 0;
+    font-size: 13px;
+  }
+
+  .productos {
+    overflow: hidden;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-tarjeta);
+    background: var(--gradiente-panel);
+    box-shadow: var(--sombra-md);
+  }
+  .producto {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 18px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--linea-suave);
+    font-size: 13px;
+  }
+  .producto:last-child {
+    border-bottom: none;
+  }
+  .producto-nombre {
+    min-width: 150px;
+    font-family: var(--fuente-titulo);
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--texto-fuerte);
+  }
+  .producto-plazo {
+    min-width: 70px;
+    font-size: 12px;
+  }
+  .claro {
+    color: var(--texto-fuerte);
+  }
+  .ten {
+    color: var(--positivo);
+  }
+  .equiv {
+    font-size: 10px;
+  }
+  .producto-fuente {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    font-size: 11px;
+  }
+  .sin-productos {
+    margin: 0;
+    padding: 18px 16px;
+  }
+
+  .acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .cta,
+  .cta-secundaria {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 12px 20px;
+    border-radius: var(--radio-pastilla);
+    font-family: var(--fuente-titulo);
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+  }
+  .cta {
+    background: var(--gradiente-acento);
+    color: var(--texto-fuerte);
+    box-shadow: var(--sombra-sm);
+  }
+  .cta:hover {
+    filter: brightness(1.12);
+  }
+  .cta-secundaria {
+    border: 1px solid var(--linea);
+    color: var(--marca-200);
+  }
+  .cta-secundaria:hover {
+    border-color: var(--linea-fuerte);
+  }
+
+  .disclaimer {
+    max-width: 80ch;
+    margin-top: 18px;
+    font-size: 11px;
+  }
+
+  @media (min-width: 720px) {
+    .superior {
+      grid-template-columns: 1.15fr 0.85fr;
+      align-items: start;
+    }
+    .indicadores {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 1080px) {
+    .indicadores {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+</style>

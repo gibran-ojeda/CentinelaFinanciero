@@ -1,0 +1,49 @@
+# ─── Secretos ────────────────────────────────────────────────
+# Nunca versionar: contiene tokens reales (Banxico, DeepSeek) y credenciales de BD.
+.env
+.env.*
+!.env.example
+
+# ─── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+
+# ─── Node / Astro (frontend, fase 5) ─────────────────────────
+node_modules/
+.astro/
+frontend/dist/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Editores y SO ───────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ─── Datos locales ───────────────────────────────────────────
+*.dump
+*.sql.gz
+/tmp/

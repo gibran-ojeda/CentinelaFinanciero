@@ -1,0 +1,35 @@
+---
+/**
+ * El centinela: pirámide escalonada azteca con un ojo vigilante encima.
+ *
+ * Trazo 1.5 como el resto de la iconografía. `currentColor` para que herede
+ * del contenedor —blanco sobre el cuadro de la cabecera, acento en el pie—
+ * salvo la pupila, que se rellena.
+ */
+interface Props {
+  tamano?: number;
+  clase?: string;
+}
+const { tamano = 20, clase } = Astro.props;
+---
+
+<svg
+  width={tamano}
+  height={tamano}
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.5"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  class={clase}
+  role="img"
+  aria-label="Centinela Financiero"
+>
+  <path d="M3 21h18"></path>
+  <path d="M5 21v-3h3v-4h3v-4"></path>
+  <path d="M19 21v-3h-3v-4h-3v-4"></path>
+  <path d="M11 10h2"></path>
+  <path d="M12 3.6c2.3 0 3.8 2.2 3.8 2.2S14.3 8 12 8 8.2 5.8 8.2 5.8 9.7 3.6 12 3.6z"></path>
+  <circle cx="12" cy="5.8" r="0.6" fill="currentColor" stroke="none"></circle>
+</svg>

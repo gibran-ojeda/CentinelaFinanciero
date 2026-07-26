@@ -1,0 +1,57 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  lint:
+    name: lint (bloqueante)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install ruff black
+      - run: ruff check src tests
+      - run: black --check src tests
+
+  typecheck:
+    name: typecheck (informativo)
+    runs-on: ubuntu-latest
+    # mypy no bloquea el merge: §18 del foundation lo define como informativo.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -e ".[app,dev]"
+      - run: mypy src
+
+  test:
+    name: test (bloqueante)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -e ".[app,dev]"
+      # Los settings se instancian al importar; sin .env el import revienta.
+      - run: cp .env.example .env
+      # El runner de GitHub trae Docker, así que los tests con testcontainers
+      # sí corren aquí (en local se saltan solos si no hay daemon).
+      - run: pytest -q --cov=src --cov-report=term-missing

@@ -1,0 +1,246 @@
+---
+/**
+ * El mercado. Server-rendered de punta a punta.
+ *
+ * Los filtros se leen de la query string y se envían a la API en el servidor,
+ * así que `/?plazo=91&seguro=IPAB` devuelve HTML ya filtrado: es una URL
+ * compartible e indexable, no un estado de cliente.
+ */
+import BarraSeleccion from '~/components/islands/BarraSeleccion';
+import FiltrosMercadoUI from '~/components/FiltrosMercado.astro';
+import TablaComparador from '~/components/TablaComparador.astro';
+import Base from '~/layouts/Base.astro';
+import { ApiError, api } from '~/lib/api';
+import { fecha } from '~/lib/formato';
+import type { CategoriaInstitucion, FiltrosMercado, TipoSeguro } from '~/lib/tipos';
+
+const params = Astro.url.searchParams;
+
+const PLAZOS_VALIDOS = new Set(['VISTA', '28', '91', '182', '364', '365+']);
+const SEGUROS_VALIDOS = new Set(['SOBERANO', 'IPAB', 'PROSOFIPO', 'NINGUNO']);
+const CATEGORIAS_VALIDAS = new Set([
+  'GOBIERNO',
+  'BANCO_TRADICIONAL',
+  'BANCO_DIGITAL',
+  'SOFIPO',
+  'IFPE',
+]);
+const ORDENES_VALIDOS = new Set(['ten', 'tasa_nominal', 'gat', 'cobertura']);
+
+/**
+ * Los parámetros se saneen aquí y no se reenvían tal cual.
+ *
+ * La query string la escribe cualquiera. Pasar un valor inventado a la API
+ * devolvería 422 y esta página serviría un error donde debería servir el
+ * mercado sin filtrar — que es lo que un enlace roto de un tercero merece.
+ */
+const plazoCrudo = params.get('plazo');
+const ordenCrudo = params.get('orden');
+const montoCrudo = (params.get('monto') ?? '').replace(/\D/g, '');
+
+const filtros: FiltrosMercado = {
+  plazo: plazoCrudo && PLAZOS_VALIDOS.has(plazoCrudo) ? plazoCrudo : null,
+  seguros: params.getAll('seguro').filter((s) => SEGUROS_VALIDOS.has(s)) as TipoSeguro[],
+  categorias: params
+    .getAll('categoria')
+    .filter((c) => CATEGORIAS_VALIDAS.has(c)) as CategoriaInstitucion[],
+  monto: montoCrudo && Number(montoCrudo) > 0 ? montoCrudo : null,
+  orden: (ordenCrudo && ORDENES_VALIDOS.has(ordenCrudo) ? ordenCrudo : 'ten') as
+    FiltrosMercado['orden'],
+  sinBanderas: params.get('sin_banderas') === 'true',
+};
+
+let mercado = null;
+let frescura = null;
+let error: string | null = null;
+
+try {
+  [mercado, frescura] = await Promise.all([api.comparador(filtros), api.frescura()]);
+} catch (e) {
+  error =
+    e instanceof ApiError && e.status === 504
+      ? 'El servicio tardó demasiado en responder. Recarga en unos segundos.'
+      : 'No pudimos cargar el mercado ahora mismo.';
+  console.error('[mercado]', e);
+}
+
+const hayDemo =
+  frescura?.modo_demo ??
+  (mercado?.filas.some((f) => f.institucion.es_demostracion || !f.procedencia.verificada) ?? false);
+
+const jsonLd = mercado
+  ? {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: 'Comparador de instrumentos de ahorro en México',
+      numberOfItems: mercado.total,
+      itemListElement: mercado.filas.slice(0, 20).map((fila, indice) => ({
+        '@type': 'ListItem',
+        position: indice + 1,
+        item: {
+          '@type': 'FinancialProduct',
+          name: `${fila.institucion.nombre} — ${fila.producto}`,
+          provider: { '@type': 'Organization', name: fila.institucion.nombre },
+          interestRate: Number(fila.tasa_nominal),
+          feesAndCommissionsSpecification: `TEN ${Number(fila.ten).toFixed(2)}% después de ISR`,
+        },
+      })),
+    }
+  : undefined;
+---
+
+<Base
+  titulo="Tasas de CETES, SOFIPOs y bancos digitales hoy — Centinela Financiero"
+  descripcion="Compara instrumentos de ahorro en México con la tasa efectiva neta después de ISR, la cobertura del seguro de depósito y las banderas de salud de cada institución."
+  vista="mercado"
+  jsonLd={jsonLd}
+>
+  <section>
+    <div class="hero">
+      <h1>Mercado de ahorro / <span class="acento">rendimiento real.</span></h1>
+      <p class="tenue sub">
+        CETES, SOFIPOs y bancos digitales con TEN después de ISR, cobertura de seguro y banderas
+        de salud. Selecciona varios y arma la mejor combinación.
+      </p>
+      <div class="avisos">
+        {
+          frescura?.ultima_actualizacion && (
+            <span class="pastilla-fecha">
+              <i aria-hidden="true" />
+              Datos al {fecha(frescura.ultima_actualizacion)}
+            </span>
+          )
+        }
+        <span class="tenue-2 aviso-texto">
+          Cada tasa muestra su fecha y su fuente.
+          {
+            hayDemo && (
+              <>
+                {' '}
+                Las instituciones marcadas <strong>◆</strong> son ejemplos ilustrativos y las
+                tasas <strong>sin verificar</strong> no se han podido confirmar con la
+                institución.
+              </>
+            )
+          }
+        </span>
+      </div>
+    </div>
+
+    <FiltrosMercadoUI filtros={filtros} total={mercado?.total ?? 0} />
+
+    <BarraSeleccion client:idle />
+
+    {error && <p class="error">{error}</p>}
+    {mercado && <TablaComparador filas={mercado.filas} />}
+
+    {mercado && <p class="tenue-2 disclaimer">{mercado.disclaimer}</p>}
+  </section>
+</Base>
+
+<script>
+  import { alternar, seleccion } from '~/lib/seleccion';
+  import { miles, soloDigitos } from '~/lib/formato';
+
+  // Marca el documento como "con JavaScript": los botones "+" y el envío
+  // automático de los filtros sólo aparecen si esto llega a ejecutarse.
+  document.documentElement.classList.add('js');
+
+  // ── Botones "+" ──
+  function pintar(boton: HTMLButtonElement, activo: boolean) {
+    boton.setAttribute('aria-pressed', String(activo));
+    const marca = boton.firstElementChild;
+    if (marca) marca.textContent = activo ? '✓' : '+';
+  }
+
+  const botones = [...document.querySelectorAll<HTMLButtonElement>('[data-agregar]')];
+
+  function sincronizar() {
+    const ids = new Set(seleccion.get().map((i) => i.productoId));
+    for (const boton of botones) {
+      pintar(boton, ids.has(Number(boton.dataset.productoId)));
+    }
+  }
+
+  for (const boton of botones) {
+    boton.addEventListener('click', () => {
+      alternar({
+        productoId: Number(boton.dataset.productoId),
+        institucion: boton.dataset.institucion ?? '',
+        producto: boton.dataset.producto ?? '',
+        slug: boton.dataset.slug ?? '',
+      });
+    });
+  }
+
+  seleccion.subscribe(sincronizar);
+
+  // ── Filtros ──
+  const formulario = document.querySelector<HTMLFormElement>('[data-filtros]');
+  if (formulario) {
+    // Con JavaScript el formulario se envía al cambiar cualquier control. Sin
+    // él, el botón "Aplicar filtros" sigue ahí y hace lo mismo.
+    for (const control of formulario.querySelectorAll<HTMLElement>('select, input')) {
+      const evento = control.matches('input[type="text"]') ? 'change' : 'input';
+      control.addEventListener(evento, () => formulario.requestSubmit());
+    }
+
+    const monto = formulario.querySelector<HTMLInputElement>('[data-miles]');
+    monto?.addEventListener('input', () => {
+      const digitos = soloDigitos(monto.value);
+      monto.value = digitos ? miles(digitos) : '';
+    });
+    if (monto?.value) monto.value = miles(soloDigitos(monto.value));
+  }
+</script>
+
+<style>
+  .hero {
+    margin: 8px 0 20px;
+  }
+  .acento {
+    color: var(--marca-200);
+  }
+  .sub {
+    max-width: 62ch;
+    margin-bottom: 6px;
+  }
+  .avisos {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .pastilla-fecha {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-pastilla);
+    background: rgba(167, 224, 219, 0.08);
+    color: var(--marca-200);
+  }
+  .pastilla-fecha i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--positivo);
+  }
+  .aviso-texto {
+    max-width: 70ch;
+  }
+  .error {
+    padding: 18px;
+    border: 1px solid var(--negativo-borde);
+    border-radius: var(--radio-tarjeta);
+    background: var(--negativo-fondo);
+    color: var(--negativo);
+  }
+  .disclaimer {
+    max-width: 80ch;
+    margin-top: 18px;
+    font-size: 11px;
+  }
+</style>

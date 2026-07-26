@@ -1,0 +1,57 @@
+---
+/**
+ * La calculadora de combinación.
+ *
+ * La página es una cáscara: el encabezado se renderiza en servidor —para que
+ * la URL tenga contenido y metadatos— y la herramienta entera es una isla,
+ * porque depende de una selección que vive en `localStorage` y que el servidor
+ * no conoce ni debería conocer.
+ */
+import Combinador from '~/components/islands/Combinador';
+import Base from '~/layouts/Base.astro';
+---
+
+<Base
+  titulo="Calculadora de combinación de ahorro — Centinela Financiero"
+  descripcion="Reparte tu monto entre varios instrumentos y mira cuánto ganas de verdad después de ISR e inflación, y cuánto queda protegido por el seguro de depósito."
+  vista="calculadora"
+>
+  <section>
+    <div class="hero">
+      <h1>Calculadora de <span class="acento">combinación.</span></h1>
+      <p class="tenue sub">
+        Reparte tu monto entre varios instrumentos — o deja que el optimizador proponga una
+        combinación respetando los límites de seguro de cada institución.
+      </p>
+    </div>
+
+    <Combinador client:load />
+
+    <noscript>
+      <p class="sin-js">
+        La calculadora necesita JavaScript para funcionar. El
+        <a href="/">comparador</a> y el detalle de cada institución sí funcionan sin él: ahí
+        están todas las tasas, con su TEN, su cobertura y sus banderas.
+      </p>
+    </noscript>
+  </section>
+</Base>
+
+<style>
+  .hero {
+    margin: 8px 0 18px;
+  }
+  .acento {
+    color: var(--marca-200);
+  }
+  .sub {
+    max-width: 62ch;
+  }
+  .sin-js {
+    padding: 18px;
+    border: 1px solid var(--aviso-borde);
+    border-radius: var(--radio-tarjeta);
+    background: var(--aviso-fondo);
+    color: var(--aviso);
+  }
+</style>

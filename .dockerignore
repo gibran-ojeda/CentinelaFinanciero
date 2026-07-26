@@ -1,0 +1,44 @@
+.git
+.github
+.gitignore
+.dockerignore
+
+# `**/` no sobra: un patrón sin barra sólo casa en la raíz del contexto, así
+# que `.env` por sí solo dejaría entrar `frontend/.env` —con la llave de
+# lectura dentro— en la imagen del frontend.
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+__pycache__
+*.py[cod]
+*.egg-info
+.eggs
+build
+dist
+.venv
+venv
+
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+.coverage.*
+htmlcov
+.hypothesis
+
+node_modules
+frontend/dist
+.astro
+
+.idea
+.vscode
+.claude
+
+tests
+docs
+plan-de-implementacion
+*.md
+!README.md

@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/industry-d44066e3-d3da-4fe8-ac61-b88458a0ddf1/styles.css">
+  <script src="_ds/industry-d44066e3-d3da-4fe8-ac61-b88458a0ddf1/_ds_bundle.js"></script>
+  <style>
+    :root{
+      --color-bg:#14163A; --color-surface:#1D2150; --color-text:#E3F6F5;
+      --color-accent:#5FB0C9; --color-accent-2:#A7E0DB;
+      --color-divider:rgba(167,224,219,.14);
+      --panel:#20244F; --panel-2:#262B5E; --line:rgba(167,224,219,.14);
+      --muted:rgba(227,246,245,.62); --muted-2:rgba(227,246,245,.42);
+      --up:#A7E0DB; --warn:#E7C36A; --down:#F08A8A;
+      --color-accent-100:#E3F6F5; --color-accent-200:#CFEDEA; --color-accent-300:#A7E0DB;
+      --color-accent-400:#7CC7CF; --color-accent-500:#5FB0C9; --color-accent-600:#4C8FB4;
+      --color-accent-700:#3E6D9C; --color-accent-800:#33507E; --color-accent-900:#2A2F63;
+      --shadow-sm:0 2px 8px rgba(8,10,32,.45); --shadow-md:0 8px 24px rgba(8,10,32,.5); --shadow-lg:0 18px 48px rgba(8,10,32,.6);
+    }
+    body{background:radial-gradient(1200px 500px at 70% -10%,rgba(62,109,156,.35),transparent),var(--color-bg);color:var(--color-text);}
+    a{color:var(--color-accent-2);} a:hover{color:#fff;}
+    input,select{color-scheme:dark;}
+    #main{width:100%;margin:0 auto;max-width:680px;padding:18px 16px 150px;}
+    #navlinks{display:none;}
+    #bottomnav{display:flex;}
+    #tablewrap{display:none;}
+    #cards{display:grid;grid-template-columns:1fr;gap:14px;}
+    #filtros{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none;}
+    #filtros2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    #combgrid{display:grid;gap:18px;}
+    #indgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+    #dettop{display:grid;gap:16px;}
+    #metgrid{display:grid;gap:14px;}
+    #footgrid{display:grid;gap:14px;}
+    #combar{position:fixed;left:14px;right:14px;bottom:78px;z-index:70;}
+    #bottomnav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 0 12px;min-height:44px;text-decoration:none;color:var(--muted);font-family:var(--font-heading);font-size:12px;letter-spacing:.05em;text-transform:uppercase;}
+    #bottomnav a[aria-current='page']{color:#fff;}
+    @media(min-width:720px){
+      #main{max-width:960px;padding:26px 32px 70px;}
+      #navlinks{display:flex;gap:24px;align-items:center;}
+      #bottomnav{display:none;}
+      #cards{grid-template-columns:repeat(2,1fr);}
+      #filtros{flex-wrap:wrap;overflow:visible;}
+      #filtros2{display:flex;flex-wrap:wrap;align-items:end;}
+      #indgrid{grid-template-columns:repeat(4,1fr);}
+      #dettop{grid-template-columns:1.15fr .85fr;align-items:start;}
+      #metgrid{grid-template-columns:repeat(2,1fr);}
+      #footgrid{grid-template-columns:2fr 1fr 1fr;}
+      #combgrid{grid-template-columns:360px 1fr;align-items:start;}
+      #combar{display:none;}
+    }
+    @media(min-width:1080px){
+      #main{max-width:1220px;}
+      #cards{display:none;}
+      #tablewrap{display:block;}
+      #combgrid{grid-template-columns:400px 1fr;}
+    }
+    @media(min-width:1600px){ #shell{zoom:1.12;} #main{max-width:1340px;} }
+    @media(min-width:2400px){ #shell{zoom:1.55;} #main{max-width:1420px;} }
+  </style>
+</helmet>
+<div id="shell" style="min-height:100vh;display:flex;flex-direction:column;font-family:var(--font-body);">
+
+  <header style="position:sticky;top:0;z-index:50;background:rgba(16,18,48,.86);border-bottom:1px solid var(--line);backdrop-filter:blur(10px);">
+    <div style="max-width:1420px;margin:0 auto;display:flex;align-items:center;gap:18px;padding:12px 16px;">
+      <a href="#" onClick="{{ goComparador }}" style="display:flex;align-items:center;gap:9px;text-decoration:none;color:#fff;margin-right:auto;font-family:var(--font-heading);font-weight:600;font-size:18px;letter-spacing:.02em;">
+        <span style="width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#5FB0C9,#3E6D9C);display:grid;place-items:center;box-shadow:var(--shadow-sm);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E3F6F5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Centinela Financiero">
+            <path d="M3 21h18"></path>
+            <path d="M5 21v-3h3v-4h3v-4"></path>
+            <path d="M19 21v-3h-3v-4h-3v-4"></path>
+            <path d="M11 10h2"></path>
+            <path d="M12 3.6c2.3 0 3.8 2.2 3.8 2.2S14.3 8 12 8 8.2 5.8 8.2 5.8 9.7 3.6 12 3.6z"></path>
+            <circle cx="12" cy="5.8" r="0.6" fill="#E3F6F5" stroke="none"></circle>
+          </svg>
+        </span>
+        CENTINELA FINANCIERO
+      </a>
+      <nav id="navlinks" style="font-size:14px;">
+        <a href="#" onClick="{{ goComparador }}" aria-current="{{ curComp }}" style="text-decoration:none;color:{{ colComp }};">Mercado</a>
+        <a href="#" onClick="{{ goCombinador }}" aria-current="{{ curComb }}" style="text-decoration:none;color:{{ colComb }};">Calculadora</a>
+        <a href="#" onClick="{{ goMetodologia }}" aria-current="{{ curMet }}" style="text-decoration:none;color:{{ colMet }};">Metodología</a>
+      </nav>
+
+    </div>
+  </header>
+
+  <main id="main" style="flex:1;">
+
+    <sc-if value="{{ esComparador }}" hint-placeholder-val="{{ true }}">
+      <section>
+        <div style="margin:8px 0 20px;">
+          <h1 style="font-size:clamp(30px,6vw,46px);margin-bottom:6px;color:#fff;">Mercado de ahorro / <span style="color:var(--color-accent-2);">rendimiento real.</span></h1>
+          <p style="max-width:62ch;margin-bottom:6px;color:var(--muted);">CETES, SOFIPOs y bancos digitales con TEN después de ISR, cobertura de seguro y banderas de salud. Selecciona varios y arma la mejor combinación.</p>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;color:var(--muted-2);">
+            <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:rgba(167,224,219,.08);border:1px solid var(--line);color:var(--color-accent-2);">
+              <i style="width:7px;height:7px;border-radius:50%;background:var(--up);"></i> Datos al 21 jul 2026
+            </span>
+            <span>Cada tasa muestra su fecha y su fuente. Las instituciones marcadas ◆ son ejemplos ilustrativos.</span>
+          </div>
+        </div>
+
+        <div id="filtros2" style="margin:4px 0 18px;">
+          <div class="field" style="min-width:140px;">
+            <label style="color:var(--muted);">Plazo</label>
+            <select class="input" value="{{ fPlazoSel }}" onChange="{{ setPlazoSel }}" style="border-radius:10px;background:var(--panel);border-color:var(--line);color:var(--color-text);">
+              <option value="TODOS">Todos</option>
+              <option value="VISTA">A la vista</option>
+              <option value="28">28 días</option>
+              <option value="91">91 días</option>
+              <option value="182">182 días</option>
+              <option value="364">364 días</option>
+              <option value="365+">365 días o más</option>
+            </select>
+          </div>
+          <div class="field" style="min-width:180px;position:relative;">
+            <label style="color:var(--muted);">Seguro de depósito</label>
+            <button onClick="{{ togSegDD }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:36px;cursor:pointer;font:inherit;font-size:14px;padding:6px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--line);color:var(--color-text);text-align:left;" style-hover="border-color:rgba(167,224,219,.45);">
+              <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ segResumen }}</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:none;opacity:.6;"><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <sc-if value="{{ ddSegOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;top:calc(100% + 6px);left:0;z-index:45;min-width:230px;max-width:calc(100vw - 40px);border-radius:12px;background:#232858;border:1px solid rgba(167,224,219,.25);box-shadow:var(--shadow-lg);padding:6px;">
+                <sc-for list="{{ segOpts }}" as="o" hint-placeholder-count="3">
+                  <button onClick="{{ o.on }}" style="display:flex;width:100%;align-items:center;gap:10px;cursor:pointer;border:none;background:transparent;color:var(--color-text);font-size:13px;padding:9px 10px;border-radius:8px;text-align:left;" style-hover="background:rgba(95,176,201,.12);">
+                    <span style="{{ o.boxSt }}">{{ o.chk }}</span>{{ o.label }}
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <div class="field" style="min-width:180px;position:relative;">
+            <label style="color:var(--muted);">Categoría</label>
+            <button onClick="{{ togCatDD }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:36px;cursor:pointer;font:inherit;font-size:14px;padding:6px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--line);color:var(--color-text);text-align:left;" style-hover="border-color:rgba(167,224,219,.45);">
+              <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ catResumen }}</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:none;opacity:.6;"><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <sc-if value="{{ ddCatOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;top:calc(100% + 6px);left:0;z-index:45;min-width:230px;max-width:calc(100vw - 40px);border-radius:12px;background:#232858;border:1px solid rgba(167,224,219,.25);box-shadow:var(--shadow-lg);padding:6px;">
+                <sc-for list="{{ catOpts }}" as="o" hint-placeholder-count="3">
+                  <button onClick="{{ o.on }}" style="display:flex;width:100%;align-items:center;gap:10px;cursor:pointer;border:none;background:transparent;color:var(--color-text);font-size:13px;padding:9px 10px;border-radius:8px;text-align:left;" style-hover="background:rgba(95,176,201,.12);">
+                    <span style="{{ o.boxSt }}">{{ o.chk }}</span>{{ o.label }}
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <div class="field" style="min-width:130px;">
+            <label style="color:var(--muted);">Monto a invertir</label>
+            <input class="input" type="text" inputmode="numeric" placeholder="Ej. 10,000" value="{{ fMonto }}" onChange="{{ setFMonto }}" style="border-radius:10px;background:var(--panel);border-color:var(--line);color:var(--color-text);">
+          </div>
+          <div class="field" style="min-width:140px;">
+            <label style="color:var(--muted);">Ordenar por</label>
+            <select class="input" value="{{ orden }}" onChange="{{ setOrden }}" style="border-radius:10px;background:var(--panel);border-color:var(--line);color:var(--color-text);">
+              <option value="ten">Mejor TEN</option>
+              <option value="tasa">Tasa nominal</option>
+              <option value="gat">GAT</option>
+              <option value="cobertura">Cobertura</option>
+            </select>
+          </div>
+          <button onClick="{{ toggleSinB }}" style="{{ sinBSt }}" style-hover="border-color:rgba(167,224,219,.5);">Solo sin banderas</button>
+        </div>
+        <sc-if value="{{ ddAbierto }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ cierraDD }}" style="position:fixed;inset:0;z-index:40;"></div>
+        </sc-if>
+
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
+          <span style="font-family:var(--font-heading);font-weight:600;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">{{ nRes }} productos</span>
+        </div>
+
+        <sc-if value="{{ hayCombo }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px;padding:10px 14px;border-radius:14px;background:rgba(95,176,201,.08);border:1px solid rgba(95,176,201,.25);">
+            <span style="font-size:12px;color:var(--muted);font-family:var(--font-heading);font-weight:600;letter-spacing:.04em;text-transform:uppercase;">Tu selección</span>
+            <sc-for list="{{ selChips }}" as="sc" hint-placeholder-count="2">
+              <button onClick="{{ sc.onQuita }}" title="Quitar de la selección" style="cursor:pointer;display:inline-flex;align-items:center;gap:7px;font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid rgba(167,224,219,.35);background:rgba(20,22,58,.5);color:var(--color-text);" style-hover="border-color:var(--down);color:var(--down);">{{ sc.nombre }} <span style="font-size:13px;">×</span></button>
+            </sc-for>
+            <button onClick="{{ limpiarCombo }}" style="cursor:pointer;font-size:12px;padding:5px 12px;border-radius:999px;border:none;background:transparent;color:var(--muted-2);text-decoration:underline;text-underline-offset:3px;" style-hover="color:var(--down);">Limpiar todo</button>
+            <button onClick="{{ goCombinador }}" style="margin-left:auto;cursor:pointer;border:none;font-family:var(--font-heading);font-weight:600;font-size:13px;color:#fff;padding:7px 16px;border-radius:999px;background:linear-gradient(90deg,#5FB0C9,#3E6D9C);" style-hover="filter:brightness(1.12);">Calcular →</button>
+          </div>
+        </sc-if>
+
+        <div id="cards">
+          <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+            <article style="border-radius:16px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);box-shadow:var(--shadow-md);padding:16px;">
+              <div style="display:flex;align-items:flex-start;gap:11px;margin-bottom:10px;">
+                <span style="width:38px;height:38px;flex:none;border-radius:50%;display:grid;place-items:center;font-family:var(--font-heading);font-weight:600;font-size:14px;color:#14163A;background:{{ r.avBg }};">{{ r.av }}</span>
+                <div onClick="{{ r.ver }}" style="cursor:pointer;min-width:0;">
+                  <div style="font-family:var(--font-heading);font-weight:600;font-size:18px;line-height:1.15;color:#fff;">{{ r.inst }}</div>
+                  <div style="font-size:12px;color:var(--muted);">{{ r.subtitulo }}</div>
+                </div>
+                <button onClick="{{ r.onAdd }}" aria-label="Agregar a combinación" style="{{ r.addSt }}" style-hover="filter:brightness(1.15);">{{ r.addTxt }}</button>
+              </div>
+              <sc-if value="{{ r.tieneFlags }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+                  <sc-for list="{{ r.flags }}" as="f" hint-placeholder-count="1">
+                    <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:3px 10px;border-radius:999px;color:{{ f.fg }};background:{{ f.bg }};"><i style="width:7px;height:7px;border-radius:50%;background:{{ f.dot }};"></i>{{ f.tipo }}</span>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;border-top:1px solid var(--line);padding-top:10px;">
+                <div>
+                  <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);">TEN</div>
+                  <div style="font-family:var(--font-heading);font-weight:600;font-size:25px;color:var(--up);font-variant-numeric:tabular-nums;">{{ r.tenStr }}</div>
+                </div>
+                <div>
+                  <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);">Nominal</div>
+                  <div style="font-family:var(--font-heading);font-weight:600;font-size:25px;color:#fff;font-variant-numeric:tabular-nums;">{{ r.tasaStr }}</div>
+                </div>
+                <div>
+                  <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);">GAT</div>
+                  <div style="font-family:var(--font-heading);font-weight:600;font-size:25px;color:#fff;font-variant-numeric:tabular-nums;">{{ r.gatStr }}<span style="font-size:10px;font-weight:400;color:var(--muted-2);"> {{ r.gatMarca }}</span></div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;font-size:11px;color:var(--muted);">
+                <span>{{ r.seguroLabel }} · {{ r.cobStr }}</span>
+                <span style="color:var(--muted-2);">dato: {{ r.fecha }}</span>
+              </div>
+            </article>
+          </sc-for>
+        </div>
+
+        <div id="tablewrap" style="--cols:46px 1.4fr 1.35fr .55fr .75fr .75fr .95fr 1.05fr 1.15fr .7fr;border-radius:16px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);box-shadow:var(--shadow-md);overflow:hidden;">
+          <div style="display:grid;grid-template-columns:var(--cols);gap:10px;padding:12px 18px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);">
+            <span></span><span>Institución</span><span>Producto</span><span>Plazo</span><span style="text-align:right;">Nominal</span><span style="text-align:right;color:var(--color-accent-2);">TEN</span><span style="text-align:right;">GAT</span><span>Cobertura</span><span>Banderas</span><span>Dato al</span>
+          </div>
+          <sc-for list="{{ rows }}" as="r" hint-placeholder-count="8">
+            <div style="display:grid;grid-template-columns:var(--cols);gap:10px;align-items:center;padding:10px 18px;border-bottom:1px solid rgba(167,224,219,.07);font-size:14px;" style-hover="background:rgba(95,176,201,.08);">
+              <button onClick="{{ r.onAdd }}" aria-label="Agregar a combinación" style="{{ r.addSt }}" style-hover="filter:brightness(1.15);">{{ r.addTxt }}</button>
+              <span onClick="{{ r.ver }}" style="display:flex;align-items:center;gap:9px;cursor:pointer;min-width:0;">
+                <span style="width:28px;height:28px;flex:none;border-radius:50%;display:grid;place-items:center;font-family:var(--font-heading);font-weight:600;font-size:11px;color:#14163A;background:{{ r.avBg }};">{{ r.av }}</span>
+                <span style="font-family:var(--font-heading);font-weight:600;font-size:15px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.inst }}</span>
+              </span>
+              <span style="font-size:13px;color:var(--muted);">{{ r.producto }}</span>
+              <span style="color:var(--muted);">{{ r.plazoCorto }}</span>
+              <span style="text-align:right;font-variant-numeric:tabular-nums;">{{ r.tasaStr }}</span>
+              <span style="text-align:right;font-family:var(--font-heading);font-weight:600;font-size:15px;color:var(--up);font-variant-numeric:tabular-nums;">{{ r.tenStr }}</span>
+              <span style="text-align:right;font-variant-numeric:tabular-nums;">{{ r.gatStr }} <span style="font-size:10px;color:var(--muted-2);">{{ r.gatMarca }}</span></span>
+              <span style="font-size:12px;color:var(--muted);">{{ r.seguroLabel }} · {{ r.cobStr }}</span>
+              <span style="display:flex;gap:5px;flex-wrap:wrap;">
+                <sc-for list="{{ r.flags }}" as="f" hint-placeholder-count="0">
+                  <span title="{{ f.motivo }}" style="display:inline-flex;align-items:center;gap:5px;font-size:10px;padding:2px 8px;border-radius:999px;color:{{ f.fg }};background:{{ f.bg }};"><i style="width:6px;height:6px;border-radius:50%;background:{{ f.dot }};"></i>{{ f.tipo }}</span>
+                </sc-for>
+                <sc-if value="{{ r.sinFlags }}" hint-placeholder-val="{{ true }}"><span style="font-size:11px;color:var(--muted-2);">—</span></sc-if>
+              </span>
+              <span style="font-size:12px;color:var(--muted-2);">{{ r.fecha }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ hayCombo }}" hint-placeholder-val="{{ false }}">
+          <div id="combar">
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 8px 8px 18px;border-radius:999px;background:linear-gradient(90deg,#3E6D9C,#2A2F63);border:1px solid rgba(167,224,219,.3);box-shadow:var(--shadow-lg);color:#fff;font-family:var(--font-heading);font-weight:600;font-size:14px;">
+              <span style="flex:1;">{{ nCombo }} seleccionados</span>
+              <button onClick="{{ limpiarCombo }}" aria-label="Limpiar selección" style="cursor:pointer;border:1px solid rgba(227,246,245,.3);background:transparent;color:rgba(227,246,245,.8);font-size:12px;padding:8px 14px;border-radius:999px;" style-hover="color:var(--down);border-color:var(--down);">Limpiar</button>
+              <button onClick="{{ goCombinador }}" style="cursor:pointer;border:none;background:rgba(227,246,245,.95);color:#2A2F63;font-family:var(--font-heading);font-weight:600;font-size:13px;padding:9px 16px;border-radius:999px;" style-hover="filter:brightness(1.06);">Calcular →</button>
+            </div>
+          </div>
+        </sc-if>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ esCombinador }}" hint-placeholder-val="{{ false }}">
+      <section>
+        <div style="margin:8px 0 18px;">
+          <h1 style="font-size:clamp(30px,6vw,46px);margin-bottom:6px;color:#fff;">Calculadora de <span style="color:var(--color-accent-2);">combinación.</span></h1>
+          <p style="max-width:62ch;color:var(--muted);">Reparte tu monto entre varios instrumentos — o deja que el optimizador proponga la mejor combinación respetando los límites de seguro por institución.</p>
+        </div>
+        <div id="combgrid">
+
+          <div style="border-radius:16px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);box-shadow:var(--shadow-md);padding:18px;">
+            <div class="field" style="margin-bottom:12px;">
+              <label style="color:var(--muted);">Monto total (MXN)</label>
+              <input class="input" type="text" inputmode="numeric" value="{{ cMonto }}" onChange="{{ setCMonto }}" style="font-size:18px;min-height:44px;border-radius:10px;background:var(--color-surface);border-color:var(--line);color:#fff;font-variant-numeric:tabular-nums;">
+              <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+                <sc-for list="{{ montoChips }}" as="m" hint-placeholder-count="4">
+                  <button onClick="{{ m.on }}" style="cursor:pointer;font-size:12px;padding:4px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);" style-hover="border-color:rgba(167,224,219,.5);color:#fff;">{{ m.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div class="field" style="margin-bottom:12px;">
+              <label style="color:var(--muted);">Horizonte</label>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <sc-for list="{{ cPlazoChips }}" as="c" hint-placeholder-count="4">
+                  <button onClick="{{ c.on }}" style="{{ c.st }}" style-hover="border-color:rgba(167,224,219,.5);">{{ c.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:grid;gap:8px;margin-bottom:14px;">
+              <button onClick="{{ toggleSeg }}" style="{{ optSegSt }}" style-hover="border-color:rgba(167,224,219,.4);">
+                <span>Respetar límites de seguro</span><span style="font-family:var(--font-heading);font-weight:600;">{{ optSegTxt }}</span>
+              </button>
+              <button onClick="{{ toggleRojas }}" style="{{ optRojSt }}" style-hover="border-color:rgba(167,224,219,.4);">
+                <span>Excluir banderas rojas</span><span style="font-family:var(--font-heading);font-weight:600;">{{ optRojTxt }}</span>
+              </button>
+            </div>
+
+            <div style="border-top:1px solid var(--line);padding-top:14px;">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
+                <span style="font-family:var(--font-heading);font-weight:600;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">Instrumentos ({{ nCombo }})</span>
+                <span style="display:inline-flex;align-items:center;gap:10px;">
+                  <span style="font-size:12px;color:{{ pctTotalColor }};font-variant-numeric:tabular-nums;">Σ {{ pctTotal }} %</span>
+                  <sc-if value="{{ hayCombo }}" hint-placeholder-val="{{ false }}">
+                    <button onClick="{{ limpiarCombo }}" style="cursor:pointer;font-size:11px;border:none;background:transparent;color:var(--muted-2);text-decoration:underline;text-underline-offset:3px;padding:0;" style-hover="color:var(--down);">Limpiar</button>
+                  </sc-if>
+                </span>
+              </div>
+              <div style="display:grid;gap:8px;">
+                <sc-for list="{{ combo }}" as="it" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:12px;background:rgba(20,22,58,.5);border:1px solid var(--line);">
+                    <i style="width:9px;height:9px;flex:none;border-radius:3px;background:{{ it.color }};"></i>
+                    <div style="min-width:0;flex:1;">
+                      <div style="font-family:var(--font-heading);font-weight:600;font-size:14px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ it.nombre }}</div>
+                      <div style="font-size:11px;color:var(--muted-2);">{{ it.sub }}</div>
+                    </div>
+                    <input type="number" min="0" max="100" step="0.1" value="{{ it.pctVal }}" onChange="{{ it.onPct }}" aria-label="Porcentaje" style="width:60px;min-height:36px;text-align:right;font:inherit;font-size:14px;padding:4px 8px;border-radius:9px;background:var(--color-surface);border:1px solid var(--line);color:#fff;">
+                    <span style="font-size:12px;color:var(--muted-2);">%</span>
+                    <button onClick="{{ it.onQuita }}" aria-label="Quitar" style="width:28px;height:28px;flex:none;cursor:pointer;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:14px;line-height:1;" style-hover="color:var(--down);border-color:var(--down);">×</button>
+                  </div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ comboVacio }}" hint-placeholder-val="{{ false }}">
+                <p style="font-size:13px;color:var(--muted-2);margin:4px 0 8px;">Aún no hay instrumentos. Agrégalos desde el mercado, con el selector, o pulsa <strong style="color:var(--color-accent-2);">Optimizar</strong> para una propuesta automática.</p>
+              </sc-if>
+              <select class="input" value="" onChange="{{ onAgrega }}" style="margin-top:10px;border-radius:10px;background:var(--color-surface);border-color:var(--line);color:var(--color-text);min-height:44px;">
+                <option value="">+ Agregar instrumento…</option>
+                <sc-for list="{{ prodOpts }}" as="o" hint-placeholder-count="6">
+                  <option value="{{ o.id }}">{{ o.label }}</option>
+                </sc-for>
+              </select>
+              <button onClick="{{ onOptimizar }}" style="width:100%;margin-top:12px;border:none;cursor:pointer;font-family:var(--font-heading);font-weight:600;font-size:16px;letter-spacing:.02em;color:#fff;padding:13px 18px;min-height:48px;border-radius:999px;background:linear-gradient(90deg,#5FB0C9,#3E6D9C);box-shadow:var(--shadow-md);" style-hover="filter:brightness(1.12);">
+                ⚡ Optimizar combinación
+              </button>
+              <p style="font-size:11px;color:var(--muted-2);margin:8px 0 0;">Optimizar <strong style="color:var(--color-accent-2);">reemplaza tu selección actual</strong>: ordena por TEN y llena cada institución hasta su límite de cobertura ({{ optSegNota }}). Si luego agregas o quitas instrumentos, los porcentajes se recalculan solos.</p>
+            </div>
+          </div>
+
+          <div>
+            <div style="border-radius:16px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);box-shadow:var(--shadow-md);padding:18px;">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
+                <div style="border-radius:12px;background:rgba(20,22,58,.5);border:1px solid var(--line);padding:12px 14px;">
+                  <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);">TEN ponderada</div>
+                  <div style="font-family:var(--font-heading);font-weight:600;font-size:clamp(20px,3vw,30px);color:var(--up);font-variant-numeric:tabular-nums;">{{ tenPond }}</div>
+                </div>
+                <div style="border-radius:12px;background:rgba(20,22,58,.5);border:1px solid var(--line);padding:12px 14px;">
+                  <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);">Ganancia real</div>
+                  <div style="font-family:var(--font-heading);font-weight:600;font-size:clamp(20px,3vw,30px);color:{{ realColor }};font-variant-numeric:tabular-nums;">{{ realTotal }}</div>
+                </div>
+                <div style="border-radius:12px;background:rgba(20,22,58,.5);border:1px solid var(--line);padding:12px 14px;">
+                  <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);">Protegido</div>
+                  <div style="font-family:var(--font-heading);font-weight:600;font-size:clamp(20px,3vw,30px);color:{{ protColor }};font-variant-numeric:tabular-nums;">{{ protPct }}</div>
+                </div>
+              </div>
+
+              <div style="margin-bottom:16px;">
+                <div style="display:flex;height:22px;border-radius:999px;overflow:hidden;border:1px solid var(--line);">
+                  <sc-for list="{{ allocSegs }}" as="a" hint-placeholder-count="3">
+                    <div title="{{ a.t }}" style="width:{{ a.w }};background:{{ a.color }};"></div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:8px;">
+                  <sc-for list="{{ allocSegs }}" as="a" hint-placeholder-count="3">
+                    <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);"><i style="width:8px;height:8px;border-radius:3px;background:{{ a.color }};"></i>{{ a.t }}</span>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:grid;gap:12px;margin-bottom:16px;">
+                <sc-for list="{{ cascada }}" as="s" hint-placeholder-count="4">
+                  <div>
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px;">
+                      <span style="font-size:12px;font-family:var(--font-heading);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:{{ s.lfg }};">{{ s.label }}</span>
+                      <span style="font-family:var(--font-heading);font-weight:600;font-size:18px;color:{{ s.lfg }};font-variant-numeric:tabular-nums;">{{ s.montoStr }}</span>
+                    </div>
+                    <div style="position:relative;height:12px;border-radius:999px;background:rgba(20,22,58,.7);border:1px solid rgba(167,224,219,.1);overflow:hidden;">
+                      <div style="position:absolute;top:0;bottom:0;border-radius:999px;left:{{ s.off }};width:{{ s.w }};background:{{ s.color }};"></div>
+                    </div>
+                    <div style="font-size:11px;margin-top:3px;color:var(--muted-2);">{{ s.sub }}</div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="padding:12px 16px;border-radius:12px;background:rgba(95,176,201,.1);border:1px solid rgba(95,176,201,.3);font-size:14px;color:var(--color-text);">{{ narrativa }}</div>
+
+              <div style="margin-top:16px;">
+                <div style="font-family:var(--font-heading);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Detalle por instrumento · {{ hzStr }}</div>
+                <div style="display:grid;gap:6px;">
+                  <sc-for list="{{ comboDet }}" as="d" hint-placeholder-count="2">
+                    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:9px 12px;border-radius:12px;background:rgba(20,22,58,.5);border:1px solid var(--line);font-size:12px;">
+                      <i style="width:8px;height:8px;flex:none;border-radius:3px;background:{{ d.color }};"></i>
+                      <span style="font-family:var(--font-heading);font-weight:600;font-size:13px;color:#fff;min-width:130px;">{{ d.nombre }}</span>
+                      <span style="color:var(--muted);">{{ d.montoStr }} ({{ d.pctStr }})</span>
+                      <span style="color:var(--up);">TEN {{ d.tenStr }}</span>
+                      <span style="color:var(--muted);">real {{ d.realStr }}</span>
+                      <span style="margin-left:auto;color:{{ d.covColor }};display:inline-flex;align-items:center;gap:5px;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path></svg>
+                        {{ d.covTxt }}
+                      </span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:grid;gap:10px;margin-top:14px;">
+              <div style="border-radius:12px;border:1px solid var(--line);background:rgba(20,22,58,.4);padding:12px 16px;">
+                <div style="font-family:var(--font-heading);font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-accent-2);margin-bottom:4px;">Nota fiscal</div>
+                <p style="font-size:12px;margin:0;color:var(--muted);">{{ notaFiscal }}</p>
+              </div>
+              <p style="font-size:11px;margin:0;color:var(--muted-2);">{{ disclaimer }}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ esDetalle }}" hint-placeholder-val="{{ false }}">
+      <section>
+        <button class="btn btn-ghost" onClick="{{ goComparador }}" style="margin:2px 0 14px;padding-left:0;color:var(--color-accent-2);border:none;">← Volver al mercado</button>
+        <div style="margin-bottom:18px;">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;">
+            <span style="width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-heading);font-weight:600;font-size:17px;color:#14163A;background:{{ instAvBg }};">{{ instAv }}</span>
+            <h1 style="font-size:clamp(28px,5.5vw,40px);margin:0;color:#fff;">{{ instNombre }}</h1>
+            <span style="font-size:11px;padding:3px 12px;border-radius:999px;background:rgba(167,224,219,.1);border:1px solid var(--line);color:var(--color-accent-2);">{{ instCat }}</span>
+            <sc-if value="{{ instDemo }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;padding:3px 12px;border-radius:999px;border:1px solid var(--line);color:var(--muted-2);">◆ demo</span></sc-if>
+          </div>
+          <p style="margin-top:8px;max-width:70ch;color:var(--muted);">{{ instDesc }}</p>
+        </div>
+
+        <div id="dettop" style="margin-bottom:20px;">
+          <div>
+            <sc-if value="{{ instTieneFlags }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid;gap:10px;margin-bottom:16px;">
+                <sc-for list="{{ instFlags }}" as="f" hint-placeholder-count="1">
+                  <div style="border-radius:14px;padding:14px 16px;background:{{ f.bg }};border:1px solid {{ f.bd }};">
+                    <div style="display:flex;align-items:center;gap:8px;font-family:var(--font-heading);font-weight:600;font-size:15px;color:{{ f.fg }};">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>
+                      Bandera {{ f.sev }} — {{ f.tipo }}
+                    </div>
+                    <p style="margin:6px 0 0;font-size:13px;color:{{ f.fg }};">{{ f.motivo }}</p>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ instSinFlags }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--up);margin-bottom:16px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path></svg>
+                Sin banderas activas al último periodo evaluado.
+              </div>
+            </sc-if>
+
+            <div style="font-family:var(--font-heading);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Indicadores de salud · {{ instPeriodo }}</div>
+            <sc-if value="{{ instTieneInd }}" hint-placeholder-val="{{ true }}">
+              <div id="indgrid">
+                <sc-for list="{{ instInd }}" as="i" hint-placeholder-count="4">
+                  <div style="border-radius:14px;padding:13px 14px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);box-shadow:var(--shadow-sm);">
+                    <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);">{{ i.k }}</div>
+                    <div style="font-family:var(--font-heading);font-weight:600;font-size:26px;margin:2px 0;color:#fff;font-variant-numeric:tabular-nums;">{{ i.v }}</div>
+                    <div style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:{{ i.fg }};"><i style="width:7px;height:7px;border-radius:50%;background:{{ i.dot }};"></i>{{ i.estado }}</div>
+                    <div style="font-size:11px;margin-top:4px;color:var(--muted-2);">{{ i.d }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <p style="font-size:11px;margin-top:8px;color:var(--muted-2);">Fuente: CNBV · cifras a {{ instPeriodo }}. Umbrales vigentes en Metodología.</p>
+            </sc-if>
+            <sc-if value="{{ instSinInd }}" hint-placeholder-val="{{ false }}">
+              <p style="font-size:13px;color:var(--muted);">Instrumento de deuda del Gobierno Federal — no aplican indicadores CNBV. El respaldo es soberano.</p>
+            </sc-if>
+          </div>
+
+          <div style="border-radius:16px;padding:18px;background:linear-gradient(160deg,rgba(95,176,201,.16),rgba(42,47,99,.4)),var(--panel);border:1px solid rgba(95,176,201,.3);box-shadow:var(--shadow-md);">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path></svg>
+              <div>
+                <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);">Cobertura de tu dinero</div>
+                <div style="font-family:var(--font-heading);font-weight:600;font-size:22px;color:#fff;">{{ instSeguro }}</div>
+              </div>
+            </div>
+            <div style="font-family:var(--font-heading);font-weight:600;font-size:34px;color:var(--up);font-variant-numeric:tabular-nums;">{{ instCobStr }}</div>
+            <p style="font-size:13px;margin:8px 0 0;color:var(--muted);">{{ instCobExp }}</p>
+          </div>
+        </div>
+
+        <div style="font-family:var(--font-heading);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Productos y tasas vigentes</div>
+        <div style="border-radius:16px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);box-shadow:var(--shadow-md);overflow:hidden;">
+          <sc-for list="{{ instProds }}" as="p" hint-placeholder-count="2">
+            <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 18px;padding:12px 16px;border-bottom:1px solid rgba(167,224,219,.07);">
+              <span style="font-family:var(--font-heading);font-weight:600;font-size:15px;min-width:150px;color:#fff;">{{ p.producto }}</span>
+              <span style="font-size:12px;min-width:70px;color:var(--muted-2);">{{ p.plazoLabel }}</span>
+              <span style="font-size:13px;color:var(--muted);">Nominal <strong style="color:#fff;">{{ p.tasaStr }}</strong></span>
+              <span style="font-size:13px;color:var(--up);">TEN <strong>{{ p.tenStr }}</strong></span>
+              <span style="font-size:13px;color:var(--muted);">GAT <strong style="color:#fff;">{{ p.gatStr }}</strong> <span style="font-size:10px;color:var(--muted-2);">{{ p.gatMarca }}</span></span>
+              <span style="font-size:11px;margin-left:auto;color:var(--muted-2);">{{ p.fuente }} · {{ p.fecha }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+          <button onClick="{{ agregarEsta }}" style="border:none;cursor:pointer;font-family:var(--font-heading);font-weight:600;font-size:14px;color:#fff;padding:12px 20px;min-height:44px;border-radius:999px;background:linear-gradient(90deg,#5FB0C9,#3E6D9C);box-shadow:var(--shadow-sm);" style-hover="filter:brightness(1.12);">+ Agregar a la combinación</button>
+          <button onClick="{{ goComparador }}" style="cursor:pointer;font-family:var(--font-heading);font-weight:600;font-size:14px;color:var(--color-accent-2);padding:12px 20px;min-height:44px;border-radius:999px;background:transparent;border:1px solid var(--line);" style-hover="border-color:rgba(167,224,219,.5);">Ver el mercado</button>
+        </div>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ esMetodologia }}" hint-placeholder-val="{{ false }}">
+      <section>
+        <div style="margin:8px 0 18px;">
+          <h1 style="font-size:clamp(30px,6vw,46px);margin-bottom:6px;color:#fff;">Cómo calculamos <span style="color:var(--color-accent-2);">cada número.</span></h1>
+          <p style="max-width:64ch;color:var(--muted);">Toda métrica proviene de funciones puras auditadas (motor de la fase 3); los umbrales viven en configuración versionada, no en el código.</p>
+        </div>
+        <div id="metgrid">
+          <div style="border-radius:16px;padding:16px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);box-shadow:var(--shadow-sm);">
+            <h4 style="color:#fff;">TEN — Tasa Efectiva Neta</h4>
+            <p style="font-size:13px;color:var(--muted);">Tasa nominal anual menos el efecto de la retención de ISR aplicable, anualizada por plazo. Para CETES, BONDDIA, PRLV y SOFIPOs la retención es sobre <strong style="color:#fff;">capital</strong> (0.50 % anual, LIF 2026); para fondos de deuda, sobre la <strong style="color:#fff;">ganancia</strong>.</p>
+            <p style="font-size:12px;margin:0;color:var(--muted-2);">TEN = nominal − retención efectiva anualizada</p>
+          </div>
+          <div style="border-radius:16px;padding:16px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);box-shadow:var(--shadow-sm);">
+            <h4 style="color:#fff;">Optimizador de combinación</h4>
+            <p style="font-size:13px;color:var(--muted);">Ordena los instrumentos elegibles por TEN descendente y asigna monto a cada uno hasta agotar el límite de cobertura de su institución (IPAB 400,000 UDIs; PROSOFIPO 25,000 UDIs; soberano sin límite). Con «excluir banderas rojas», las instituciones 🔴 no participan. Es una heurística informativa, no una recomendación.</p>
+          </div>
+          <div style="border-radius:16px;padding:16px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);box-shadow:var(--shadow-sm);">
+            <h4 style="color:#fff;">Banderas de salud</h4>
+            <p style="font-size:13px;margin-bottom:8px;color:var(--muted);">Reglas sobre indicadores CNBV del último periodo disponible:</p>
+            <div style="font-size:12px;display:grid;gap:5px;color:var(--muted);">
+              <div style="display:flex;justify-content:space-between;gap:10px;"><span>IMOR (morosidad)</span><span style="color:var(--muted-2);">≥ 3 % amarilla · ≥ 6 % roja</span></div>
+              <div style="display:flex;justify-content:space-between;gap:10px;"><span>ICAP (capitalización)</span><span style="color:var(--muted-2);">&lt; 15 % amarilla · &lt; 10.5 % roja</span></div>
+              <div style="display:flex;justify-content:space-between;gap:10px;"><span>Cobertura cartera vencida</span><span style="color:var(--muted-2);">&lt; 100 % amarilla · &lt; 70 % roja</span></div>
+              <div style="display:flex;justify-content:space-between;gap:10px;"><span>NICAP (SOFIPOs)</span><span style="color:var(--muted-2);">N2 amarilla · N3/N4 roja</span></div>
+            </div>
+            <p style="font-size:12px;margin:8px 0 0;color:var(--muted-2);">Si aplica una bandera compuesta roja, se emite solo esa (prioridad de severidad).</p>
+          </div>
+          <div style="border-radius:16px;padding:16px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);box-shadow:var(--shadow-sm);">
+            <h4 style="color:#fff;">Qué NO es Centinela</h4>
+            <p style="font-size:13px;color:var(--muted);">No es asesoría de inversión, no recibe dinero, no intermedia contrataciones y no recibe pago de las instituciones listadas. Cada dato muestra su fecha y fuente; las tasas se verifican contra fuentes oficiales (Banxico SIE, CNBV) o se marcan como carga manual.</p>
+          </div>
+        </div>
+      </section>
+    </sc-if>
+  </main>
+
+  <footer style="border-top:1px solid var(--line);background:rgba(10,12,34,.5);">
+    <div id="footgrid" style="max-width:1420px;margin:0 auto;padding:22px 16px 100px;">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;font-family:var(--font-heading);font-weight:600;font-size:16px;margin-bottom:4px;color:#fff;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 21h18"></path>
+            <path d="M5 21v-3h3v-4h3v-4"></path>
+            <path d="M19 21v-3h-3v-4h-3v-4"></path>
+            <path d="M11 10h2"></path>
+            <path d="M12 3.6c2.3 0 3.8 2.2 3.8 2.2S14.3 8 12 8 8.2 5.8 8.2 5.8 9.7 3.6 12 3.6z"></path>
+            <circle cx="12" cy="5.8" r="0.6" fill="var(--color-accent-2)" stroke="none"></circle>
+          </svg>
+          CENTINELA FINANCIERO
+        </div>
+        <p style="font-size:12px;max-width:52ch;margin:0;color:var(--muted-2);">Comparador informativo de instrumentos de ahorro en México. No es asesoría de inversión. Última actualización de datos: 21 jul 2026.</p>
+      </div>
+      <div style="display:grid;gap:5px;font-size:13px;">
+        <a href="#" onClick="{{ goMetodologia }}">Metodología</a>
+        <a href="#" onClick="{{ goMetodologia }}">Acerca de</a>
+        <a href="#" onClick="{{ goMetodologia }}">Disclaimer legal</a>
+      </div>
+      <div style="font-size:11px;color:var(--muted-2);">
+        Fuentes de datos: Banco de México y CNBV, complementadas con verificación manual. Cada tasa muestra su fecha de actualización y su fuente.
+      </div>
+    </div>
+  </footer>
+
+  <nav id="bottomnav" style="position:fixed;bottom:0;left:0;right:0;z-index:60;background:rgba(16,18,48,.92);border-top:1px solid var(--line);backdrop-filter:blur(10px);">
+    <a href="#" onClick="{{ goComparador }}" aria-current="{{ curComp }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18"></path><path d="M3 12h18"></path><path d="M3 19h18"></path></svg>
+      Mercado
+    </a>
+    <a href="#" onClick="{{ goCombinador }}" aria-current="{{ curComb }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M2 12h20"></path><circle cx="12" cy="12" r="9"></circle></svg>
+      Calculadora
+    </a>
+    <a href="#" onClick="{{ goMetodologia }}" aria-current="{{ curMet }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg>
+      Método
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: {&quot;width&quot;: 390, &quot;height&quot;: 844},
+  &quot;inflacionAnual&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 4.2, &quot;min&quot;: 2, &quot;max&quot;: 9, &quot;step&quot;: 0.1, &quot;unit&quot;: &quot;%&quot;, &quot;section&quot;: &quot;Supuestos económicos&quot;, &quot;tsType&quot;: &quot;number&quot;},
+  &quot;valorUdi&quot;: {&quot;editor&quot;: &quot;float&quot;, &quot;default&quot;: 8.56, &quot;section&quot;: &quot;Supuestos económicos&quot;, &quot;tsType&quot;: &quot;number&quot;},
+  &quot;vistaInicial&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;comparador&quot;, &quot;combinador&quot;, &quot;metodologia&quot;], &quot;default&quot;: &quot;comparador&quot;, &quot;section&quot;: &quot;Vista&quot;, &quot;tsType&quot;: &quot;string&quot;}
+}">
+class Component extends DCLogic {
+  state = { view:null, instId:null, fPlazo:'TODOS', fCats:[], fSegs:[], fSinB:false, fMonto:'', orden:'ten', ddOpen:null,
+            cMonto:250000, cPlazo:91, combo:[{pid:'p-uala',pct:50},{pid:'p-c91',pct:50}], optSeg:true, optRoj:true };
+
+  get D(){
+    if(this._D) return this._D;
+    const AM = {sev:'AMARILLA', dot:'#E7C36A', fg:'#E7C36A', bg:'rgba(231,195,106,.12)', bd:'rgba(231,195,106,.4)'};
+    const RO = {sev:'ROJA', dot:'#F08A8A', fg:'#F08A8A', bg:'rgba(240,138,138,.12)', bd:'rgba(240,138,138,.4)'};
+    const ok = {estado:'En rango', dot:'#A7E0DB', fg:'#A7E0DB'};
+    const at = {estado:'Atención', dot:'#E7C36A', fg:'#E7C36A'};
+    const al = {estado:'Alerta', dot:'#F08A8A', fg:'#F08A8A'};
+    const ind = (arr)=>arr.map(([k,v,s,d])=>({k,v,d,...s}));
+    const insts = [
+      {id:'cetes', nombre:'CETES', av:'CE', cat:'GOBIERNO', catLabel:'Gobierno', seguro:'SOBERANO', desc:'Certificados de la Tesorería vía Cetesdirecto. Deuda del Gobierno Federal: el instrumento de referencia del mercado mexicano.', flags:[], ind:null},
+      {id:'bond', nombre:'BONDDIA', av:'BD', cat:'GOBIERNO', catLabel:'Gobierno', seguro:'SOBERANO', desc:'Fondo gubernamental de liquidez diaria operado en Cetesdirecto.', flags:[], ind:null},
+      {id:'nu', nombre:'Nu México', av:'NU', cat:'BANCO_DIGITAL', catLabel:'Banco digital', seguro:'IPAB', desc:'Banco digital con licencia bancaria. Cuenta y Cajitas con rendimiento a la vista.', flags:[], periodo:'may 2026', ind: ind([['IMOR','2.4 %',ok,'Cartera vencida / cartera total'],['ICAP','21.8 %',ok,'Índice de capitalización'],['ICOR','142 %',ok,'Cobertura de cartera vencida'],['Captación','$98,300 M',ok,'Saldo total captado']])},
+      {id:'uala', nombre:'Ualá', av:'UA', cat:'BANCO_DIGITAL', catLabel:'Banco digital', seguro:'IPAB', desc:'Banco digital (ABC Capital). Cuenta remunerada a la vista.', flags:[], periodo:'may 2026', ind: ind([['IMOR','3.4 %',at,'Cartera vencida / cartera total'],['ICAP','17.2 %',ok,'Índice de capitalización'],['ICOR','118 %',ok,'Cobertura de cartera vencida'],['Captación','$21,900 M',ok,'Saldo total captado']])},
+      {id:'hey', nombre:'Hey Banco', av:'HB', cat:'BANCO_DIGITAL', catLabel:'Banco digital', seguro:'IPAB', desc:'Banco digital de Banregio con cuenta de ahorro remunerada.', flags:[], periodo:'may 2026', ind: ind([['IMOR','2.9 %',ok,'Cartera vencida / cartera total'],['ICAP','18.6 %',ok,'Índice de capitalización'],['ICOR','131 %',ok,'Cobertura de cartera vencida'],['Captación','$34,700 M',ok,'Saldo total captado']])},
+      {id:'open', nombre:'Openbank', av:'OP', cat:'BANCO_DIGITAL', catLabel:'Banco digital', seguro:'IPAB', desc:'Banco digital de Grupo Santander. Cuenta de ahorro sin comisiones.', flags:[], periodo:'may 2026', ind: ind([['IMOR','1.8 %',ok,'Cartera vencida / cartera total'],['ICAP','24.1 %',ok,'Índice de capitalización'],['ICOR','156 %',ok,'Cobertura de cartera vencida'],['Captación','$18,200 M',ok,'Saldo total captado']])},
+      {id:'rev', nombre:'Revolut', av:'RE', cat:'BANCO_DIGITAL', catLabel:'Banco digital', seguro:'IPAB', desc:'Banco digital global con cuenta flexible remunerada en México.', flags:[], periodo:'may 2026', ind: ind([['IMOR','2.2 %',ok,'Cartera vencida / cartera total'],['ICAP','19.9 %',ok,'Índice de capitalización'],['ICOR','127 %',ok,'Cobertura de cartera vencida'],['Captación','$9,800 M',ok,'Saldo total captado']])},
+      {id:'finsus', nombre:'FinSUS', av:'FS', cat:'SOFIPO', catLabel:'SOFIPO', seguro:'PROSOFIPO', desc:'SOFIPO digital con inversiones a plazo (PRLV) y cuenta a la vista.', flags:[], periodo:'may 2026', ind: ind([['IMOR','2.7 %',ok,'Cartera vencida / cartera total'],['NICAP','N1 (312 %)',ok,'Nivel de capitalización SOFIPO'],['ICOR','109 %',ok,'Cobertura de cartera vencida'],['Captación','$14,600 M',ok,'Saldo total captado']])},
+      {id:'didi', nombre:'DiDi Cuenta', av:'DI', cat:'SOFIPO', catLabel:'SOFIPO', seguro:'PROSOFIPO', desc:'Cuenta de rendimiento a la vista operada como SOFIPO.', flags:[], periodo:'may 2026', ind: ind([['IMOR','2.1 %',ok,'Cartera vencida / cartera total'],['NICAP','N1 (287 %)',ok,'Nivel de capitalización SOFIPO'],['ICOR','121 %',ok,'Cobertura de cartera vencida'],['Captación','$11,200 M',ok,'Saldo total captado']])},
+      {id:'kubo', nombre:'Kubo Financiero', av:'KU', cat:'SOFIPO', catLabel:'SOFIPO', seguro:'PROSOFIPO', desc:'SOFIPO con inversiones a plazo fijo de 1 a 36 meses.', flags:[], periodo:'may 2026', ind: ind([['IMOR','3.2 %',at,'Cartera vencida / cartera total'],['NICAP','N1 (198 %)',ok,'Nivel de capitalización SOFIPO'],['ICOR','104 %',ok,'Cobertura de cartera vencida'],['Captación','$7,900 M',ok,'Saldo total captado']])},
+      {id:'lib', nombre:'Libertad SF', av:'LI', cat:'SOFIPO', catLabel:'SOFIPO', seguro:'PROSOFIPO', desc:'Libertad Servicios Financieros, SOFIPO con red de sucursales y PRLV.', flags:[], periodo:'may 2026', ind: ind([['IMOR','4.1 %',at,'Cartera vencida / cartera total'],['NICAP','N1 (176 %)',ok,'Nivel de capitalización SOFIPO'],['ICOR','96 %',at,'Cobertura de cartera vencida'],['Captación','$16,400 M',ok,'Saldo total captado']])},
+      {id:'ahp', nombre:'Ahorra+ Capital', av:'A+', cat:'SOFIPO', catLabel:'SOFIPO', seguro:'PROSOFIPO', demo:true, desc:'Institución ficticia de demostración: ilustra la bandera amarilla por GAT inconsistente.', flags:[{...AM, tipo:'GAT inconsistente', motivo:'La GAT publicada (18.40 %) excede en más de 1.5 pp la equivalente calculada con su tasa nominal (15.25 %). Verifica las condiciones reales antes de contratar.'}], periodo:'may 2026', ind: ind([['IMOR','3.6 %',at,'Cartera vencida / cartera total'],['NICAP','N2 (131 %)',at,'Nivel de capitalización SOFIPO'],['ICOR','92 %',at,'Cobertura de cartera vencida'],['Captación','$2,100 M',ok,'Saldo total captado']])},
+      {id:'alc', nombre:'Alcancía Fuerte', av:'AF', cat:'SOFIPO', catLabel:'SOFIPO', seguro:'PROSOFIPO', demo:true, desc:'Institución ficticia de demostración: ilustra la bandera roja compuesta (tasa muy sobre mercado + deterioro de cartera y capital).', flags:[{...RO, tipo:'No recomendable', motivo:'Bandera compuesta: ofrece 6.9 pp sobre el promedio de mercado con IMOR en alerta (8.4 %) e ICAP por debajo del umbral regulatorio (9.8 % < 10.5 %). Riesgo elevado de incumplimiento.'}], periodo:'may 2026', ind: ind([['IMOR','8.4 %',al,'Cartera vencida / cartera total'],['NICAP','N3 (94 %)',al,'Nivel de capitalización SOFIPO'],['ICOR','61 %',al,'Cobertura de cartera vencida'],['Captación','$860 M',at,'Saldo total captado']])}
+    ];
+    const P = (id,inst,producto,tipo,plazo,tasa,gatN,min,fuente)=>({id,inst,producto,tipo,plazo,tasa,gatN,min,fuente,fecha:'21 jul 2026'});
+    const prods = [
+      P('p-c28','cetes','CETES 28 días','PLAZO',28,7.72,null,100,'Banxico SIE'),
+      P('p-c91','cetes','CETES 91 días','PLAZO',91,7.81,null,100,'Banxico SIE'),
+      P('p-c182','cetes','CETES 182 días','PLAZO',182,7.90,null,100,'Banxico SIE'),
+      P('p-c364','cetes','CETES 364 días','PLAZO',364,7.98,null,100,'Banxico SIE'),
+      P('p-bond','bond','BONDDIA','VISTA',null,7.55,7.30,100,'Banxico SIE'),
+      P('p-nu','nu','Cajita Turbo','VISTA',null,12.00,11.42,0,'Carga manual'),
+      P('p-uala','uala','Cuenta remunerada','VISTA',null,12.50,11.89,0,'Carga manual'),
+      P('p-hey','hey','Hey Ahorro','VISTA',null,10.75,10.21,0,'Carga manual'),
+      P('p-open','open','Cuenta Open','VISTA',null,11.25,null,0,'Carga manual'),
+      P('p-rev','rev','Cuenta flexible','VISTA',null,11.50,null,0,'Carga manual'),
+      P('p-fin-v','finsus','FinSUS Vista','VISTA',null,10.20,null,1,'Carga manual'),
+      P('p-fin-182','finsus','PRLV 6 meses','PLAZO',182,13.40,12.78,100,'Carga manual'),
+      P('p-didi','didi','DiDi Cuenta','VISTA',null,12.75,12.10,0,'Carga manual'),
+      P('p-kubo','kubo','PRLV 12 meses','PLAZO',365,13.10,null,1000,'Carga manual'),
+      P('p-lib','lib','PRLV 91 días','PLAZO',91,11.80,null,500,'Carga manual'),
+      P('p-ahp','ahp','PRLV 364 días','PLAZO',364,15.75,18.40,5000,'Carga manual'),
+      P('p-alc','alc','PRLV 182 días','PLAZO',182,16.50,null,10000,'Carga manual')
+    ];
+    this._D = { insts, prods, map:Object.fromEntries(insts.map(i=>[i.id,i])), pmap:Object.fromEntries(prods.map(p=>[p.id,p])) };
+    return this._D;
+  }
+  get params(){ return { infl:Number(this.props.inflacionAnual ?? 4.2), udi:Number(this.props.valorUdi ?? 8.56), isr:0.50 }; }
+  fmt(n){ return new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0}).format(n); }
+  pct(n){ return n.toFixed(2)+' %'; }
+  avBg(i){ const c=['#A7E0DB','#5FB0C9','#7D9BE0','#8ED0C6','#B9CFF0','#6FBBD3']; let h=0; for(const ch of i) h=(h*31+ch.charCodeAt(0))%c.length; return c[h]; }
+  cobertura(seguro){
+    const {udi}=this.params;
+    if(seguro==='SOBERANO') return {mxn:Infinity, str:'Sin límite', label:'Soberano'};
+    if(seguro==='IPAB'){ const m=400000*udi; return {mxn:m, str:'$'+(m/1e6).toFixed(2)+' M', label:'IPAB'}; }
+    if(seguro==='PROSOFIPO'){ const m=25000*udi; return {mxn:m, str:'$'+Math.round(m/1000)+' mil', label:'PROSOFIPO'}; }
+    return {mxn:0, str:'$0', label:'Sin cobertura'};
+  }
+  ten(t){ return t-this.params.isr; }
+  desglose(monto,tasa,plazo){
+    const {infl,isr}=this.params, f=plazo/365;
+    const bruto=monto*tasa/100*f, isrM=monto*isr/100*f, inflM=monto*infl/100*f;
+    return {bruto,isrM,inflM,neto:bruto-isrM,real:bruto-isrM-inflM};
+  }
+  plazoLabel(p){ return p.tipo==='VISTA' ? 'A la vista' : p.plazo+' días'; }
+  milesStr(v){ const n=Number(v); return (v===''||isNaN(n)||n===0&&v==='')?'':new Intl.NumberFormat('es-MX').format(n); }
+  parseNum(str){ const d=String(str).replace(/[^\d]/g,''); return d===''?'':Number(d); }
+  nav(v){ this.setState({view:v}); if(typeof window!=='undefined') window.scrollTo(0,0); }
+  rebalance(list){
+    if(!list.length) return [];
+    const t=list.reduce((a,x)=>a+(Number(x.pct)||0),0);
+    let out = t<=0 ? list.map(x=>({...x,pct:Math.round(1000/list.length)/10}))
+                   : list.map(x=>({...x,pct:Math.round(((Number(x.pct)||0)*100/t)*10)/10}));
+    const diff=Math.round((100-out.reduce((a,x)=>a+x.pct,0))*10)/10;
+    if(diff!==0) out[0]={...out[0], pct:Math.round((out[0].pct+diff)*10)/10};
+    return out;
+  }
+  addCombo(pid){
+    const c=this.state.combo;
+    if(c.find(x=>x.pid===pid)){ this.setState({combo:this.rebalance(c.filter(x=>x.pid!==pid))}); return; }
+    const share=100/(c.length+1);
+    const scaled=c.map(x=>({...x,pct:(Number(x.pct)||0)*(100-share)/100}));
+    this.setState({combo:this.rebalance([...scaled,{pid,pct:share}])});
+  }
+  optimizar(){
+    const D=this.D, s=this.state, monto=Math.max(100,Number(s.cMonto)||0), hz=s.cPlazo;
+    const elig=D.prods
+      .filter(p=>p.tipo==='VISTA'||p.plazo<=hz)
+      .filter(p=>!s.optRoj || !D.map[p.inst].flags.some(f=>f.sev==='ROJA'))
+      .filter(p=>p.min<=monto)
+      .sort((a,b)=>this.ten(b.tasa)-this.ten(a.tasa));
+    const capLeft={}; let rem=monto; const alloc=[]; const usado={};
+    for(const p of elig){
+      if(rem<=0) break;
+      if(usado[p.inst]) continue;
+      const inst=D.map[p.inst];
+      if(!(p.inst in capLeft)) capLeft[p.inst]= s.optSeg ? this.cobertura(inst.seguro).mxn : Infinity;
+      const take=Math.min(rem, capLeft[p.inst]);
+      if(take<=0) continue;
+      alloc.push({pid:p.id, monto:take}); usado[p.inst]=true;
+      capLeft[p.inst]-=take; rem-=take;
+    }
+    let combo=alloc.map(a=>({pid:a.pid, pct:Math.floor(a.monto/monto*1000)/10}));
+    const diff=Math.round((100-combo.reduce((s2,x)=>s2+x.pct,0))*10)/10;
+    if(diff>0&&combo.length){
+      // el remanente va al instrumento sin tope (soberano) o, en su defecto, al de mayor holgura
+      let idx=combo.findIndex(x=>this.cobertura(D.map[D.pmap[x.pid].inst].seguro).mxn===Infinity);
+      if(idx<0) idx=combo.length-1;
+      combo[idx]={...combo[idx], pct:Math.round((combo[idx].pct+diff)*10)/10};
+    }
+    combo=combo.filter(x=>x.pct>0);
+    this.setState({combo, view:'combinador'}, ()=>window.scrollTo(0,0));
+  }
+
+  renderVals(){
+    const D=this.D, s=this.state, pr=this.params;
+    const view = s.view || this.props.vistaInicial || 'comparador';
+    const COLORS=['#5FB0C9','#A7E0DB','#7D9BE0','#3E6D9C','#D8E9F5','#8ED0C6','#B9A7E0','#E7C36A'];
+    const pill=(a)=>'cursor:pointer;font-size:13px;padding:7px 15px;white-space:nowrap;flex:none;min-height:36px;border-radius:999px;font-family:var(--font-heading);font-weight:600;letter-spacing:.02em;'+(a?'border:1px solid rgba(95,176,201,.6);background:linear-gradient(90deg,#5FB0C9,#3E6D9C);color:#fff;':'border:1px solid var(--line);background:transparent;color:var(--muted);');
+    const inCombo=(pid)=>s.combo.some(x=>x.pid===pid);
+    const addSt=(sel)=>'width:30px;height:30px;flex:none;cursor:pointer;border-radius:50%;font-size:15px;line-height:1;display:grid;place-items:center;margin-left:auto;'+(sel?'border:none;background:linear-gradient(90deg,#5FB0C9,#3E6D9C);color:#fff;':'border:1px solid rgba(167,224,219,.35);background:transparent;color:var(--color-accent-2);');
+
+    let rows = D.prods.map(p=>{
+      const inst=D.map[p.inst], ten=this.ten(p.tasa), gat=p.gatN ?? +(ten-0.05).toFixed(2), cob=this.cobertura(inst.seguro);
+      const sel=inCombo(p.id);
+      return {
+        id:p.id, inst:inst.nombre+(inst.demo?' ◆':''), av:inst.av, avBg:this.avBg(inst.id),
+        producto:p.producto, cat:inst.cat, seguro:inst.seguro, seguroLabel:cob.label,
+        tipo:p.tipo, plazo:p.plazo, plazoCorto:p.tipo==='VISTA'?'Vista':p.plazo+' d',
+        subtitulo: p.tipo==='VISTA' ? p.producto+' · A la vista' : p.producto+' · Liquidez al vencimiento',
+        tasa:p.tasa, tenV:ten, gatV:gat, cobV:cob.mxn, min:p.min,
+        tasaStr:this.pct(p.tasa), tenStr:this.pct(ten), gatStr:this.pct(gat), gatMarca:p.gatN==null?'(equiv.)':'',
+        cobStr:cob.str, fecha:p.fecha, fuente:p.fuente,
+        flags:inst.flags, tieneFlags:inst.flags.length>0, sinFlags:inst.flags.length===0,
+        addTxt: sel?'✓':'+', addSt:addSt(sel), onAdd:(e)=>{e&&e.stopPropagation(); this.addCombo(p.id);},
+        ver:()=>this.setState({view:'detalle', instId:inst.id}, ()=>window.scrollTo(0,0))
+      };
+    });
+    if(s.fPlazo!=='TODOS'){
+      if(s.fPlazo==='VISTA') rows=rows.filter(r=>r.tipo==='VISTA');
+      else if(s.fPlazo==='365+') rows=rows.filter(r=>r.plazo>=365);
+      else rows=rows.filter(r=>r.plazo===s.fPlazo);
+    }
+    if(s.fCats.length) rows=rows.filter(r=>s.fCats.includes(r.cat));
+    if(s.fSegs.length) rows=rows.filter(r=>s.fSegs.includes(r.seguro));
+    if(s.fSinB) rows=rows.filter(r=>r.sinFlags);
+    const m=Number(s.fMonto); if(!isNaN(m)&&m>0) rows=rows.filter(r=>r.min<=m);
+    const key={ten:'tenV',tasa:'tasa',gat:'gatV',cobertura:'cobV'}[s.orden];
+    rows.sort((a,b)=>(b[key]===Infinity?1e15:b[key])-(a[key]===Infinity?1e15:a[key]));
+
+    const tog=(arr,v)=>arr.includes(v)?arr.filter(x=>x!==v):[...arr,v];
+    const box=(a)=>'width:16px;height:16px;flex:none;border-radius:5px;display:grid;place-items:center;font-size:11px;'+(a?'color:#14163A;background:linear-gradient(135deg,#A7E0DB,#5FB0C9);border:none;':'color:transparent;background:transparent;border:1px solid rgba(167,224,219,.35);');
+    const SEGS=[['SOBERANO','Soberano (CETES)'],['IPAB','IPAB (bancos)'],['PROSOFIPO','PROSOFIPO (SOFIPOs)']];
+    const CATS=[['GOBIERNO','Gobierno'],['BANCO_DIGITAL','Banco digital'],['SOFIPO','SOFIPO']];
+    const mkOpts=(defs,arr,key)=>defs.map(([v,l])=>({label:l, chk:arr.includes(v)?'✓':'', boxSt:box(arr.includes(v)), on:()=>this.setState({[key]:tog(arr,v)})}));
+    const segOpts=mkOpts(SEGS,s.fSegs,'fSegs'), catOpts=mkOpts(CATS,s.fCats,'fCats');
+    const resumen=(defs,arr)=>arr.length===0?'Todos':(arr.length===defs.length?'Todos':defs.filter(([v])=>arr.includes(v)).map(([,l])=>l.split(' ')[0]).join(', '));
+    const selChips=s.combo.map(x=>{ const p=D.pmap[x.pid], ins=D.map[p.inst]; return {nombre:ins.nombre+(ins.demo?' ◆':'')+' · '+p.producto, onQuita:()=>this.setState({combo:this.rebalance(s.combo.filter(y=>y.pid!==x.pid))})}; });
+
+    // ── detalle ──
+    const inst=D.map[s.instId]||{};
+    const cobI=this.cobertura(inst.seguro||'NINGUNO');
+    const instProds=D.prods.filter(p=>p.inst===inst.id).map(p=>({
+      producto:p.producto, plazoLabel:this.plazoLabel(p), tasaStr:this.pct(p.tasa), tenStr:this.pct(this.ten(p.tasa)),
+      gatStr:this.pct(p.gatN ?? +(this.ten(p.tasa)-0.05).toFixed(2)), gatMarca:p.gatN==null?'(equiv.)':'', fuente:p.fuente, fecha:p.fecha
+    }));
+    const cobExp={
+      SOBERANO:'Deuda directa del Gobierno Federal: no hay límite de seguro porque el emisor es el propio Estado mexicano.',
+      IPAB:'Depósitos protegidos por el IPAB hasta 400,000 UDIs por persona e institución (UDI = $'+pr.udi.toFixed(2)+'). Por encima de ese monto no hay garantía.',
+      PROSOFIPO:'Ahorro protegido por el Fondo PROSOFIPO hasta 25,000 UDIs por persona e institución (UDI = $'+pr.udi.toFixed(2)+'). Es una cobertura mucho menor que la del IPAB: no inviertas por encima del límite.',
+      NINGUNO:'Este instrumento no cuenta con seguro de depósito.'
+    }[inst.seguro]||'';
+
+    // ── combinador ──
+    const monto=Math.max(100,Number(s.cMonto)||0);
+    const hz=s.cPlazo;
+    const pctTotal=s.combo.reduce((a,x)=>a+(Number(x.pct)||0),0);
+    const norm=pctTotal>0?100/pctTotal:0;
+    const capUsed={};
+    let T={bruto:0,isrM:0,inflM:0,real:0}, tenP=0, protegido=0;
+    const comboDet=s.combo.map((x,i)=>{
+      const p=D.pmap[x.pid], ins=D.map[p.inst];
+      const mAsg=monto*(Number(x.pct)||0)*norm/100;
+      const plz=p.tipo==='PLAZO'?Math.min(p.plazo,hz):hz;
+      const d=this.desglose(mAsg,p.tasa,hz);
+      T.bruto+=d.bruto; T.isrM+=d.isrM; T.inflM+=d.inflM; T.real+=d.real;
+      tenP+=this.ten(p.tasa)*(Number(x.pct)||0)*norm/100;
+      const cap=this.cobertura(ins.seguro).mxn;
+      const antes=capUsed[p.inst]||0;
+      const cubierto=Math.max(0,Math.min(mAsg,cap-antes));
+      capUsed[p.inst]=antes+mAsg; protegido+=cubierto;
+      const covOk=cubierto>=mAsg-1;
+      return { color:COLORS[i%COLORS.length], nombre:ins.nombre+(ins.demo?' ◆':''), 
+        montoStr:this.fmt(mAsg), pctStr:Math.round((Number(x.pct)||0)*norm)+' %',
+        tenStr:this.pct(this.ten(p.tasa)), realStr:this.fmt(d.real),
+        covOk, covTxt: covOk?'Cubierto ('+this.cobertura(ins.seguro).label+')':'Excede cobertura '+this.fmt(mAsg-cubierto),
+        covColor: covOk?'var(--up)':'var(--warn)', plz };
+    });
+    const combo=s.combo.map((x,i)=>{
+      const p=D.pmap[x.pid], ins=D.map[p.inst];
+      return { color:COLORS[i%COLORS.length], nombre:ins.nombre+(ins.demo?' ◆':'')+' — '+p.producto,
+        sub:this.pct(p.tasa)+' nominal · '+this.plazoLabel(p), pctVal:x.pct,
+        onPct:(e)=>{ const v=Math.max(0,Math.min(100,Number(e.target.value)||0)); this.setState({combo:s.combo.map(y=>y.pid===x.pid?{...y,pct:v}:y)}); },
+        onQuita:()=>this.setState({combo:this.rebalance(s.combo.filter(y=>y.pid!==x.pid))}) };
+    });
+    const allocSegs=s.combo.map((x,i)=>{
+      const p=D.pmap[x.pid], ins=D.map[p.inst];
+      return { w:Math.round((Number(x.pct)||0)*norm)+'%', color:COLORS[i%COLORS.length], t:ins.nombre+' '+Math.round((Number(x.pct)||0)*norm)+'%' };
+    });
+    const B=T.bruto||1, realNeg=T.real<0;
+    const wp=(x)=>Math.max(2,Math.round(x/B*100))+'%', op=(x)=>Math.max(0,Math.round(x/B*100))+'%';
+    const cascada=[
+      {label:'Rendimiento bruto', montoStr:'+'+this.fmt(T.bruto), off:'0%', w:'100%', color:'#A7E0DB', lfg:'#E3F6F5', sub:'Combinación de '+s.combo.length+' instrumentos × '+hz+' días'},
+      {label:'ISR retenido', montoStr:'−'+this.fmt(T.isrM), off:op(B-T.isrM), w:wp(T.isrM), color:'#E7C36A', lfg:'#E7C36A', sub:'Retención '+pr.isr.toFixed(2)+' % anual sobre capital'},
+      {label:'Efecto inflación', montoStr:'−'+this.fmt(T.inflM), off:op(Math.max(0,B-T.isrM-T.inflM)), w:wp(T.inflM), color:'#8FA0C9', lfg:'#B9CFF0', sub:'Pérdida de poder adquisitivo ('+pr.infl.toFixed(1)+' % anual)'},
+      {label:'Ganancia real', montoStr:(realNeg?'−':'')+this.fmt(Math.abs(T.real)), off:'0%', w:wp(Math.abs(T.real)), color: realNeg?'#F08A8A':'linear-gradient(90deg,#5FB0C9,#A7E0DB)', lfg: realNeg?'#F08A8A':'#A7E0DB', sub: realNeg?'Con estos supuestos pierdes poder adquisitivo.':'Lo que de verdad crece tu patrimonio'}
+    ];
+    const narrativa = s.combo.length===0 ? 'Agrega instrumentos o pulsa Optimizar para ver el desglose.' :
+      'De '+this.fmt(T.bruto)+' de ganancia bruta combinada, '+this.fmt(T.isrM)+' se van en impuestos, '+this.fmt(T.inflM)+' se los come la inflación y '+this.fmt(Math.max(0,T.real))+(realNeg?' — nada — queda para ti.':' son realmente tuyos.');
+    const protPctN = monto>0 ? Math.min(100,Math.floor(protegido/monto*100)) : 0;
+    const prodOpts=D.prods.filter(p=>!inCombo(p.id)).map(p=>({id:p.id, label:D.map[p.inst].nombre+(D.map[p.inst].demo?' ◆':'')+' — '+p.producto+' ('+this.pct(p.tasa)+')'}));
+
+    return {
+      esComparador:view==='comparador', esCombinador:view==='combinador', esDetalle:view==='detalle', esMetodologia:view==='metodologia',
+      curComp:view==='comparador'?'page':null, curComb:view==='combinador'?'page':null, curMet:view==='metodologia'?'page':null,
+      colComp:view==='comparador'?'#fff':'var(--muted)', colComb:view==='combinador'?'#fff':'var(--muted)', colMet:view==='metodologia'?'#fff':'var(--muted)',
+      goComparador:(e)=>{e&&e.preventDefault(); this.nav('comparador');},
+      goCombinador:(e)=>{e&&e.preventDefault(); this.nav('combinador');},
+      goMetodologia:(e)=>{e&&e.preventDefault(); this.nav('metodologia');},
+      rows, nRes:rows.length,
+      fPlazoSel:String(s.fPlazo),
+      setPlazoSel:(e)=>{ const v=e.target.value; this.setState({fPlazo:(v==='TODOS'||v==='VISTA'||v==='365+')?v:Number(v)}); },
+      segOpts, catOpts, segResumen:resumen(SEGS,s.fSegs), catResumen:resumen(CATS,s.fCats),
+      togSegDD:()=>this.setState({ddOpen:s.ddOpen==='seg'?null:'seg'}),
+      togCatDD:()=>this.setState({ddOpen:s.ddOpen==='cat'?null:'cat'}),
+      ddSegOpen:s.ddOpen==='seg', ddCatOpen:s.ddOpen==='cat', ddAbierto:s.ddOpen!==null,
+      cierraDD:()=>this.setState({ddOpen:null}),
+      selChips, limpiarCombo:()=>this.setState({combo:[]}),
+      fMonto:this.milesStr(s.fMonto), orden:s.orden,
+      setFMonto:(e)=>this.setState({fMonto:this.parseNum(e.target.value)}),
+      setOrden:(e)=>this.setState({orden:e.target.value}),
+      sinBSt:pill(s.fSinB), toggleSinB:()=>this.setState({fSinB:!s.fSinB}),
+      hayCombo:s.combo.length>0, nCombo:s.combo.length,
+      instNombre:inst.nombre||'', instAv:inst.av||'', instAvBg:this.avBg(inst.id||'x'), instCat:inst.catLabel||'', instDesc:inst.desc||'',
+      instDemo:!!inst.demo, instSeguro:cobI.label, instCobStr:cobI.str, instCobExp:cobExp,
+      instFlags:inst.flags||[], instTieneFlags:(inst.flags||[]).length>0, instSinFlags:(inst.flags||[]).length===0,
+      instInd:inst.ind||[], instTieneInd:!!inst.ind, instSinInd:!inst.ind, instPeriodo:inst.periodo||'—', instProds,
+      agregarEsta:()=>{ const p=D.prods.find(x=>x.inst===inst.id); if(p&&!inCombo(p.id)) this.addCombo(p.id); this.nav('combinador'); },
+      cMonto:this.milesStr(s.cMonto), setCMonto:(e)=>this.setState({cMonto:this.parseNum(e.target.value)||0}),
+      montoChips:[50000,250000,1000000,5000000].map(v=>({label:'$'+(v>=1e6?(v/1e6)+' M':(v/1000)+'k'), on:()=>this.setState({cMonto:v})})),
+      cPlazoChips:[28,91,182,364].map(v=>({label:v+' días', st:pill(s.cPlazo===v), on:()=>this.setState({cPlazo:v})})),
+      toggleSeg:()=>this.setState({optSeg:!s.optSeg}), toggleRojas:()=>this.setState({optRoj:!s.optRoj}),
+      optSegSt:'display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;font-size:13px;padding:10px 14px;border-radius:12px;text-align:left;border:1px solid '+(s.optSeg?'rgba(167,224,219,.4)':'var(--line)')+';background:'+(s.optSeg?'rgba(167,224,219,.08)':'transparent')+';color:'+(s.optSeg?'var(--color-accent-2)':'var(--muted)')+';',
+      optRojSt:'display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;font-size:13px;padding:10px 14px;border-radius:12px;text-align:left;border:1px solid '+(s.optRoj?'rgba(167,224,219,.4)':'var(--line)')+';background:'+(s.optRoj?'rgba(167,224,219,.08)':'transparent')+';color:'+(s.optRoj?'var(--color-accent-2)':'var(--muted)')+';',
+      optSegTxt:s.optSeg?'Sí':'No', optRojTxt:s.optRoj?'Sí':'No',
+      optSegNota:s.optSeg?'activado':'desactivado — todo el monto puede ir a un solo emisor',
+      combo, comboVacio:s.combo.length===0, prodOpts,
+      onAgrega:(e)=>{ const v=e.target.value; if(v) this.addCombo(v); e.target.value=''; },
+      onOptimizar:()=>this.optimizar(),
+      pctTotal: Math.round(pctTotal*10)/10, pctTotalColor: Math.abs(pctTotal-100)<1?'var(--up)':'var(--warn)',
+      allocSegs, cascada, narrativa, comboDet, hzStr:hz+' días',
+      tenPond:s.combo.length?this.pct(tenP):'—', realTotal:s.combo.length?this.fmt(T.real):'—',
+      realColor:realNeg?'var(--down)':'var(--up)',
+      protPct:s.combo.length?protPctN+' %':'—', protColor:protPctN>=100?'var(--up)':(protPctN>=60?'var(--warn)':'var(--down)'),
+      notaFiscal:'Se aplicó la retención de ISR de '+pr.isr.toFixed(2)+' % anual sobre el capital (LIF 2026), proporcional a '+hz+' días sobre cada monto asignado: '+this.fmt(T.isrM)+' en total. Los fondos de deuda retienen sobre la ganancia, no sobre el capital. Referencia fiscal: 21 jul 2026.',
+      disclaimer:'Centinela Financiero es un comparador informativo con datos de demostración (algunas cifras son ilustrativas). El optimizador es una heurística ilustrativa, no una recomendación de inversión. Verifica tasas, GAT y condiciones vigentes con cada institución antes de contratar.'
+    };
+  }
+}
+</script>
+</body>
+</html>

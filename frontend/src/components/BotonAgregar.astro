@@ -1,0 +1,63 @@
+---
+/**
+ * El botón "+" de cada fila.
+ *
+ * Es HTML plano con los datos en atributos, no una isla React. Hidratar un
+ * componente por fila costaría cuarenta islas en una tabla de cuarenta filas;
+ * un único script las cablea todas contra el mismo store. Sin JavaScript
+ * simplemente no aparece —no hay forma de armar una combinación sin él— y la
+ * tabla sigue completa, que es lo que la fase exige.
+ */
+interface Props {
+  productoId: number;
+  institucion: string;
+  producto: string;
+  slug: string;
+}
+const { productoId, institucion, producto, slug } = Astro.props;
+---
+
+<button
+  type="button"
+  class="agregar"
+  data-agregar
+  data-producto-id={productoId}
+  data-institucion={institucion}
+  data-producto={producto}
+  data-slug={slug}
+  aria-pressed="false"
+  aria-label={`Agregar ${institucion} · ${producto} a la combinación`}
+>
+  <span aria-hidden="true">+</span>
+</button>
+
+<style>
+  .agregar {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    flex: none;
+    cursor: pointer;
+    border-radius: 50%;
+    border: 1px solid rgba(167, 224, 219, 0.35);
+    background: transparent;
+    color: var(--marca-200);
+    font-size: 15px;
+    line-height: 1;
+    /* Oculto hasta que el script lo habilite: un botón que no hace nada es
+       peor que un botón ausente. */
+    visibility: hidden;
+  }
+  :global(html.js) .agregar {
+    visibility: visible;
+  }
+  .agregar:hover {
+    filter: brightness(1.15);
+  }
+  .agregar[aria-pressed='true'] {
+    border: none;
+    background: var(--gradiente-acento);
+    color: var(--texto-fuerte);
+  }
+</style>

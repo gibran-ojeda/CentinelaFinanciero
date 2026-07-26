@@ -1,0 +1,55 @@
+---
+/**
+ * Los dos avisos que el usuario tiene derecho a ver, y que son distintos.
+ *
+ *   ◆              la institución es ficticia, sembrada para ilustrar
+ *   sin verificar  la institución es real; su tasa no se pudo confirmar
+ *
+ * Juntarlos en un solo distintivo diría de Finsus que es inventada, que es
+ * falso, o de Alcancía Fuerte que su tasa está pendiente de confirmar, que no
+ * significa nada porque la institución no existe.
+ */
+interface Props {
+  esDemostracion?: boolean;
+  verificada?: boolean;
+}
+const { esDemostracion = false, verificada = true } = Astro.props;
+---
+
+{
+  esDemostracion && (
+    <span class="marca demo" title="Institución ficticia, incluida para ilustrar el producto">
+      ◆<span class="solo-lectores"> institución de ejemplo</span>
+    </span>
+  )
+}
+{
+  !verificada && (
+    <span
+      class="marca sin-verificar"
+      title="Esta tasa no se ha podido confirmar contra la fuente oficial de la institución"
+    >
+      sin verificar
+    </span>
+  )
+}
+
+<style>
+  .marca {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+  }
+  .demo {
+    font-size: 11px;
+    color: var(--texto-tenue-2);
+  }
+  .sin-verificar {
+    padding: 1px 7px;
+    border-radius: var(--radio-pastilla);
+    font-size: 10px;
+    color: var(--aviso);
+    background: var(--aviso-fondo);
+    white-space: nowrap;
+  }
+</style>
