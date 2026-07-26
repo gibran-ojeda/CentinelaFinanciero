@@ -278,6 +278,106 @@ class RespuestaCalculadora(Esquema):
     disclaimer: str = DISCLAIMER
 
 
+# ─── Calculadora de combinación ───────────────────────────────
+
+#: Se dice en la respuesta, no sólo en la página de metodología: quien consuma
+#: la API por su cuenta tiene que recibir la misma advertencia que el usuario.
+AVISO_OPTIMIZADOR = (
+    "El reparto propuesto es una heurística informativa: ordena por tasa efectiva "
+    "neta y llena cada institución hasta su límite de seguro de depósito. No es una "
+    "recomendación de inversión ni considera tu situación fiscal, tu liquidez ni tu "
+    "tolerancia al riesgo."
+)
+
+
+class ItemCombinacion(Esquema):
+    producto_id: int
+    porcentaje: Decimal = Field(
+        ge=0,
+        le=100,
+        description="Se normaliza para que el total sume 100: expresa una proporción",
+    )
+
+
+class SolicitudCombinacion(Esquema):
+    monto_total: Decimal = Field(gt=0)
+    horizonte_dias: int = Field(gt=0, le=3650)
+    items: list[ItemCombinacion] = Field(min_length=1, max_length=20)
+    inflacion_anual: Decimal | None = Field(
+        default=None, description="Permite simular otro escenario. Por defecto, el INPC vigente."
+    )
+
+
+class SolicitudOptimizador(Esquema):
+    monto_total: Decimal = Field(gt=0)
+    horizonte_dias: int = Field(gt=0, le=3650)
+    respetar_seguro: bool = Field(
+        default=True,
+        description="No asigna a una institución más de lo que cubre su fondo de protección",
+    )
+    excluir_rojas: bool = Field(
+        default=True, description="Deja fuera a las instituciones con bandera roja activa"
+    )
+    inflacion_anual: Decimal | None = None
+
+
+class AsignacionSchema(Esquema):
+    institucion: InstitucionResumen
+    producto_id: int
+    producto: str
+    producto_slug: str
+    plazo_dias: int | None
+    porcentaje: Decimal
+    monto: Decimal
+    ten: Decimal
+    cascada: CascadaSchema
+    cobertura: CoberturaSchema
+    monto_cubierto: Decimal
+    monto_expuesto: Decimal
+    cubierto: bool
+    advertencia_liquidez: str | None = Field(
+        description="El plazo del producto excede el horizonte elegido"
+    )
+    banderas: list[BanderaSchema]
+    procedencia: Procedencia
+
+
+class RespuestaCombinacion(Esquema):
+    monto_total: Decimal = Field(description="Lo efectivamente repartido")
+    monto_no_asignado: Decimal = Field(
+        default=Decimal("0"),
+        description=(
+            "Sólo lo devuelve el optimizador: parte del monto que no pudo colocarse "
+            "sin exceder algún límite de seguro. Estirarla entre los instrumentos ya "
+            "llenos anularía la protección que se pidió respetar."
+        ),
+    )
+    horizonte_dias: int
+    ten_ponderada: Decimal
+
+    rendimiento_bruto: Decimal
+    isr_retenido: Decimal
+    rendimiento_neto: Decimal
+    efecto_inflacion: Decimal
+    ganancia_real: Decimal
+
+    monto_protegido: Decimal
+    porcentaje_protegido: Decimal = Field(
+        description="Truncado hacia abajo: nunca es 100 si queda un peso expuesto"
+    )
+
+    asignaciones: list[AsignacionSchema]
+    narrativa: str
+    nota_fiscal: str
+
+    #: Contexto del cálculo, para que el resultado sea reproducible.
+    inflacion_anual: Decimal
+    valor_udi: Decimal
+    generado_en: datetime
+    aviso_optimizador: str = AVISO_OPTIMIZADOR
+    disclaimer: str = DISCLAIMER
+
+
 # ─── Meta ─────────────────────────────────────────────────────
 
 
@@ -351,8 +451,10 @@ class ResolucionRevision(Esquema):
 
 
 __all__ = [
+    "AVISO_OPTIMIZADOR",
     "DISCLAIMER",
     "AltaTasa",
+    "AsignacionSchema",
     "BanderaSchema",
     "CascadaSchema",
     "CoberturaSchema",
@@ -363,14 +465,18 @@ __all__ = [
     "IndicadorEvaluadoSchema",
     "IndicadoresSchema",
     "InstitucionResumen",
+    "ItemCombinacion",
     "Procedencia",
     "ProductoDetalle",
     "ResolucionRevision",
     "RespuestaCalculadora",
+    "RespuestaCombinacion",
     "RespuestaComparador",
     "RespuestaFrescura",
     "ResultadoCalculadora",
     "RevisionPendiente",
     "SolicitudCalculadora",
+    "SolicitudCombinacion",
+    "SolicitudOptimizador",
     "TasaCreada",
 ]

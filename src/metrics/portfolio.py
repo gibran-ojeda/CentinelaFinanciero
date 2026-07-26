@@ -87,6 +87,23 @@ class Asignacion:
 
 
 @dataclass(frozen=True, slots=True)
+class Reparto:
+    """Lo que el optimizador propone, en pesos."""
+
+    asignaciones: list[tuple[Candidato, Decimal]]
+    monto_no_asignado: Decimal
+    """Lo que no cupo: sin emisor sin tope, la cobertura disponible se agota."""
+
+    @property
+    def candidatos(self) -> list[Candidato]:
+        return [c for c, _ in self.asignaciones]
+
+    @property
+    def montos(self) -> list[Decimal]:
+        return [m for _, m in self.asignaciones]
+
+
+@dataclass(frozen=True, slots=True)
 class Combinacion:
     """El reparto entero, con su cascada agregada."""
 
@@ -165,11 +182,9 @@ def evaluar_combinacion(
     params: ParametrosFiscales,
     valor_udi: Decimal,
 ) -> Combinacion:
-    """Calcula el reparto completo: cascada agregada y protección real."""
+    """Evalúa un reparto expresado en porcentajes. El camino del usuario."""
     if monto_total <= 0:
         raise ValueError("el monto total debe ser positivo")
-    if horizonte_dias <= 0:
-        raise ValueError("el horizonte debe ser positivo")
     if len(candidatos) != len(porcentajes):
         raise ValueError("hay que dar un porcentaje por candidato")
 
@@ -177,8 +192,45 @@ def evaluar_combinacion(
     # vacía, el bucle no itera y los agregados salen en cero por sí solos.
     # Construir aquí una respuesta de ceros a mano sería un segundo camino que
     # habría que mantener en sincronía con el primero.
-    normalizados = normalizar(porcentajes)
-    montos = _montos(monto_total, normalizados)
+    return evaluar_reparto(
+        candidatos,
+        _montos(monto_total, normalizar(porcentajes)),
+        horizonte_dias=horizonte_dias,
+        inflacion_anual=inflacion_anual,
+        params=params,
+        valor_udi=valor_udi,
+    )
+
+
+def evaluar_reparto(
+    candidatos: Sequence[Candidato],
+    montos: Sequence[Decimal],
+    *,
+    horizonte_dias: int,
+    inflacion_anual: Decimal,
+    params: ParametrosFiscales,
+    valor_udi: Decimal,
+) -> Combinacion:
+    """Evalúa un reparto expresado en pesos. El camino del optimizador.
+
+    Existe separado de `evaluar_combinacion` por una razón concreta: el
+    optimizador calcula importes exactos que respetan cada tope al centavo, y
+    convertirlos a porcentajes de un decimal para volver a convertirlos a
+    importes los mueve. Sobre $5,000,000 un decimal de porcentaje son $5,000,
+    suficiente para colocar a una institución **por encima de su cobertura**
+    justo después de haberla respetado. El único reparto que no pierde nada al
+    redondear es el que nunca se expresa en porcentajes.
+    """
+    if horizonte_dias <= 0:
+        raise ValueError("el horizonte debe ser positivo")
+    if len(candidatos) != len(montos):
+        raise ValueError("hay que dar un monto por candidato")
+
+    monto_total = sum(montos, Decimal("0"))
+    porcentajes = [
+        redondear(m * CIEN / monto_total, PORCENTAJE_REPARTO) if monto_total > 0 else Decimal("0")
+        for m in montos
+    ]
 
     # Lo que ya consumió cada institución de su propio tope. La clave es la
     # institución y no el producto: ahí está la regla que hace que la suma sea
@@ -186,7 +238,7 @@ def evaluar_combinacion(
     usado_por_institucion: dict[int, Decimal] = {}
 
     asignaciones: list[Asignacion] = []
-    for candidato, porcentaje, monto in zip(candidatos, normalizados, montos, strict=True):
+    for candidato, porcentaje, monto in zip(candidatos, porcentajes, montos, strict=True):
         cobertura = resolver_cobertura(candidato.tipo_seguro, valor_udi)
         previo = usado_por_institucion.get(candidato.institucion_id, Decimal("0"))
 
@@ -234,8 +286,10 @@ def evaluar_combinacion(
         monto_protegido=redondear(protegido, CENTAVO),
         # Truncado, no redondeado: si sobra un peso sin cubrir la respuesta es
         # 99%, nunca 100%.
-        porcentaje_protegido=(protegido * CIEN / monto_total).to_integral_value(
-            rounding="ROUND_FLOOR"
+        porcentaje_protegido=(
+            (protegido * CIEN / monto_total).to_integral_value(rounding="ROUND_FLOOR")
+            if monto_total > 0
+            else Decimal("0")
         ),
         asignaciones=asignaciones,
     )
@@ -347,16 +401,21 @@ def optimizar(
     valor_udi: Decimal,
     respetar_seguro: bool = True,
     excluir_rojas: bool = True,
-) -> list[tuple[Candidato, Decimal]]:
+) -> Reparto:
     """Reparto greedy por TEN, respetando el tope de cada emisor.
 
-    Devuelve pares (candidato, porcentaje). Es una heurística deliberadamente
+    Devuelve **importes**, no porcentajes. Es una heurística deliberadamente
     simple y explicable: el usuario tiene que poder entender por qué le
     propone lo que le propone, y "el que más rinde primero, hasta donde
     alcanza el seguro" se explica en una frase.
 
     Un producto por institución: dos del mismo emisor comparten tope, así que
     añadir el segundo no protege más dinero y sólo complica el reparto.
+
+    Puede quedar dinero sin colocar —si la cobertura disponible no alcanza para
+    el monto pedido y no hay ningún emisor sin tope— y ese remanente se declara
+    en vez de repartirse. Estirarlo entre los que ya están llenos anularía
+    exactamente la garantía que el usuario acaba de pedir.
     """
     if monto_total <= 0:
         raise ValueError("el monto total debe ser positivo")
@@ -397,15 +456,14 @@ def optimizar(
             # debe proponer dinero sin proteger cuando le pidieron protegerlo.
             continue
 
-        reparto.append((candidato, asignado))
+        reparto.append((candidato, redondear(asignado, CENTAVO)))
         usados.add(candidato.institucion_id)
         restante -= asignado
 
-    if not reparto:
-        return []
-
-    porcentajes = normalizar([monto for _, monto in reparto])
-    return [(candidato, pct) for (candidato, _), pct in zip(reparto, porcentajes, strict=True)]
+    return Reparto(
+        asignaciones=reparto,
+        monto_no_asignado=redondear(max(restante, Decimal("0")), CENTAVO),
+    )
 
 
 __all__ = [
@@ -414,8 +472,10 @@ __all__ = [
     "Asignacion",
     "Candidato",
     "Combinacion",
+    "Reparto",
     "elegibles",
     "evaluar_combinacion",
+    "evaluar_reparto",
     "normalizar",
     "optimizar",
 ]

@@ -22,6 +22,7 @@ from metrics.portfolio import (
     Candidato,
     elegibles,
     evaluar_combinacion,
+    evaluar_reparto,
     normalizar,
     optimizar,
 )
@@ -361,24 +362,75 @@ def test_the_optimiser_fills_by_net_rate_first(fiscal_2026: ParametrosFiscales) 
     """Ordena por TEN, no por tasa nominal: es la comparación honesta."""
     reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026)
 
-    assert [c.producto_id for c, _ in reparto][0] == SOFIPO_A.producto_id
-    assert sum(pct for _, pct in reparto) == Decimal("100")
+    assert reparto.candidatos[0].producto_id == SOFIPO_A.producto_id
+    assert sum(reparto.montos) == Decimal("100000")
 
 
 def test_no_institution_exceeds_its_cap(fiscal_2026: ParametrosFiscales) -> None:
     """El criterio de la fase: $5M repartidos sin pasarse de ningún tope."""
-    monto = Decimal("5000000")
-    reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026, monto_total=monto)
+    reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026, monto_total=Decimal("5000000"))
 
     topes = {
         TipoSeguro.PROSOFIPO: LIMITE_PROSOFIPO_UDIS * UDI,
         TipoSeguro.IPAB: LIMITE_IPAB_UDIS * UDI,
     }
-    for candidato, porcentaje in reparto:
-        asignado = monto * porcentaje / Decimal("100")
+    for candidato, monto in reparto.asignaciones:
         tope = topes.get(candidato.tipo_seguro)
         if tope is not None:
-            assert asignado <= tope, candidato.producto_id
+            assert monto <= tope, candidato.producto_id
+
+
+def test_the_cap_survives_the_round_trip_through_percentages(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    """El defecto que motivó separar `evaluar_reparto` de `evaluar_combinacion`.
+
+    El optimizador respeta cada tope al centavo, pero un porcentaje con un solo
+    decimal sobre $5,000,000 tiene una granularidad de $5,000: pasar el reparto
+    por porcentajes y de vuelta a importes colocaba a una institución por
+    encima de su cobertura justo después de haberla respetado.
+    """
+    reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026, monto_total=Decimal("5000000"))
+
+    combinacion = evaluar_reparto(
+        reparto.candidatos,
+        reparto.montos,
+        horizonte_dias=HORIZONTE,
+        inflacion_anual=Decimal("4.5"),
+        params=fiscal_2026,
+        valor_udi=UDI,
+    )
+
+    for asignacion in combinacion.asignaciones:
+        limite = asignacion.cobertura.limite_mxn
+        if limite is not None:
+            assert asignacion.monto <= limite, asignacion.candidato.producto_id
+    assert combinacion.porcentaje_protegido == Decimal("100")
+
+
+def test_money_that_does_not_fit_is_declared_not_spread(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    """Sin emisor sin tope, la cobertura disponible se agota y sobra dinero.
+
+    Repartir ese remanente entre los que ya están llenos anularía exactamente
+    la garantía que el usuario pidió, así que se declara en vez de colocarse.
+    """
+    monto = Decimal("10000000")
+    reparto = _optimizar([BANCO, SOFIPO_A], fiscal_2026, monto_total=monto)
+
+    capacidad = LIMITE_IPAB_UDIS * UDI + LIMITE_PROSOFIPO_UDIS * UDI
+    assert sum(reparto.montos) == capacidad
+    assert reparto.monto_no_asignado == monto - capacidad
+
+
+def test_with_an_uncapped_instrument_nothing_is_left_over(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026, monto_total=Decimal("10000000"))
+
+    assert reparto.monto_no_asignado == Decimal("0.00")
+    assert sum(reparto.montos) == Decimal("10000000")
 
 
 def test_the_remainder_goes_to_the_uncapped_instrument(
@@ -387,12 +439,11 @@ def test_the_remainder_goes_to_the_uncapped_instrument(
     """Con $5M, tras llenar SOFIPO e IPAB el resto sólo cabe en el soberano."""
     monto = Decimal("5000000")
     reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026, monto_total=monto)
-    por_id = {c.producto_id: pct for c, pct in reparto}
+    por_id = {c.producto_id: m for c, m in reparto.asignaciones}
 
-    esperado_cetes = (
-        (monto - LIMITE_PROSOFIPO_UDIS * UDI - LIMITE_IPAB_UDIS * UDI) * Decimal("100") / monto
+    assert por_id[CETES.producto_id] == (
+        monto - LIMITE_PROSOFIPO_UDIS * UDI - LIMITE_IPAB_UDIS * UDI
     )
-    assert por_id[CETES.producto_id] == esperado_cetes.quantize(Decimal("0.1"))
 
 
 def test_one_product_per_institution(fiscal_2026: ParametrosFiscales) -> None:
@@ -406,10 +457,12 @@ def test_one_product_per_institution(fiscal_2026: ParametrosFiscales) -> None:
         [SOFIPO_A, SOFIPO_A_BIS, CETES], fiscal_2026, monto_total=Decimal("5000000")
     )
 
-    instituciones = [c.institucion_id for c, _ in reparto]
+    instituciones = [c.institucion_id for c in reparto.candidatos]
     assert len(instituciones) == len(set(instituciones))
-    assert SOFIPO_A_BIS.producto_id not in {c.producto_id for c, _ in reparto}
-    assert {c.producto_id for c, _ in reparto} == {SOFIPO_A.producto_id, CETES.producto_id}
+    assert {c.producto_id for c in reparto.candidatos} == {
+        SOFIPO_A.producto_id,
+        CETES.producto_id,
+    }
 
 
 def test_the_optimiser_leaves_out_uncovered_issuers_when_protecting(
@@ -422,7 +475,7 @@ def test_the_optimiser_leaves_out_uncovered_issuers_when_protecting(
     """
     reparto = _optimizar([IFPE, CETES], fiscal_2026, respetar_seguro=True)
 
-    assert IFPE.producto_id not in {c.producto_id for c, _ in reparto}
+    assert IFPE.producto_id not in {c.producto_id for c in reparto.candidatos}
 
 
 def test_without_the_insurance_toggle_the_best_rate_takes_everything(
@@ -430,19 +483,19 @@ def test_without_the_insurance_toggle_the_best_rate_takes_everything(
 ) -> None:
     reparto = _optimizar([IFPE, CETES], fiscal_2026, respetar_seguro=False)
 
-    assert len(reparto) == 1
-    assert reparto[0][0].producto_id == IFPE.producto_id
-    assert reparto[0][1] == Decimal("100")
+    assert len(reparto.asignaciones) == 1
+    assert reparto.candidatos[0].producto_id == IFPE.producto_id
+    assert reparto.montos[0] == Decimal("100000")
 
 
 def test_the_optimiser_skips_red_flagged_institutions(
     fiscal_2026: ParametrosFiscales,
 ) -> None:
     reparto = _optimizar([RIESGOSA, CETES], fiscal_2026, excluir_rojas=True)
-    assert RIESGOSA.producto_id not in {c.producto_id for c, _ in reparto}
+    assert RIESGOSA.producto_id not in {c.producto_id for c in reparto.candidatos}
 
     reparto = _optimizar([RIESGOSA, CETES], fiscal_2026, excluir_rojas=False)
-    assert RIESGOSA.producto_id in {c.producto_id for c, _ in reparto}
+    assert RIESGOSA.producto_id in {c.producto_id for c in reparto.candidatos}
 
 
 def test_the_optimiser_is_deterministic(fiscal_2026: ParametrosFiscales) -> None:
@@ -450,14 +503,44 @@ def test_the_optimiser_is_deterministic(fiscal_2026: ParametrosFiscales) -> None
     uno = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026)
     otro = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026)
 
-    assert [(c.producto_id, p) for c, p in uno] == [(c.producto_id, p) for c, p in otro]
+    assert uno.asignaciones == otro.asignaciones
 
 
 def test_nothing_eligible_produces_an_empty_allocation(
     fiscal_2026: ParametrosFiscales,
 ) -> None:
     reparto = _optimizar([RIESGOSA], fiscal_2026, monto_total=Decimal("500"))
-    assert reparto == []
+
+    assert reparto.asignaciones == []
+    assert reparto.monto_no_asignado == Decimal("500.00")
+
+
+def test_mismatched_amounts_are_rejected(fiscal_2026: ParametrosFiscales) -> None:
+    with pytest.raises(ValueError, match="monto por candidato"):
+        evaluar_reparto(
+            [CETES, BANCO],
+            [Decimal("100")],
+            horizonte_dias=HORIZONTE,
+            inflacion_anual=Decimal("4.5"),
+            params=fiscal_2026,
+            valor_udi=UDI,
+        )
+
+
+def test_an_empty_allocation_evaluates_to_zeros(fiscal_2026: ParametrosFiscales) -> None:
+    combinacion = evaluar_reparto(
+        [],
+        [],
+        horizonte_dias=HORIZONTE,
+        inflacion_anual=Decimal("4.5"),
+        params=fiscal_2026,
+        valor_udi=UDI,
+    )
+
+    assert combinacion.asignaciones == []
+    assert combinacion.monto_total == Decimal("0")
+    assert combinacion.porcentaje_protegido == Decimal("0")
+    assert combinacion.ten_ponderada == Decimal("0.0000")
 
 
 def test_the_optimiser_rejects_a_non_positive_amount(
@@ -469,14 +552,15 @@ def test_the_optimiser_rejects_a_non_positive_amount(
 
 def test_the_optimiser_output_feeds_the_evaluator(fiscal_2026: ParametrosFiscales) -> None:
     """Las dos mitades encajan: lo que propone se puede evaluar tal cual."""
-    monto = Decimal("5000000")
-    reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026, monto_total=monto)
+    reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026, monto_total=Decimal("5000000"))
 
-    combinacion = _evaluar(
-        [c for c, _ in reparto],
-        [p for _, p in reparto],
-        fiscal_2026,
-        monto_total=monto,
+    combinacion = evaluar_reparto(
+        reparto.candidatos,
+        reparto.montos,
+        horizonte_dias=HORIZONTE,
+        inflacion_anual=Decimal("4.5"),
+        params=fiscal_2026,
+        valor_udi=UDI,
     )
 
     assert combinacion.porcentaje_protegido == Decimal("100")
@@ -484,3 +568,4 @@ def test_the_optimiser_output_feeds_the_evaluator(fiscal_2026: ParametrosFiscale
         combinacion.rendimiento_bruto
         == combinacion.isr_retenido + combinacion.efecto_inflacion + combinacion.ganancia_real
     )
+    assert sum(a.porcentaje for a in combinacion.asignaciones) == Decimal("100")
