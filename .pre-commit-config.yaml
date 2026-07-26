@@ -1,3 +1,9 @@
+# El prototipo de diseño se queda tal cual lo entregó el handoff. Es la
+# referencia contra la que se compara la implementación, y un archivo que los
+# hooks reformatean deja de servir para eso: la próxima comparación mostraría
+# diferencias que no son de nadie.
+exclude: ^frontend/referencia-diseno/
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
