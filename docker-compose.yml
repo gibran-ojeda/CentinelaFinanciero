@@ -114,11 +114,50 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'python -m scheduler' > /dev/null"]
+      # No `pgrep`: no existe en python:3.12-slim, así que la sonda anterior
+      # devolvía 127 y marcaba unhealthy un servicio que funcionaba. Y aunque
+      # existiera, que el proceso viva no dice que esté planificando nada: la
+      # sonda comprueba que el heartbeat haya corrido hace poco, que es la
+      # pregunta que importa.
+      test: ["CMD", "python", "-m", "scheduler.health"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 90s
+
+  web:
+    image: centinela-web:latest
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    container_name: centinela-web
+    restart: unless-stopped
+    environment:
+      # El único servicio que habla con el navegador, y el único que necesita
+      # la llave de **lectura**. Nunca la de admin: el BFF sólo consulta.
+      API_BASE_URL: http://api:8000
+      API_READ_KEY: ${API_READ_KEY:-}
+      API_TIMEOUT_SECONDS: ${API_TIMEOUT_SECONDS:-10}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://127.0.0.1:3010}
+    ports:
+      # Como el resto: sólo en loopback. En el VPS lo alcanza el Caddy
+      # compartido; a internet no se expone nada directamente (§14).
+      - "127.0.0.1:3010:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # La portada consulta la API: si responde 200, el camino completo
+      # navegador → web → api → db está vivo. Es el smoke test permanente.
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    <<: *logging
 
 volumes:
   pgdata:
