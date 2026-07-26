@@ -1,4 +1,4 @@
-# Stack de Brújula Financiera.
+# Stack de Centinela Financiero.
 #
 # Convive con NarrativeAlpha en el mismo VPS, así que todo lleva prefijo propio
 # y puertos fuera del rango que ese stack ya ocupa (5432, 6379, 8000, 8001,
