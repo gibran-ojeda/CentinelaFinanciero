@@ -20,9 +20,21 @@ import type {
   RespuestaFrescura,
 } from './tipos';
 
-const BASE = import.meta.env.API_BASE_URL ?? 'http://127.0.0.1:8010';
-const LLAVE = import.meta.env.API_READ_KEY ?? '';
-const TIMEOUT_MS = Number(import.meta.env.API_TIMEOUT_SECONDS ?? 10) * 1000;
+/**
+ * Se lee de `process.env` **en cada llamada**, no una vez al importar.
+ *
+ * Vite no expone al bundle las variables sin prefijo `PUBLIC_`, así que
+ * `import.meta.env.API_READ_KEY` llega vacío en el build de producción y la
+ * API responde 401. Es la cara buena de la misma regla que impide filtrar la
+ * llave al navegador.
+ *
+ * Leerlo en tiempo de ejecución es además lo correcto para el despliegue: la
+ * llave la inyecta el compose en el contenedor, y hornearla en el artefacto
+ * significaría reconstruir la imagen para rotarla.
+ */
+function entorno(clave: string, porDefecto = ''): string {
+  return process.env[clave] ?? porDefecto;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -36,17 +48,21 @@ export class ApiError extends Error {
 }
 
 async function pedir<T>(ruta: string, init?: RequestInit): Promise<T> {
+  const base = entorno('API_BASE_URL', 'http://127.0.0.1:8010');
+  const llave = entorno('API_READ_KEY');
+  const timeoutMs = Number(entorno('API_TIMEOUT_SECONDS', '10')) * 1000;
+
   // Un timeout explícito: sin él, una API colgada deja la petición del usuario
   // esperando hasta que el navegador se rinda, sin nada que mostrar.
   const control = new AbortController();
-  const reloj = setTimeout(() => control.abort(), TIMEOUT_MS);
+  const reloj = setTimeout(() => control.abort(), timeoutMs);
 
   try {
-    const respuesta = await fetch(`${BASE}${ruta}`, {
+    const respuesta = await fetch(`${base}${ruta}`, {
       ...init,
       signal: control.signal,
       headers: {
-        'X-API-Key': LLAVE,
+        'X-API-Key': llave,
         Accept: 'application/json',
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
         ...init?.headers,
@@ -61,7 +77,7 @@ async function pedir<T>(ruta: string, init?: RequestInit): Promise<T> {
   } catch (error) {
     if (error instanceof ApiError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new ApiError(504, ruta, `La API no respondió en ${TIMEOUT_MS / 1000}s`);
+      throw new ApiError(504, ruta, `La API no respondió en ${timeoutMs / 1000}s`);
     }
     throw new ApiError(502, ruta, error instanceof Error ? error.message : 'error desconocido');
   } finally {

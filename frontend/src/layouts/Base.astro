@@ -20,6 +20,7 @@ interface Props {
 
 const { titulo, descripcion, vista, canonica, jsonLd } = Astro.props;
 
+// `PUBLIC_SITE_URL` sí lleva prefijo, así que Vite la expone en el bundle.
 const sitio = import.meta.env.PUBLIC_SITE_URL ?? Astro.url.origin;
 const urlCanonica = canonica ?? new URL(Astro.url.pathname, sitio).href;
 

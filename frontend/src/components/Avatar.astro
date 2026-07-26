@@ -1,0 +1,30 @@
+---
+import { iniciales, tinte } from '~/lib/formato';
+
+interface Props {
+  nombre: string;
+  slug: string;
+  tamano?: number;
+}
+const { nombre, slug, tamano = 28 } = Astro.props;
+---
+
+<span
+  class="avatar"
+  style={`width:${tamano}px;height:${tamano}px;font-size:${Math.round(tamano * 0.39)}px;background:${tinte(slug)}`}
+  aria-hidden="true">{iniciales(nombre)}</span
+>
+
+<style>
+  .avatar {
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    font-family: var(--fuente-titulo);
+    font-weight: 600;
+    /* Texto oscuro sobre el tinte claro: es la única combinación que mantiene
+       contraste con los seis tonos del ciclo. */
+    color: var(--fondo);
+  }
+</style>

@@ -1,0 +1,67 @@
+---
+/**
+ * Cobertura de seguro. §4.6: "nunca en letra chica".
+ *
+ * Tres estados que la UI no puede confundir:
+ *   sin_limite     deuda soberana — no hay tope porque el obligado es el Estado
+ *   con límite     IPAB o PROSOFIPO, con su importe en pesos
+ *   sin_cobertura  IFPE — cero protegido, que es lo contrario de "sin límite"
+ */
+import { dineroCompacto } from '~/lib/formato';
+import type { Cobertura } from '~/lib/tipos';
+
+interface Props {
+  cobertura: Cobertura;
+  detallada?: boolean;
+}
+const { cobertura, detallada = false } = Astro.props;
+
+const ETIQUETAS: Record<string, string> = {
+  SOBERANO: 'Soberano',
+  IPAB: 'IPAB',
+  PROSOFIPO: 'PROSOFIPO',
+  NINGUNO: 'Sin cobertura',
+};
+
+const etiqueta = ETIQUETAS[cobertura.tipo] ?? cobertura.tipo;
+const importe = cobertura.sin_limite
+  ? 'Sin límite'
+  : cobertura.sin_cobertura
+    ? 'Sin protección'
+    : dineroCompacto(cobertura.limite_mxn);
+---
+
+{
+  detallada ? (
+    <span class="detallada">
+      <strong>{etiqueta}</strong>
+      <span class:list={['importe', cobertura.sin_cobertura && 'nulo']}>{importe}</span>
+    </span>
+  ) : (
+    <span class:list={['sello', cobertura.sin_cobertura && 'nulo']}>
+      {etiqueta} · {importe}
+    </span>
+  )
+}
+
+<style>
+  .sello {
+    font-size: 12px;
+    color: var(--texto-tenue);
+  }
+  .detallada {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .detallada strong {
+    font-family: var(--fuente-titulo);
+  }
+  .importe {
+    font-variant-numeric: tabular-nums;
+    color: var(--positivo);
+  }
+  .nulo {
+    color: var(--aviso);
+  }
+</style>

@@ -1,0 +1,228 @@
+---
+/**
+ * Los filtros de §7.
+ *
+ * Es un `<form method="get">` de verdad, no una isla. Sin JavaScript funciona
+ * entero —se envía y el servidor devuelve la página filtrada— y con
+ * JavaScript un script lo mejora: los `<select multiple>` se convierten en los
+ * desplegables con casillas del diseño y el envío es automático al cambiar.
+ *
+ * Esa decisión es la que hace que `/?plazo=91&seguro=IPAB` sea una URL
+ * indexable con contenido real detrás, en vez de un estado de cliente que
+ * Google ve vacío.
+ */
+import type { FiltrosMercado } from '~/lib/tipos';
+
+interface Props {
+  filtros: FiltrosMercado;
+  total: number;
+}
+const { filtros, total } = Astro.props;
+
+const PLAZOS = [
+  ['TODOS', 'Todos'],
+  ['VISTA', 'A la vista'],
+  ['28', '28 días'],
+  ['91', '91 días'],
+  ['182', '182 días'],
+  ['364', '364 días'],
+  ['365+', '365 días o más'],
+];
+
+const SEGUROS = [
+  ['SOBERANO', 'Soberano (CETES)'],
+  ['IPAB', 'IPAB (bancos)'],
+  ['PROSOFIPO', 'PROSOFIPO (SOFIPOs)'],
+];
+
+const CATEGORIAS = [
+  ['GOBIERNO', 'Gobierno'],
+  ['BANCO_DIGITAL', 'Banco digital'],
+  ['SOFIPO', 'SOFIPO'],
+];
+
+const ORDENES = [
+  ['ten', 'Mejor TEN'],
+  ['tasa_nominal', 'Tasa nominal'],
+  ['gat', 'GAT'],
+  ['cobertura', 'Cobertura'],
+];
+---
+
+<form class="filtros" method="get" action="/" data-filtros>
+  <div class="campo">
+    <label for="f-plazo">Plazo</label>
+    <select id="f-plazo" name="plazo" class="control">
+      {
+        PLAZOS.map(([valor, etiqueta]) => (
+          <option value={valor} selected={(filtros.plazo ?? 'TODOS') === valor}>
+            {etiqueta}
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <div class="campo" data-multi="seguro">
+    <label for="f-seguro">Seguro de depósito</label>
+    <select id="f-seguro" name="seguro" class="control" multiple size="3">
+      {
+        SEGUROS.map(([valor, etiqueta]) => (
+          <option value={valor} selected={filtros.seguros.includes(valor as never)}>
+            {etiqueta}
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <div class="campo" data-multi="categoria">
+    <label for="f-categoria">Categoría</label>
+    <select id="f-categoria" name="categoria" class="control" multiple size="3">
+      {
+        CATEGORIAS.map(([valor, etiqueta]) => (
+          <option value={valor} selected={filtros.categorias.includes(valor as never)}>
+            {etiqueta}
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <div class="campo">
+    <label for="f-monto">Monto a invertir</label>
+    <input
+      id="f-monto"
+      name="monto"
+      class="control"
+      type="text"
+      inputmode="numeric"
+      placeholder="Ej. 10,000"
+      value={filtros.monto ?? ''}
+      data-miles
+    />
+  </div>
+
+  <div class="campo">
+    <label for="f-orden">Ordenar por</label>
+    <select id="f-orden" name="orden" class="control">
+      {
+        ORDENES.map(([valor, etiqueta]) => (
+          <option value={valor} selected={filtros.orden === valor}>
+            {etiqueta}
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <label class="toggle" data-toggle>
+    <input type="checkbox" name="sin_banderas" value="true" checked={filtros.sinBanderas} />
+    <span>Solo sin banderas</span>
+  </label>
+
+  <button type="submit" class="aplicar" data-aplicar>Aplicar filtros</button>
+</form>
+
+<p class="conteo etiqueta" aria-live="polite">{total} productos</p>
+
+<style>
+  .filtros {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 4px 0 18px;
+    align-items: end;
+  }
+
+  .campo label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: var(--texto-tenue);
+  }
+
+  .control {
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 12px;
+    font-size: 14px;
+    color: var(--texto);
+    background: var(--panel);
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-campo);
+  }
+  .control:hover {
+    border-color: rgba(167, 224, 219, 0.45);
+  }
+  select[multiple].control {
+    padding: 4px;
+  }
+  select[multiple].control option {
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 7px 15px;
+    cursor: pointer;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-pastilla);
+    font-family: var(--fuente-titulo);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--texto-tenue);
+    white-space: nowrap;
+  }
+  .toggle:hover {
+    border-color: var(--linea-fuerte);
+  }
+  .toggle:has(input:checked) {
+    border-color: rgba(95, 176, 201, 0.6);
+    background: var(--gradiente-acento);
+    color: var(--texto-fuerte);
+  }
+  .toggle input {
+    accent-color: var(--marca-300);
+  }
+
+  .aplicar {
+    min-height: 36px;
+    padding: 7px 16px;
+    cursor: pointer;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-pastilla);
+    background: transparent;
+    color: var(--texto);
+    font-family: var(--fuente-titulo);
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .aplicar:hover {
+    border-color: var(--linea-fuerte);
+  }
+  /* Con JavaScript el formulario se envía solo al cambiar cualquier filtro,
+     así que el botón sobra. Sin él es imprescindible. */
+  :global(html.js) .aplicar {
+    display: none;
+  }
+
+  .conteo {
+    margin: 0 0 12px;
+  }
+
+  @media (min-width: 720px) {
+    .filtros {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+    }
+    .campo {
+      min-width: 150px;
+    }
+  }
+</style>

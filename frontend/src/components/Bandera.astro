@@ -1,0 +1,71 @@
+---
+/**
+ * Una bandera como pastilla.
+ *
+ * Lleva el tipo escrito, no sólo el color: quien no distingue el amarillo del
+ * rojo tiene que poder leer qué pasa. El motivo completo va en `title` y, en
+ * el detalle de la institución, en la tarjeta misma.
+ */
+import type { Bandera } from '~/lib/tipos';
+
+interface Props {
+  bandera: Bandera;
+  compacta?: boolean;
+}
+const { bandera, compacta = false } = Astro.props;
+
+const ETIQUETAS: Record<string, string> = {
+  IMOR: 'Morosidad',
+  ICAP: 'Capitalización',
+  NICAP: 'Nivel de capital',
+  COBERTURA_CARTERA: 'Cobertura de cartera',
+  APALANCAMIENTO: 'Apalancamiento',
+  NO_RECOMENDABLE: 'No recomendable',
+  RED_FLAG_TASA: 'Tasa sobre mercado',
+  GAT_INCONSISTENTE: 'GAT inconsistente',
+  SIN_COBERTURA: 'Sin seguro de depósito',
+};
+
+const etiqueta = ETIQUETAS[bandera.tipo] ?? bandera.tipo;
+const roja = bandera.severidad === 'ROJA';
+---
+
+<span
+  class:list={['pastilla', roja ? 'roja' : 'amarilla', compacta && 'compacta']}
+  title={bandera.motivo}
+>
+  <i aria-hidden="true"></i>
+  <span class="solo-lectores">Bandera {roja ? 'roja' : 'amarilla'}:</span>
+  {etiqueta}
+</span>
+
+<style>
+  .pastilla {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: var(--radio-pastilla);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .compacta {
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+  .pastilla i {
+    width: 6px;
+    height: 6px;
+    flex: none;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .amarilla {
+    color: var(--aviso);
+    background: var(--aviso-fondo);
+  }
+  .roja {
+    color: var(--negativo);
+    background: var(--negativo-fondo);
+  }
+</style>
