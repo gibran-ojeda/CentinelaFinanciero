@@ -58,11 +58,18 @@ def test_imor_above_the_alert_threshold_is_red(imor: str, umbrales: UmbralesBand
 
 
 def test_imor_flag_explains_itself_in_plain_language(umbrales: UmbralesBanderas) -> None:
-    """§10: son señales orientativas, así que hay que decir qué significan."""
+    """§10: son señales orientativas, así que hay que decir qué significan.
+
+    Y decirlo del indicador, no de la institución: el motivo explica qué
+    implica una morosidad en ese rango, sin afirmar como hecho un estado de
+    la institución deducido de un solo cociente. Ver los criterios de
+    redacción que cierran D5.
+    """
     bandera = evaluar_imor(_indicadores(imor=Decimal("9.0")), umbrales)
     assert bandera is not None
     assert "9.0%" in bandera.motivo
-    assert "cobrar lo que prestó" in bandera.motivo
+    assert "cobrar lo prestado" in bandera.motivo
+    assert "La institución tiene" not in bandera.motivo
 
 
 def test_flags_carry_the_period_of_the_underlying_data(umbrales: UmbralesBanderas) -> None:

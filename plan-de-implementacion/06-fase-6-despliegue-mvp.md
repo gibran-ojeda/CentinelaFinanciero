@@ -85,10 +85,10 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 4. Añadir el site block al Caddyfile de NarrativeAlpha, recargar Caddy y verificar que **ambos** dominios responden.
 5. Escribir el workflow de CD con los gates (incluido el de no-interferencia); probar un deploy completo y un rollback simulado.
 6. Programar backups y probar un restore en local desde el dump.
-7. Ejecutar el primer ciclo del runbook manual completo (buscar tasas → CSV → import → verificar en sitio).
+7. **Antes de apuntar el DNS**, ejecutar el primer ciclo del runbook manual completo (revisar las URLs oficiales → CSV → import → verificar en sitio). Va **antes** del lanzamiento y no después: con el modo demo apagado, el catálogo verificado son cinco filas de CETES y BONDDIA, y un comparador de SOFIPOs y bancos que no muestra ninguna de las dos cosas no sirve. Lo que no se logre verificar contra la página de la propia institución se queda en `PENDIENTE_REVISION` y lo recupera la fase 9.
 8. Configurar el uptime monitor.
 9. **Apagar el modo demo**: `python -m cli config set mostrar_datos_demo false --motivo "lanzamiento público"`. Mientras esté encendido, el comparador publica las instituciones ilustrativas (◆) y las tasas en `PENDIENTE_REVISION` — marcadas, pero publicadas. Un sitio abierto a internet sólo debe servir lo verificado. Verificar después que `/api/v1/meta/frescura` devuelve `modo_demo: false`.
-10. Resolver **D5** (revisión de redacción legal de banderas y disclaimers) — bloqueante para el lanzamiento público, no para tener el stack corriendo.
+10. **D5 está resuelta** (ver [criterios de redacción](../docs/criterios-de-redaccion.md)). Lo que queda de ella en esta fase es publicar `/aviso-legal` y `/privacidad` con el `contacto@` ya operativo, y releer los cinco criterios antes de difundir el sitio.
 
 ## Criterios de aceptación
 
@@ -100,9 +100,10 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 - [ ] Un push a `main` despliega automáticamente y los gates se ejecutan; un gate en rojo aborta el deploy.
 - [ ] Rollback ejecutado al menos una vez como simulacro, documentado.
 - [ ] Restore desde backup probado en local.
-- [ ] Primer ciclo de actualización manual semanal completado de punta a punta; la fecha de frescura en el sitio lo refleja.
-- [ ] Disclaimers y redacción de banderas revisados (D5 cerrada) — **antes de difundir el sitio públicamente**.
+- [ ] Primer ciclo de actualización manual semanal completado de punta a punta **antes del lanzamiento**; la fecha de frescura en el sitio lo refleja.
+- [ ] `/aviso-legal` y `/privacidad` publicadas y enlazadas desde el pie; `contacto@centinelafinanciero.lat` recibe correo.
+- [ ] Cada tasa del sitio enlaza a la página de la que se leyó.
 
 ## Dependencias
 
-Fases 4 y 5 (API + frontend funcionando en local). Acceso SSH al VPS de NarrativeAlpha y permiso para editar su Caddyfile. Decisión D5 pendiente (bloquea solo el lanzamiento público).
+Fases 4 y 5 (API + frontend funcionando en local). Acceso SSH al VPS de NarrativeAlpha y permiso para editar su Caddyfile. D1b y D5 resueltas.

@@ -73,7 +73,7 @@ Se descarta el scraping clásico por selectores CSS. Toda tasa de origen LLM fue
 | D2 | API key de DeepSeek y límite diario del CostTracker | **Resuelta** — límite duro **$1 USD/día** (`LLM_COST_DAILY_LIMIT_USD=1.0`) | 09 |
 | D3 | Alcance del seed inicial | **Resuelta** — catálogo **completo de F1**: top 10 SOFIPOs + top 5 neobancos + CETES + BONDDIA | 02 |
 | D4 | Cola de revisión de tasas: ¿CLI o UI admin? | **Resuelta** — **CLI + endpoints admin** al inicio; mini-UI solo si el volumen de revisión lo justifica | 09 |
-| D5 | Revisión de redacción legal de banderas y disclaimers antes del lanzamiento público | **Abierta** — bloqueante para cerrar la fase 6 (el resto de la fase puede avanzar) | 06 |
+| D5 | Revisión de redacción legal de banderas y disclaimers antes del lanzamiento público | **Resuelta para el MVP** — se cierra con [criterios de redacción escritos](../docs/criterios-de-redaccion.md), aviso legal y aviso de privacidad propios, y enlace a la fuente en cada dato. Sin revisión legal profesional: es una aceptación de riesgo documentada, válida mientras el sitio siga siendo gratuito, sin patrocinio, sin intermediación y sin recomendación personalizada. Los **disparadores de reapertura** están en ese documento | 06 |
 | D6 | Frontend | **Resuelta** — Astro SSR + islas React (SEO primero) | 05 |
 | D7 | Nomenclatura de métrica de rendimiento | **Resuelta** — GAT (corrección aplicada al foundation v1.3); NICAP queda como indicador de salud | todas |
 

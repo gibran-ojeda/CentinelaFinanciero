@@ -70,8 +70,8 @@ def evaluar_imor(
             TipoBandera.IMOR,
             Severidad.ROJA,
             f"Morosidad de {imor}%, por encima del {umbrales.imor_roja}% de alerta. "
-            f"La institución tiene problemas para cobrar lo que prestó, y eso "
-            f"presiona su liquidez y su capital.",
+            f"Una morosidad en ese rango indica dificultad para cobrar lo prestado "
+            f"y presiona liquidez y capital.",
         )
     if imor >= umbrales.imor_amarilla:
         return _bandera(
@@ -97,9 +97,12 @@ def evaluar_cobertura_cartera(
             indicadores,
             TipoBandera.COBERTURA_CARTERA,
             Severidad.ROJA,
+            # Sin adjetivos sobre la magnitud: el umbral vive en el ConfigStore
+            # y se mueve. Los dos números dicen lo mismo y siguen siendo
+            # ciertos cuando alguien lo cambie.
             f"Cobertura de cartera vencida del {icor}%, por debajo del "
-            f"{umbrales.cobertura_roja}%. No tiene reservas para cubrir ni la mitad "
-            f"larga de lo que ya está vencido.",
+            f"{umbrales.cobertura_roja}%. Sus reservas cubren esa fracción de la "
+            f"cartera que ya está vencida.",
         )
     if icor < umbrales.cobertura_amarilla:
         return _bandera(
@@ -373,8 +376,8 @@ def evaluar_no_recomendable(
         TipoBandera.NO_RECOMENDABLE,
         Severidad.ROJA,
         f"Combinación de riesgo: morosidad del {imor}%, capitalización del {icap}% y "
-        f"crecimiento de captación del {crecimiento}%. Es el patrón de una "
-        f"institución que capta para cubrir deudas previas.",
+        f"crecimiento de captación del {crecimiento}%. Es un patrón que puede "
+        f"corresponder a una institución que capta para cubrir deudas previas.",
         compuesta=True,
     )
 
