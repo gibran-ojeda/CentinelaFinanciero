@@ -55,26 +55,27 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
   ```
 
   La recarga se hace **sin downtime de NarrativeAlpha**: `docker exec narrativealpha-caddy caddy reload --config /etc/caddy/Caddyfile`. Documentar este acoplamiento entre repos en ambos lados (nota en el Caddyfile de NarrativeAlpha apuntando a este archivo).
-- `docker-compose.yml` + `docker-compose.prod.yml` de Centinela — servicios `web`, `api`, `scheduler`, `db`, `redis` con la asignación de puertos de arriba, healthchecks, `restart: unless-stopped`, logging `json-file` rotado (10m × 3) y **límites de memoria** por servicio (el VPS ya sostiene 9 contenedores).
+- [`docs/despliegue.md`](../docs/despliegue.md) — prerrequisitos, secretos, site block de Caddy, rollback, respaldos y las trampas de este VPS.
+- `docker-compose.yml` + [`docker-compose.prod.yml`](../docker-compose.prod.yml) de Centinela — servicios `web`, `api`, `scheduler`, `db`, `redis` con la asignación de puertos de arriba, healthchecks, `restart: unless-stopped`, logging `json-file` rotado (10m × 3) y **límites de memoria** por servicio (el VPS ya sostiene 9 contenedores).
 - **Postgres afinado para co-hosting**: `shared_buffers` y `work_mem` modestos, `max_connections` acotado — el catálogo del MVP es pequeño y la RAM se comparte con NarrativeAlpha.
-- `.github/workflows/deploy.yml` — CD en push a `main`, con directorio propio en el VPS (`~/centinela-financiero`, **nunca** el de NarrativeAlpha):
-  1. SSH → `git fetch && git reset --hard origin/main` (determinista).
-  2. Sincronizar secretos desde GitHub Secrets al `.env`.
-  3. `docker compose -p centinela build` + `up -d`.
-  4. `alembic upgrade head`.
-  5. **Gates duros** (abortan el deploy si fallan):
-     - Migraciones aplicadas sin error.
-     - Deriva de esquema: `python -m core.schema_check` deriva el contrato desde el metadata del ORM (no de una lista a mano) y lo compara contra la BD real.
-     - Smoke tests HTTP: `/healthz` de la API, home del sitio (200 + contenido esperado), `GET /api/v1/meta/frescura`.
-     - **Verificación de no-interferencia**: los contenedores `narrativealpha-*` siguen `healthy` y `https://narrative-alpha.cloud` responde 200 después del deploy.
-  6. Recarga de Caddy solo si el site block cambió.
-  7. Rollback documentado: re-deploy del commit anterior + `alembic downgrade` si la migración fue el problema.
-- **Backups**: `pg_dump` diario del contenedor `centinela-db` con nombre y retención propios (14 días), sin colisionar con los de NarrativeAlpha; copia fuera del VPS; restore probado al menos una vez.
-- `docs/runbook-actualizacion-manual.md` — ciclo semanal operativo:
-  1. Revisar las tasas publicadas por cada institución del catálogo (URLs de `seeds/fuentes_tasas.yaml`).
-  2. Actualizar `seeds/tasas.csv` con tasa, fecha del dato y URL fuente.
-  3. `python -m cli tasas import` (en el VPS o en local contra prod vía túnel SSH).
-  4. Verificar en el sitio que la fecha de actualización cambió.
+- [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — CD en push a `main`, con directorio propio en el VPS (`~/centinela-financiero`, **nunca** el de NarrativeAlpha). La lógica vive en [`scripts/desplegar.sh`](../scripts/desplegar.sh) y [`scripts/gates.sh`](../scripts/gates.sh) y viaja por stdin, no en el YAML: así se lee y se corre fuera de un workflow, y los secretos no acaban en la línea de comandos del proceso remoto.
+  1. `git fetch && git reset --hard <ref>` (determinista).
+  2. Regenerar `.env` desde GitHub Secrets.
+  3. `build` + `up -d` con el overlay de producción.
+  4. Esperar a que la API esté `healthy`; si no llega, volcar sus logs y abortar.
+  5. `alembic upgrade head`.
+  6. **Gates duros** (abortan el deploy si fallan):
+     - Deriva de esquema: `python -m core.schema_check` deriva el contrato desde el metadata del ORM (no de una lista a mano) y lo compara contra la BD real, además de comprobar que esté en el head.
+     - Humo HTTP: `/healthz`, `GET /api/v1/meta/frescura`, y la portada **con filas** — un 200 con la tabla vacía es justo el fallo que hay que ver — más que la canónica apunte al dominio y no al loopback.
+     - **No-interferencia**: los contenedores `narrativealpha-*` siguen `healthy` y `https://narrative-alpha.cloud` responde 200 después del deploy.
+     - TLS público: `https://centinelafinanciero.lat` responde 200.
+  7. Rollback: `workflow_dispatch` con el SHA anterior en `ref`, más `alembic downgrade -1` a mano si la migración fue el problema.
+- **Respaldos**: [`scripts/respaldar.sh`](../scripts/respaldar.sh) — `pg_dump` diario del contenedor `centinela-db` con nombre y retención propios (14 días), sin colisionar con los de NarrativeAlpha; copia fuera del VPS por `scp` en el ciclo semanal; [`scripts/restaurar.sh`](../scripts/restaurar.sh) restaura en un Postgres desechable y comprueba que los datos estén.
+- [`docs/runbook-actualizacion-manual.md`](../docs/runbook-actualizacion-manual.md) — ciclo semanal operativo, apoyado en `python -m cli tasas pendientes`:
+  1. `cli tasas pendientes` lista lo que no puede salir al sitio, con la URL oficial de cada institución.
+  2. Abrir cada página —ocho necesitan navegador de verdad— y anotar tasa, plazo, GAT y fecha.
+  3. Actualizar `seeds/tasas.csv` y correr `python -m cli tasas import`.
+  4. Verificar en el sitio que la fecha cambió y que el enlace a la fuente lleva a donde debe.
 - Monitoreo mínimo: uptime monitor externo sobre el dominio y revisión de `job_runs` incluida en el runbook.
 
 ## Tareas

@@ -109,7 +109,10 @@ def _head_del_disco() -> str | None:
     raiz = _raiz_alembic()
     config = Config(str(raiz / "alembic.ini"))
     config.set_main_option("script_location", str(raiz / "alembic"))
-    return ScriptDirectory.from_config(config).get_current_head()
+    head = ScriptDirectory.from_config(config).get_current_head()
+    # Explícito porque el mypy del pre-commit no instala alembic y ahí
+    # `get_current_head()` es `Any`; en el entorno de desarrollo sí lo tipa.
+    return str(head) if head is not None else None
 
 
 def _comparar(conn: Connection, reporte: ReporteEsquema) -> None:
