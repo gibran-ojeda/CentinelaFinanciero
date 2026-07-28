@@ -1,0 +1,82 @@
+# Overlay de producción. Se aplica **encima** del compose base:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Sólo contiene lo que cambia respecto a desarrollo. Dos cosas, y las dos
+# existen por la misma razón: Centinela comparte VPS con NarrativeAlpha, que ya
+# sostiene nueve contenedores. Un servicio de aquí que se coma la RAM no se
+# lleva por delante a Centinela: se lleva al vecino.
+#
+#   1. Límites de memoria por servicio.
+#   2. Postgres afinado para convivir, no para tener la máquina para él.
+
+services:
+  db:
+    # Los defaults de postgres:16 asumen una máquina dedicada. Estos valores
+    # son para un catálogo pequeño —decenas de instituciones, cientos de
+    # productos, miles de observaciones de tasa— consultado por una API con
+    # cache en Redis delante. La medición de la tarea 1 de la fase 06 (`free -h`)
+    # manda sobre estos números.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      # 50 y no 100: cinco procesos con pools de 10+5. Un max_connections alto
+      # no da capacidad, sólo permite que el sobrecoste por conexión agote la
+      # RAM antes de que nadie se entere.
+      - -c
+      - max_connections=50
+      - -c
+      - log_min_duration_statement=1000
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  redis:
+    # Cache y locks, no almacén: si se llena, lo que toca es tirar lo más viejo
+    # y no que el kernel elija por nosotros a quién matar.
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 96mb
+      - --maxmemory-policy
+      - allkeys-lru
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  api:
+    environment:
+      ENVIRONMENT: prod
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  scheduler:
+    environment:
+      ENVIRONMENT: prod
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  web:
+    environment:
+      # Obligatoria en producción: sin ella la canónica y el sitemap anuncian
+      # el loopback. El despliegue la inyecta desde los secretos.
+      SITE_URL: ${SITE_URL:?SITE_URL es obligatoria en producción}
+    deploy:
+      resources:
+        limits:
+          memory: 256M
