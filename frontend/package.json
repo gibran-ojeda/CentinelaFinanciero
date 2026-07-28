@@ -5,7 +5,7 @@
   "private": true,
   "description": "Frontend público de Centinela Financiero: Astro SSR con islas React",
   "scripts": {
-    "dev": "astro dev --host 127.0.0.1 --port 3010",
+    "dev": "astro dev --host 127.0.0.1 --port 8011",
     "build": "astro build",
     "preview": "node ./dist/server/entry.mjs",
     "check": "astro check"
