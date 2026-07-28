@@ -19,7 +19,7 @@ from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from core.schema_check import comprobar_esquema
+from core.schema_check import _raiz_alembic, comprobar_esquema
 
 pytestmark = pytest.mark.requires_docker
 
@@ -142,3 +142,24 @@ async def test_alembic_version_is_not_reported_as_an_extra_table() -> None:
     reporte = await comprobar_esquema()
 
     assert reporte.tablas_sobrantes == []
+
+
+def test_the_alembic_directory_is_resolved_from_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cómo encuentra las migraciones cuando el paquete está instalado.
+
+    En la imagen, `core` vive en `site-packages` y subir dos niveles apunta a
+    `/usr/local/lib/python3.12`, donde no hay ni `alembic/` ni `alembic.ini`.
+    El gate reventaba justo en el único sitio donde tiene que correr, que sólo
+    se ve levantando el contenedor. El `WORKDIR` es `/app`, que es donde la
+    imagen las copia.
+    """
+    (tmp_path / "alembic").mkdir()
+    monkeypatch.chdir(tmp_path)
+    assert _raiz_alembic() == tmp_path
+
+    # Sin `alembic/` en el cwd se cae a la raíz del repo, que es lo que hace
+    # falta al correr desde cualquier subdirectorio en desarrollo.
+    monkeypatch.chdir(tmp_path / "alembic")
+    assert _raiz_alembic() == REPO_ROOT

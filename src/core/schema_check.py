@@ -90,9 +90,23 @@ class ReporteEsquema:
         return "\n".join(lineas)
 
 
+def _raiz_alembic() -> Path:
+    """Dónde vive `alembic/`: primero el directorio de trabajo, luego el repo.
+
+    Instalado, este módulo está en `site-packages`, así que subir dos niveles
+    apunta a `/usr/local/lib/python3.12` y ahí no hay migraciones — el gate
+    reventaba justo en el único sitio donde tiene que correr. En el contenedor
+    el `WORKDIR` es `/app`, que es donde la imagen las copia.
+    """
+    cwd = Path.cwd()
+    if (cwd / "alembic").is_dir():
+        return cwd
+    return Path(__file__).resolve().parents[2]
+
+
 def _head_del_disco() -> str | None:
     """La revisión más reciente de `alembic/versions`, sin tocar la base."""
-    raiz = Path(__file__).resolve().parents[2]
+    raiz = _raiz_alembic()
     config = Config(str(raiz / "alembic.ini"))
     config.set_main_option("script_location", str(raiz / "alembic"))
     return ScriptDirectory.from_config(config).get_current_head()
