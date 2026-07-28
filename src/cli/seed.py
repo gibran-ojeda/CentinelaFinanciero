@@ -46,6 +46,7 @@ from domain.orm import (
 
 log = get_logger(__name__)
 
+
 def _default_seeds_dir() -> Path:
     """Dónde están los catálogos, resuelto en este orden.
 
