@@ -9,6 +9,7 @@
 
 import type { APIRoute } from 'astro';
 import { api } from '~/lib/api';
+import { sitioPublico } from '~/lib/sitio';
 
 export const prerender = false;
 
@@ -18,8 +19,10 @@ const ESTATICAS: [ruta: string, prioridad: string, frecuencia: string][] = [
   ['/metodologia', '0.5', 'monthly'],
 ];
 
-export const GET: APIRoute = async ({ site, url }) => {
-  const base = (site ?? new URL(url.origin)).origin;
+export const GET: APIRoute = async ({ url }) => {
+  // No se usa el `site` de la configuración: es un valor de build, y el dominio
+  // se conoce al desplegar. Ver [sitio.ts](~/lib/sitio).
+  const base = sitioPublico(url);
 
   let instituciones: string[] = [];
   try {

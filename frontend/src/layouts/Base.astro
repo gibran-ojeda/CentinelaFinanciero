@@ -8,6 +8,7 @@
  */
 import Icono from '~/components/Icono.astro';
 import Logo from '~/components/Logo.astro';
+import { urlCanonica } from '~/lib/sitio';
 import '~/styles/tokens.css';
 
 interface Props {
@@ -20,9 +21,7 @@ interface Props {
 
 const { titulo, descripcion, vista, canonica, jsonLd } = Astro.props;
 
-// `PUBLIC_SITE_URL` sí lleva prefijo, así que Vite la expone en el bundle.
-const sitio = import.meta.env.PUBLIC_SITE_URL ?? Astro.url.origin;
-const urlCanonica = canonica ?? new URL(Astro.url.pathname, sitio).href;
+const canonicaFinal = canonica ?? urlCanonica(Astro.url);
 
 const ENLACES = [
   { href: '/', etiqueta: 'Mercado', vista: 'mercado', icono: 'lista' as const },
@@ -38,13 +37,13 @@ const ENLACES = [
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{titulo}</title>
     <meta name="description" content={descripcion} />
-    <link rel="canonical" href={urlCanonica} />
+    <link rel="canonical" href={canonicaFinal} />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Centinela Financiero" />
     <meta property="og:title" content={titulo} />
     <meta property="og:description" content={descripcion} />
-    <meta property="og:url" content={urlCanonica} />
+    <meta property="og:url" content={canonicaFinal} />
     <meta property="og:locale" content="es_MX" />
     <meta name="twitter:card" content="summary" />
 

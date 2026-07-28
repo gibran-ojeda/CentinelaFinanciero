@@ -6,7 +6,11 @@ interface ImportMetaEnv {
   /** Llave de lectura del BFF. Nunca la de admin. */
   readonly API_READ_KEY: string;
   readonly API_TIMEOUT_SECONDS?: string;
-  readonly PUBLIC_SITE_URL?: string;
+  /**
+   * Origen público del sitio. Sin prefijo PUBLIC_ a propósito: se lee de
+   * `process.env` en tiempo de ejecución, no del bundle. Ver `lib/sitio.ts`.
+   */
+  readonly SITE_URL?: string;
 }
 
 interface ImportMeta {
