@@ -48,8 +48,19 @@ const ENLACES = [
     <meta property="og:locale" content="es_MX" />
     <meta name="twitter:card" content="summary" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    {/*
+      Las dos que se usan por encima del pliegue: el cuerpo de la tabla y los
+      títulos. Precargarlas evita el salto de layout de esperar a que el CSS
+      las descubra — el resto de pesos llegan cuando toque.
+    */}
+    <link rel="preload" href="/fuentes/barlow-400.woff2" as="font" type="font/woff2" crossorigin />
+    <link
+      rel="preload"
+      href="/fuentes/barlow-condensed-600.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     {
       /* `is:inline` porque no es un script a procesar sino datos para los
          buscadores: pasarlo por el bundler lo sacaría del <head>. */
