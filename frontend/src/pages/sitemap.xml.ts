@@ -17,6 +17,8 @@ const ESTATICAS: [ruta: string, prioridad: string, frecuencia: string][] = [
   ['/', '1.0', 'daily'],
   ['/calculadora', '0.8', 'weekly'],
   ['/metodologia', '0.5', 'monthly'],
+  ['/aviso-legal', '0.2', 'yearly'],
+  ['/privacidad', '0.2', 'yearly'],
 ];
 
 export const GET: APIRoute = async ({ url }) => {

@@ -1,0 +1,174 @@
+---
+/**
+ * Aviso legal. Cierra la parte visible de D5.
+ *
+ * Vive en el pie y no en la navegación de tres pestañas: el diseño aprobado no
+ * se toca por añadir una página que casi nadie abre y que tiene que estar.
+ *
+ * El texto sigue los criterios de `docs/criterios-de-redaccion.md`. Cambiar
+ * algo aquí sin releerlos es cómo se deshace el cierre de esa decisión.
+ */
+import Base from '~/layouts/Base.astro';
+
+const ACTUALIZADO = '27 de julio de 2026';
+const CONTACTO = 'contacto@centinelafinanciero.lat';
+---
+
+<Base
+  titulo="Aviso legal — Centinela Financiero"
+  descripcion="Qué es y qué no es Centinela Financiero, de dónde salen los datos, y cómo reportar un dato incorrecto."
+  vista="legal"
+>
+  <section>
+    <div class="encabezado">
+      <h1>Aviso <span class="acento">legal.</span></h1>
+      <p class="tenue intro">
+        Última actualización: {ACTUALIZADO}.
+      </p>
+    </div>
+
+    <div class="rejilla">
+      <article class="tarjeta" id="que-es">
+        <h4>Qué es este sitio</h4>
+        <p class="tenue">
+          Centinela Financiero es un comparador informativo de instrumentos de ahorro en
+          México. Reúne tasas publicadas por instituciones financieras e indicadores de
+          salud publicados por la CNBV, los pone en una unidad comparable y muestra de
+          dónde salió cada número y de cuándo es.
+        </p>
+        <p class="tenue-2 nota">
+          Existe porque elegir dónde se ahorra importa más de lo que parece, y porque esa
+          información está pública pero dispersa y en formatos que no se pueden comparar
+          entre sí.
+        </p>
+      </article>
+
+      <article class="tarjeta" id="que-no-es">
+        <h4>Qué no es</h4>
+        <p class="tenue">
+          <strong>No es asesor financiero ni de inversiones</strong>, no es intermediario
+          y no está autorizado ni supervisado como ninguna de esas figuras. Nada de lo
+          publicado aquí constituye una recomendación de inversión ni una oferta de
+          contratar producto alguno.
+        </p>
+        <p class="tenue-2 nota">
+          No capta recursos, no intermedia contrataciones, no cobra a las instituciones
+          listadas y no muestra publicidad ni resultados patrocinados. El orden de la
+          tabla lo decide el criterio que está a la vista y que controla quien la lee.
+        </p>
+        <p class="tenue-2 nota">
+          <strong>No emite dictámenes de solvencia.</strong> Las banderas de salud son
+          señales orientativas calculadas sobre indicadores públicos de la CNBV, que se
+          publican con uno a tres meses de rezago. Cada bandera muestra el periodo del
+          dato que la originó. La ausencia de bandera no es un aval.
+        </p>
+      </article>
+
+      <article class="tarjeta" id="datos">
+        <h4>De dónde salen los datos, y sus límites</h4>
+        <p class="tenue">
+          Las tasas se leen de la página oficial de cada institución; los indicadores de
+          salud, de los boletines del Portafolio de Información de la CNBV; el valor de
+          la UDI y el INPC, del SIE del Banco de México. Cada dato del sitio muestra su
+          fecha y enlaza a la fuente de la que se leyó.
+        </p>
+        <p class="tenue-2 nota">
+          <strong>La información puede contener errores o estar desactualizada.</strong>
+          Las tasas cambian sin aviso y las condiciones de contratación —montos mínimos,
+          comisiones, penalizaciones por retiro anticipado— no están completas aquí.
+          Verifica siempre las condiciones vigentes directamente con la institución antes
+          de contratar. Ese es el uso para el que este sitio está hecho: como punto de
+          partida de tu propia investigación, no como sustituto de ella.
+        </p>
+        <p class="tenue-2 nota">
+          La GAT que se muestra marcada <strong>(equiv.)</strong> es un cálculo propio
+          para poder comparar, no la GAT publicada por la institución.
+        </p>
+      </article>
+
+      <article class="tarjeta" id="responsabilidad">
+        <h4>Responsabilidad</h4>
+        <p class="tenue">
+          El sitio se ofrece tal cual, de forma gratuita y sin garantía sobre la exactitud
+          o vigencia de la información. Quien lo consulta es responsable de las decisiones
+          que tome, y la vía para confirmar cualquier dato es la institución que lo
+          publica.
+        </p>
+        <p class="tenue-2 nota">
+          Los enlaces a sitios de terceros se ofrecen para que puedas verificar en la
+          fuente. No controlamos su contenido ni respondemos por él.
+        </p>
+      </article>
+
+      <article class="tarjeta" id="marcas">
+        <h4>Marcas de terceros</h4>
+        <p class="tenue">
+          Los nombres y denominaciones de las instituciones financieras pertenecen a sus
+          titulares y se usan aquí únicamente para identificarlas dentro de la
+          comparación. Este sitio no está afiliado a ninguna de ellas, no las representa
+          y no cuenta con su patrocinio.
+        </p>
+      </article>
+
+      <article class="tarjeta" id="contacto">
+        <h4>Encontraste un dato incorrecto</h4>
+        <p class="tenue">
+          Escríbenos a <a href={`mailto:${CONTACTO}`}>{CONTACTO}</a> indicando la
+          institución, el producto y la fuente donde aparece el valor correcto. Las
+          correcciones se aplican en el siguiente ciclo de actualización, y antes si el
+          dato es grave.
+        </p>
+        <p class="tenue-2 nota">
+          Es también el canal para una institución que quiera señalar un error sobre sus
+          propios productos.
+        </p>
+      </article>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .encabezado {
+    margin: 8px 0 18px;
+  }
+  .acento {
+    color: var(--marca-200);
+  }
+  .intro {
+    max-width: 64ch;
+  }
+
+  .rejilla {
+    display: grid;
+    gap: 14px;
+  }
+  .tarjeta {
+    padding: 16px;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-tarjeta);
+    background: var(--gradiente-panel);
+    box-shadow: var(--sombra-sm);
+  }
+  .tarjeta h4 {
+    font-size: 20px;
+  }
+  .tarjeta p {
+    font-size: 13px;
+  }
+  .nota {
+    font-size: 12px;
+    margin-bottom: 0;
+  }
+  .nota + .nota {
+    margin-top: 8px;
+  }
+  a {
+    color: var(--marca-200);
+  }
+
+  @media (min-width: 720px) {
+    .rejilla {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+</style>

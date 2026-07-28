@@ -14,7 +14,8 @@ import '~/styles/tokens.css';
 interface Props {
   titulo: string;
   descripcion: string;
-  vista: 'mercado' | 'calculadora' | 'metodologia' | 'institucion';
+  /** `legal` no casa con ninguna pestaña: esas páginas viven en el pie. */
+  vista: 'mercado' | 'calculadora' | 'metodologia' | 'institucion' | 'legal';
   canonica?: string;
   jsonLd?: unknown;
 }
@@ -98,8 +99,9 @@ const ENLACES = [
         </div>
         <nav class="pie-enlaces" aria-label="Secundaria">
           <a href="/metodologia">Metodología</a>
-          <a href="/metodologia#que-no-es">Qué no es Centinela</a>
           <a href="/metodologia#banderas">Banderas de salud</a>
+          <a href="/aviso-legal">Aviso legal</a>
+          <a href="/privacidad">Privacidad</a>
         </nav>
         <p class="tenue-2 pie-fuentes">
           Fuentes: Banco de México y CNBV, complementadas con verificación manual. Cada tasa
