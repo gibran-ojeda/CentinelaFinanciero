@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-El MVP en producción con actualización **manual semanal** de tasas — exactamente la Fase conceptual F1 del foundation. Al cerrar esta fase hay un sitio público en `centinelafinanciero.cloud` con TLS, sirviendo el comparador y la calculadora con el catálogo seed completo, y un runbook para mantener los datos frescos a mano mientras las fases 7–9 automatizan.
+El MVP en producción con actualización **manual semanal** de tasas — exactamente la Fase conceptual F1 del foundation. Al cerrar esta fase hay un sitio público en `centinelafinanciero.lat` con TLS, sirviendo el comparador y la calculadora con el catálogo seed completo, y un runbook para mantener los datos frescos a mano mientras las fases 7–9 automatizan.
 
 **Hosting (decisión D1):** Centinela convive con NarrativeAlpha en el **mismo VPS**, como un stack Docker **completamente independiente** (base de datos, Redis e imagen propias). El único recurso compartido es el **Caddy** del host, que ya ocupa 80/443. Sin PaaS de pago: el despliegue es íntegro en el VPS y el costo marginal del proyecto es ~$0.
 
@@ -46,7 +46,7 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 - **Site block en el Caddyfile compartido** (en el repo de NarrativeAlpha, `docker/caddy/Caddyfile`):
 
   ```
-  centinelafinanciero.cloud {
+  centinelafinanciero.lat {
       encode zstd gzip
       # Stack Centinela: bridge con puerto publicado en loopback.
       # 127.0.0.1 explícito (no `localhost`): puede resolver a ::1 y fallar.
@@ -80,7 +80,7 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 ## Tareas
 
 1. **Antes de nada, verificar capacidad del VPS**: `free -h`, `df -h`, `docker stats`. Si la RAM libre no sostiene un Postgres más, decidir límites o ampliar el VPS — no descubrirlo a mitad del deploy.
-2. Verificar disponibilidad y registrar el dominio `centinelafinanciero.cloud` (sin guion, **propuesto — no confirmado**: el nombre anterior quedó obsoleto con el rebrand, ver D1b) y apuntar el DNS al VPS.
+2. Registrar el dominio `centinelafinanciero.lat` (D1b, resuelta), apuntar el DNS al VPS y activar el reenvío de `contacto@centinelafinanciero.lat` a la bandeja del operador — es el canal de corrección que publica el aviso legal.
 3. Escribir el compose de producción con la asignación de puertos y los límites de memoria; levantar el stack en el VPS **sin** tocar Caddy todavía y verificar por túnel SSH que el sitio responde en `127.0.0.1:8011`.
 4. Añadir el site block al Caddyfile de NarrativeAlpha, recargar Caddy y verificar que **ambos** dominios responden.
 5. Escribir el workflow de CD con los gates (incluido el de no-interferencia); probar un deploy completo y un rollback simulado.
@@ -92,7 +92,7 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 
 ## Criterios de aceptación
 
-- [ ] `https://centinelafinanciero.cloud` responde con TLS válido; la API interna (8010) no es alcanzable desde internet.
+- [ ] `https://centinelafinanciero.lat` responde con TLS válido; la API interna (8010) no es alcanzable desde internet.
 - [ ] `mostrar_datos_demo` está en `false`: ninguna institución ◆ ni ninguna tasa sin verificar aparece en el sitio público.
 - [ ] `https://narrative-alpha.cloud` sigue respondiendo 200 y todos los contenedores `narrativealpha-*` siguen `healthy` — cero regresión en el vecino.
 - [ ] Ningún puerto de Centinela colisiona con los de NarrativeAlpha (verificar con `ss -tlnp`).

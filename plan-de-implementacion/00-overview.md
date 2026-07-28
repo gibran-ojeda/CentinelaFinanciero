@@ -69,7 +69,7 @@ Se descarta el scraping clásico por selectores CSS. Toda tasa de origen LLM fue
 | # | Decisión | Estado | Afecta a |
 |---|---|---|---|
 | D1 | Hosting | **Resuelta** — **co-hosting en el VPS de NarrativeAlpha**, aislado en su propio stack Docker (proyecto `centinela`, contenedores y volúmenes con prefijo propio, puertos distintos). Sin PaaS de pago — todo en el VPS. Implicaciones en la fase 06 | 06 |
-| D1b | Dominio | **Reabierta por el rebrand** — `brujulafinanciera.cloud` quedó obsoleto al renombrar el proyecto. Propuesto: **`centinelafinanciero.cloud`** (sin guion), pendiente de verificar disponibilidad y registrar. Bloquea el paso 2 de la fase 06 | 06 |
+| D1b | Dominio | **Resuelta** — **`centinelafinanciero.lat`** (sin guion). El `.cloud` que se propuso al reabrir la decisión por el rebrand quedó descartado. Pendiente sólo de compra y DNS: paso 2 de la fase 06 | 06 |
 | D2 | API key de DeepSeek y límite diario del CostTracker | **Resuelta** — límite duro **$1 USD/día** (`LLM_COST_DAILY_LIMIT_USD=1.0`) | 09 |
 | D3 | Alcance del seed inicial | **Resuelta** — catálogo **completo de F1**: top 10 SOFIPOs + top 5 neobancos + CETES + BONDDIA | 02 |
 | D4 | Cola de revisión de tasas: ¿CLI o UI admin? | **Resuelta** — **CLI + endpoints admin** al inicio; mini-UI solo si el volumen de revisión lo justifica | 09 |
