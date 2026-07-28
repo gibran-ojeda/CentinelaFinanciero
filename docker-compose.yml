@@ -138,11 +138,18 @@ services:
       API_BASE_URL: http://api:8000
       API_READ_KEY: ${API_READ_KEY:-}
       API_TIMEOUT_SECONDS: ${API_TIMEOUT_SECONDS:-10}
-      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://127.0.0.1:3010}
+      # Origen público: alimenta la canónica, el sitemap y el robots. Se lee en
+      # tiempo de ejecución (no lleva prefijo PUBLIC_ para que Vite no la
+      # hornee en el build). En producción: https://centinelafinanciero.lat
+      SITE_URL: ${SITE_URL:-http://127.0.0.1:8011}
     ports:
       # Como el resto: sólo en loopback. En el VPS lo alcanza el Caddy
       # compartido; a internet no se expone nada directamente (§14).
-      - "127.0.0.1:3010:3000"
+      #
+      # 8011 no es arbitrario: es la asignación verificada contra los puertos
+      # que NarrativeAlpha ya ocupa, y el que apunta su site block
+      # (`reverse_proxy 127.0.0.1:8011`). Cambiarlo aquí rompe el edge.
+      - "127.0.0.1:8011:3000"
     depends_on:
       api:
         condition: service_healthy

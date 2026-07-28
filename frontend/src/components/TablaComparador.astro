@@ -99,7 +99,22 @@ function coberturaCorta(fila: FilaComparador): string {
             {fila.banderas.length === 0 && <span class="tenue-2">—</span>}
           </span>
           <span class="fecha tenue-2" role="cell">
-            {fecha(fila.procedencia.fecha_dato)}
+            {/*
+              La fecha enlaza a la página de la que se leyó la tasa. No añade
+              columna ni cambia el layout: es el mismo texto, con destino.
+            */}
+            {fila.procedencia.fuente_url ? (
+              <a
+                href={fila.procedencia.fuente_url}
+                target="_blank"
+                rel="nofollow noopener"
+                title={`Ver esta tasa en la fuente (${fila.procedencia.fuente})`}
+              >
+                {fecha(fila.procedencia.fecha_dato)}
+              </a>
+            ) : (
+              fecha(fila.procedencia.fecha_dato)
+            )}
             <MarcaDato verificada={fila.procedencia.verificada} />
           </span>
         </div>
@@ -163,7 +178,19 @@ function coberturaCorta(fila: FilaComparador): string {
             {ETIQUETA_SEGURO[fila.cobertura.tipo]} · {coberturaCorta(fila)}
           </span>
           <span class="tenue-2 tarjeta-fecha">
-            dato: {fecha(fila.procedencia.fecha_dato)}
+            dato:{' '}
+            {fila.procedencia.fuente_url ? (
+              <a
+                href={fila.procedencia.fuente_url}
+                target="_blank"
+                rel="nofollow noopener"
+                title={`Ver esta tasa en la fuente (${fila.procedencia.fuente})`}
+              >
+                {fecha(fila.procedencia.fecha_dato)}
+              </a>
+            ) : (
+              fecha(fila.procedencia.fecha_dato)
+            )}
             <MarcaDato verificada={fila.procedencia.verificada} />
           </span>
         </div>
@@ -271,6 +298,20 @@ function coberturaCorta(fila: FilaComparador): string {
     gap: 2px;
     align-items: flex-start;
     font-size: 12px;
+  }
+  /* Enlace discreto: subrayado punteado en vez de color, para no competir con
+     los datos de la fila. Se declara el color en :hover y no antes. */
+  .fecha a,
+  .tarjeta-fecha a {
+    color: inherit;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+  }
+  .fecha a:hover,
+  .tarjeta-fecha a:hover,
+  .fecha a:focus-visible,
+  .tarjeta-fecha a:focus-visible {
+    color: var(--marca-200);
   }
 
   /* ── Tarjetas ── */

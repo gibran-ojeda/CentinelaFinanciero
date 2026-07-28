@@ -47,3 +47,6 @@ Thumbs.db
 *.dump
 *.sql.gz
 /tmp/
+
+# Estado local de Claude Code (permisos de esta máquina, no del proyecto).
+.claude/

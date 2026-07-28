@@ -8,7 +8,60 @@
  *   #E3F6F5  #A7E0DB  #5FB0C9  #3E6D9C  #2A2F63
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@400;600;700&display=swap');
+/* Fuentes autoalojadas (subset latin, SIL Open Font License 1.1).
+ *
+ * Antes venían de Google con un `@import`, que es el peor caso posible: el
+ * navegador no descubre la petición hasta haber parseado este archivo, así que
+ * son dos viajes en serie antes de poder pintar nada. Lighthouse lo medía en
+ * 1.5 s de recursos que bloquean el render sobre una portada que, por lo demás,
+ * llega entera en el HTML.
+ *
+ * Y había una razón que pesa más que la velocidad: `/privacidad` dice que el
+ * sitio no habla con terceros. Cargar las fuentes de Google le entrega a Google
+ * la IP de cada visitante. Autoalojarlas es lo que hace cierta esa frase.
+ */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fuentes/barlow-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fuentes/barlow-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fuentes/barlow-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fuentes/barlow-condensed-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fuentes/barlow-condensed-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fuentes/barlow-condensed-700.woff2') format('woff2');
+}
 
 :root {
   /* Marca */

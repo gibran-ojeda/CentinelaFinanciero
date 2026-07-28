@@ -13,6 +13,7 @@ el dato es nuevo, y ninguna modifica una anterior.
 from __future__ import annotations
 
 import csv
+import os
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
@@ -45,7 +46,33 @@ from domain.orm import (
 
 log = get_logger(__name__)
 
-DEFAULT_SEEDS_DIR = Path(__file__).resolve().parents[2] / "seeds"
+
+def _default_seeds_dir() -> Path:
+    """Dónde están los catálogos, resuelto en este orden.
+
+    1. `SEEDS_DIR`, si alguien la fija explícitamente.
+    2. `seeds/` bajo el directorio de trabajo. Es el caso del contenedor: la
+       imagen los copia en `/app/seeds` y el `WORKDIR` es `/app`.
+    3. Relativo al paquete, subiendo dos niveles. Sirve en el repo, donde
+       `src/cli/seed.py` cuelga de la raíz.
+
+    El tercero **no** basta por sí solo: instalado, el paquete vive en
+    `site-packages`, así que ese cálculo apunta a `/usr/local/lib/python3.12/
+    seeds` y el `cli seed` del despliegue no encuentra nada que cargar — sin
+    fallar, que es lo peor de todo.
+    """
+    crudo = os.environ.get("SEEDS_DIR", "").strip()
+    if crudo:
+        return Path(crudo)
+    cwd = Path.cwd() / "seeds"
+    if cwd.is_dir():
+        return cwd
+    return Path(__file__).resolve().parents[2] / "seeds"
+
+
+#: Conveniencia para las pruebas, que corren desde la raíz del repo. El código
+#: de producción llama a `_default_seeds_dir()` en cada corrida.
+DEFAULT_SEEDS_DIR = _default_seeds_dir()
 
 
 class SeedError(Exception):
@@ -350,7 +377,13 @@ async def _seed_indicadores(
 
 async def run_seed(seeds_dir: Path | None = None) -> SeedReport:
     """Carga todos los catálogos. Una sola transacción: todo o nada."""
-    directorio = seeds_dir or DEFAULT_SEEDS_DIR
+    # Se resuelve aquí y no al importar: en el contenedor depende del `cwd`.
+    directorio = seeds_dir or _default_seeds_dir()
+    # Que falte un archivo suelto es tolerable —`indicadores.csv` está casi
+    # vacío a propósito— pero que falte el directorio entero no: significa que
+    # la carga no va a hacer nada, y sin esto lo haría anunciando éxito.
+    if not directorio.is_dir():
+        raise SeedError(f"no existe el directorio de semillas: {directorio}")
     report = SeedReport()
 
     async with session_scope() as session:

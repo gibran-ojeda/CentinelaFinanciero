@@ -1,0 +1,97 @@
+# Despliegue a producción.
+#
+# Se dispara en push a `main` y a mano (`workflow_dispatch`), que es también la
+# vía del rollback: se lanza con el SHA anterior en `ref`.
+#
+# El workflow no contiene la lógica: la manda por stdin desde `scripts/`. Así
+# los scripts se leen, se prueban y se corrigen sin tocar YAML, y los secretos
+# viajan por stdin en vez de ir en la línea de comandos del proceso remoto,
+# donde un `ps` los enseñaría.
+#
+# Detalle operativo, rollback y respaldos: docs/despliegue.md
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit o rama a desplegar (para rollback, el SHA anterior)"
+        required: false
+        default: ""
+
+# Un despliegue a la vez, y sin cancelar el que esté corriendo: interrumpir a
+# medio `alembic upgrade` deja la base en un estado que nadie eligió.
+concurrency:
+  group: deploy-produccion
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: desplegar y verificar
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolver la referencia a desplegar
+        id: ref
+        run: |
+          REF="${{ github.event.inputs.ref }}"
+          echo "valor=${REF:-${{ github.sha }}}" >> "$GITHUB_OUTPUT"
+
+      - name: Preparar la llave SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_deploy
+          # El host key se fija por secreto en vez de aceptarlo a ciegas: un
+          # StrictHostKeyChecking=no convierte cualquier secuestro de DNS en
+          # una sesión con nuestras credenciales dentro.
+          printf '%s\n' "${{ secrets.VPS_HOST_KEY }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_deploy ~/.ssh/known_hosts
+
+      - name: Desplegar
+        run: |
+          {
+            echo "REF='${{ steps.ref.outputs.valor }}'"
+            echo "POSTGRES_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}'"
+            echo "API_READ_KEY='${{ secrets.API_READ_KEY }}'"
+            echo "API_ADMIN_KEY='${{ secrets.API_ADMIN_KEY }}'"
+            echo "SITE_URL='${{ secrets.SITE_URL }}'"
+            cat scripts/desplegar.sh
+          } | ssh -i ~/.ssh/id_deploy \
+                "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" 'bash -s'
+
+      - name: Gates
+        run: |
+          # `gates.sh` sale del repo ya actualizado en el VPS, no de este
+          # checkout: se comprueba el commit que se acaba de desplegar con las
+          # comprobaciones de ese mismo commit.
+          {
+            echo "API_READ_KEY='${{ secrets.API_READ_KEY }}'"
+            echo 'cd ~/centinela-financiero && exec bash scripts/gates.sh'
+          } | ssh -i ~/.ssh/id_deploy \
+                "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" 'bash -s'
+
+      - name: Qué hacer si algo de esto falló
+        if: failure()
+        run: |
+          cat <<'AYUDA'
+          El despliegue se detuvo. El VPS quedó en el estado del último paso que pasó.
+
+          Rollback: Actions → deploy → Run workflow, y en `ref` el SHA anterior.
+          Si el problema fue la migración, antes hay que bajarla a mano:
+
+            ssh <vps> 'cd ~/centinela-financiero && \
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+              exec -T api alembic downgrade -1'
+
+          Detalle en docs/despliegue.md.
+          AYUDA
+
+      - name: Borrar la llave
+        if: always()
+        run: rm -f ~/.ssh/id_deploy

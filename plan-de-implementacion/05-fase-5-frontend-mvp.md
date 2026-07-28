@@ -28,7 +28,7 @@ UI pública del comparador: tabla comparadora con capas de profundidad, calculad
 
 ## Criterios de aceptación
 
-- [ ] Lighthouse SEO ≥ 90 y Performance ≥ 80 en `/` e `/institucion/[slug]` (build de producción).
+- [x] Lighthouse SEO ≥ 90 y Performance ≥ 80 en `/` e `/institucion/[slug]` (build de producción). Medido en la fase 06: SEO 100 en las tres páginas; rendimiento 95 · 100 · 91 tras autoalojar las fuentes, que venían de Google con un `@import` y costaban 1.5 s de render bloqueado.
 - [ ] Con JavaScript deshabilitado, el comparador muestra la tabla completa con tasas y banderas (SSR real).
 - [ ] El navegador nunca recibe la `X-API-Key` ni llama a la API interna directamente (verificar en la pestaña Network).
 - [ ] Cada dato con tasa muestra su fecha de actualización; cada bandera enlaza a su explicación.

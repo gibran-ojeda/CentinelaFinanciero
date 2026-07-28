@@ -1,9 +1,10 @@
 import type { APIRoute } from 'astro';
+import { sitioPublico } from '~/lib/sitio';
 
 export const prerender = false;
 
-export const GET: APIRoute = ({ site, url }) => {
-  const base = (site ?? new URL(url.origin)).origin;
+export const GET: APIRoute = ({ url }) => {
+  const base = sitioPublico(url);
 
   // `/api/` es el BFF: son endpoints internos que sólo sirven a las islas de
   // este mismo sitio. Indexarlos no aporta nada y ensucia los resultados.

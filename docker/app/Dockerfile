@@ -23,6 +23,11 @@ RUN pip install --upgrade pip && pip install ".[app]"
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
 
+# Los catálogos semilla también. El ciclo semanal del runbook corre
+# `python -m cli seed` y `python -m cli tasas import` **dentro** del
+# contenedor: sin esto, ahí no hay nada que importar. Son YAML y CSV.
+COPY seeds/ ./seeds/
+
 # Usuario sin privilegios: nada aquí necesita root en runtime.
 RUN useradd --create-home --uid 10001 centinela && chown -R centinela:centinela /app
 USER centinela

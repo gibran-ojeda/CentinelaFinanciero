@@ -44,6 +44,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="valida y reporta sin escribir nada",
     )
+    tasas_sub.add_parser(
+        "pendientes",
+        help="lista de revisión: qué falta verificar para que salga al sitio público",
+    )
 
     config = sub.add_parser("config", help="inspección y ajuste del ConfigStore")
     config_sub = config.add_subparsers(dest="subcomando", required=True)
@@ -77,6 +81,11 @@ async def _run(args: argparse.Namespace) -> int:
             print(report.render())
             return 0
         case "tasas":
+            if args.subcomando == "pendientes":
+                lista = await tasas_module.listar_pendientes()
+                print("Pendientes de verificar contra la fuente oficial:")
+                print(lista.render())
+                return 0
             resultado = await tasas_module.import_csv(args.csv, dry_run=args.dry_run)
             titulo = "Simulación de alta de tasas" if args.dry_run else "Alta de tasas"
             print(f"{titulo}:")

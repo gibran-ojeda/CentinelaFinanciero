@@ -19,11 +19,13 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
+from api.services.tasas_vigentes import tasas_vigentes_por_producto
 from core.db import session_scope
 from core.logging import get_logger
 from domain.enums import EstadoTasa, FuenteTasa
-from domain.orm import Producto, Tasa
+from domain.orm import FuenteTasas, Institucion, Producto, Tasa
 
 log = get_logger(__name__)
 
@@ -166,4 +168,132 @@ async def import_csv(path: Path, *, dry_run: bool = False) -> ImportReport:
     return report
 
 
-__all__ = ["TASA_MAXIMA_PLAUSIBLE", "ImportReport", "ImportError_", "import_csv"]
+# ─── Lista de revisión ────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class ProductoPendiente:
+    """Un producto que no puede salir al sitio público, y por qué."""
+
+    institucion: str
+    producto_slug: str
+    producto_nombre: str
+    tasa_nominal: Decimal | None
+    fecha_dato: date | None
+    fuente_url: str | None
+    motivo: str
+
+
+@dataclass(slots=True)
+class ListaRevision:
+    """La lista de la semana, agrupada por institución.
+
+    `urls_oficiales` viene de `fuentes_tasas`, que es el catálogo curado de
+    páginas por institución. Es lo que hay que abrir para verificar, y no la
+    `fuente_url` que trae la tasa — esa es de donde salió el dato la vez
+    anterior, que muchas veces es justo el problema.
+    """
+
+    pendientes: list[ProductoPendiente] = field(default_factory=list)
+    urls_oficiales: dict[str, list[tuple[str, bool]]] = field(default_factory=dict)
+
+    def render(self) -> str:
+        if not self.pendientes:
+            return "  Nada pendiente: todas las tasas del catálogo están verificadas."
+
+        lineas: list[str] = []
+        # `key=str.casefold`: si no, "kubo.financiero" cae al final de la lista,
+        # detrás de "Ualá", y quien la recorre se lo salta.
+        for institucion in sorted({p.institucion for p in self.pendientes}, key=str.casefold):
+            lineas.append(f"\n  {institucion}")
+            for url, requiere_js in self.urls_oficiales.get(institucion, []):
+                marca = "  [requiere JS: ábrela en el navegador]" if requiere_js else ""
+                lineas.append(f"    → {url}{marca}")
+            if not self.urls_oficiales.get(institucion):
+                lineas.append("    → (sin URL curada en fuentes_tasas.yaml)")
+            for p in sorted(self.pendientes, key=lambda x: x.producto_slug):
+                if p.institucion != institucion:
+                    continue
+                tasa = f"{p.tasa_nominal}%" if p.tasa_nominal is not None else "—"
+                fecha = p.fecha_dato.isoformat() if p.fecha_dato else "—"
+                lineas.append(f"      {p.producto_slug:<26} {tasa:>8}  {fecha:>10}  {p.motivo}")
+
+        total = len(self.pendientes)
+        instituciones = len({p.institucion for p in self.pendientes})
+        lineas.append(
+            f"\n  {total} productos en {instituciones} instituciones. "
+            f"Actualiza seeds/tasas.csv con lo que publique cada página "
+            f"(estado VIGENTE, fuente OFICIAL, la URL de la institución) y corre "
+            f"`python -m cli tasas import seeds/tasas.csv`."
+        )
+        return "\n".join(lineas)
+
+
+async def listar_pendientes() -> ListaRevision:
+    """Qué falta verificar para que el catálogo pueda salir a internet.
+
+    Dos cosas distintas caen aquí y las dos importan: los productos cuya tasa
+    está en `PENDIENTE_REVISION` —hoy leída de un agregador y no de la propia
+    institución— y los que no tienen ninguna tasa. Ambos son invisibles en el
+    sitio público, así que ambos son trabajo de la misma sesión.
+    """
+    lista = ListaRevision()
+
+    async with session_scope() as session:
+        productos = (
+            (
+                await session.execute(
+                    select(Producto)
+                    .options(selectinload(Producto.institucion))
+                    .order_by(Producto.slug)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        vigentes = await tasas_vigentes_por_producto(session, incluir_pendientes=True)
+
+        for producto in productos:
+            tasa = vigentes.get(producto.id)
+            if tasa is not None and tasa.estado is EstadoTasa.VIGENTE:
+                continue
+            lista.pendientes.append(
+                ProductoPendiente(
+                    institucion=producto.institucion.nombre,
+                    producto_slug=producto.slug,
+                    producto_nombre=producto.nombre,
+                    tasa_nominal=tasa.tasa_nominal if tasa else None,
+                    fecha_dato=tasa.fecha_dato if tasa else None,
+                    fuente_url=tasa.fuente_url if tasa else None,
+                    motivo="sin verificar" if tasa else "sin tasa",
+                )
+            )
+
+        interesantes = {p.institucion for p in lista.pendientes}
+        fuentes = (
+            await session.execute(
+                select(FuenteTasas, Institucion.nombre)
+                .join(Institucion, Institucion.id == FuenteTasas.institucion_id)
+                .where(FuenteTasas.activa.is_(True))
+                .order_by(Institucion.nombre, FuenteTasas.url)
+            )
+        ).all()
+        for fuente, nombre in fuentes:
+            if nombre in interesantes:
+                lista.urls_oficiales.setdefault(nombre, []).append(
+                    (fuente.url, fuente.requiere_js)
+                )
+
+    log.info("tasas_pendientes_listadas", productos=len(lista.pendientes))
+    return lista
+
+
+__all__ = [
+    "TASA_MAXIMA_PLAUSIBLE",
+    "ImportReport",
+    "ImportError_",
+    "ListaRevision",
+    "ProductoPendiente",
+    "import_csv",
+    "listar_pendientes",
+]

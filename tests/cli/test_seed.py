@@ -231,5 +231,38 @@ async def test_missing_seed_files_are_tolerated(tmp_path: Path) -> None:
     assert report.total_creados == 0
 
 
+async def test_a_missing_seeds_directory_is_not_tolerated(tmp_path: Path) -> None:
+    """Un archivo suelto que falte se tolera; el directorio entero, no.
+
+    Es la diferencia entre una semilla incompleta y una carga que no hace
+    nada. Sin esto, `cli seed` en un contenedor sin `seeds/` anunciaba éxito
+    con la base vacía — que fue exactamente lo que pasó.
+    """
+    with pytest.raises(SeedError, match="directorio de semillas"):
+        await run_seed(tmp_path / "no-existe")
+
+
 def test_default_seeds_directory_exists() -> None:
     assert (DEFAULT_SEEDS_DIR / "instituciones.yaml").exists()
+
+
+def test_the_seeds_directory_is_resolved_from_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cómo se encuentran los catálogos cuando el paquete está instalado.
+
+    En la imagen, `cli` vive en `site-packages` y subir dos niveles desde el
+    módulo apunta a `/usr/local/lib/python3.12/seeds`, que no existe. Lo que
+    manda es el directorio de trabajo, que en el contenedor es `/app`.
+    """
+    from cli.seed import _default_seeds_dir
+
+    monkeypatch.delenv("SEEDS_DIR", raising=False)
+
+    (tmp_path / "seeds").mkdir()
+    monkeypatch.chdir(tmp_path)
+    assert _default_seeds_dir() == tmp_path / "seeds"
+
+    # Y `SEEDS_DIR` gana sobre todo lo demás.
+    monkeypatch.setenv("SEEDS_DIR", str(tmp_path / "otro"))
+    assert _default_seeds_dir() == tmp_path / "otro"

@@ -8,21 +8,21 @@
  */
 import Icono from '~/components/Icono.astro';
 import Logo from '~/components/Logo.astro';
+import { urlCanonica } from '~/lib/sitio';
 import '~/styles/tokens.css';
 
 interface Props {
   titulo: string;
   descripcion: string;
-  vista: 'mercado' | 'calculadora' | 'metodologia' | 'institucion';
+  /** `legal` no casa con ninguna pestaña: esas páginas viven en el pie. */
+  vista: 'mercado' | 'calculadora' | 'metodologia' | 'institucion' | 'legal';
   canonica?: string;
   jsonLd?: unknown;
 }
 
 const { titulo, descripcion, vista, canonica, jsonLd } = Astro.props;
 
-// `PUBLIC_SITE_URL` sí lleva prefijo, así que Vite la expone en el bundle.
-const sitio = import.meta.env.PUBLIC_SITE_URL ?? Astro.url.origin;
-const urlCanonica = canonica ?? new URL(Astro.url.pathname, sitio).href;
+const canonicaFinal = canonica ?? urlCanonica(Astro.url);
 
 const ENLACES = [
   { href: '/', etiqueta: 'Mercado', vista: 'mercado', icono: 'lista' as const },
@@ -38,18 +38,29 @@ const ENLACES = [
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{titulo}</title>
     <meta name="description" content={descripcion} />
-    <link rel="canonical" href={urlCanonica} />
+    <link rel="canonical" href={canonicaFinal} />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Centinela Financiero" />
     <meta property="og:title" content={titulo} />
     <meta property="og:description" content={descripcion} />
-    <meta property="og:url" content={urlCanonica} />
+    <meta property="og:url" content={canonicaFinal} />
     <meta property="og:locale" content="es_MX" />
     <meta name="twitter:card" content="summary" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    {/*
+      Las dos que se usan por encima del pliegue: el cuerpo de la tabla y los
+      títulos. Precargarlas evita el salto de layout de esperar a que el CSS
+      las descubra — el resto de pesos llegan cuando toque.
+    */}
+    <link rel="preload" href="/fuentes/barlow-400.woff2" as="font" type="font/woff2" crossorigin />
+    <link
+      rel="preload"
+      href="/fuentes/barlow-condensed-600.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     {
       /* `is:inline` porque no es un script a procesar sino datos para los
          buscadores: pasarlo por el bundler lo sacaría del <head>. */
@@ -99,8 +110,9 @@ const ENLACES = [
         </div>
         <nav class="pie-enlaces" aria-label="Secundaria">
           <a href="/metodologia">Metodología</a>
-          <a href="/metodologia#que-no-es">Qué no es Centinela</a>
           <a href="/metodologia#banderas">Banderas de salud</a>
+          <a href="/aviso-legal">Aviso legal</a>
+          <a href="/privacidad">Privacidad</a>
         </nav>
         <p class="tenue-2 pie-fuentes">
           Fuentes: Banco de México y CNBV, complementadas con verificación manual. Cada tasa

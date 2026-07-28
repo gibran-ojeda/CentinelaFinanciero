@@ -1,0 +1,126 @@
+---
+/**
+ * Aviso de privacidad.
+ *
+ * Es corto porque el sitio hace poco: no hay cuentas, ni cookies, ni analítica.
+ * Si algún día se añade cualquiera de las tres, esta página es lo primero que
+ * cambia — y conviene releer los criterios que cerraron D5 antes de hacerlo.
+ */
+import Base from '~/layouts/Base.astro';
+
+const ACTUALIZADO = '27 de julio de 2026';
+const CONTACTO = 'contacto@centinelafinanciero.lat';
+---
+
+<Base
+  titulo="Aviso de privacidad — Centinela Financiero"
+  descripcion="Qué datos recoge Centinela Financiero: ninguno personal, sin cookies ni analítica."
+  vista="legal"
+>
+  <section>
+    <div class="encabezado">
+      <h1>Aviso de <span class="acento">privacidad.</span></h1>
+      <p class="tenue intro">Última actualización: {ACTUALIZADO}.</p>
+    </div>
+
+    <div class="rejilla">
+      <article class="tarjeta">
+        <h4>No recogemos datos personales</h4>
+        <p class="tenue">
+          Este sitio no pide ni almacena nombre, correo, teléfono, RFC, CURP ni ningún
+          otro dato que identifique a quien lo usa. No hay cuentas de usuario ni registro.
+        </p>
+      </article>
+
+      <article class="tarjeta">
+        <h4>Sin cookies ni analítica</h4>
+        <p class="tenue">
+          No se instalan cookies, ni propias ni de terceros. No hay analítica, ni píxeles
+          de seguimiento, ni publicidad. Por eso tampoco verás un banner pidiéndote
+          permiso: no hay nada que consentir.
+        </p>
+        <p class="tenue-2 nota">
+          Lo único que se guarda en tu navegador es la selección de instrumentos que
+          armas para la calculadora, en el almacenamiento local del propio navegador.
+          Nunca sale de tu dispositivo y la borras vaciando los datos del sitio.
+        </p>
+      </article>
+
+      <article class="tarjeta">
+        <h4>Qué pasa con los montos de la calculadora</h4>
+        <p class="tenue">
+          El monto y el plazo que escribes se envían a nuestro servidor porque el cálculo
+          se hace ahí y no en tu navegador — es la única forma de que las cifras salgan
+          de la misma lógica auditada que el resto del sitio. Se usan para responder esa
+          petición y <strong>no se almacenan</strong>.
+        </p>
+        <p class="tenue-2 nota">
+          Un monto por sí solo no identifica a nadie, y no se asocia a ningún
+          identificador de tu persona ni de tu dispositivo.
+        </p>
+      </article>
+
+      <article class="tarjeta">
+        <h4>Registros del servidor</h4>
+        <p class="tenue">
+          Como cualquier servidor web, el nuestro deja registros técnicos de las
+          peticiones que recibe para poder operar y diagnosticar fallas. No se usan para
+          perfilar a nadie ni se comparten con terceros.
+        </p>
+      </article>
+
+      <article class="tarjeta">
+        <h4>Dudas</h4>
+        <p class="tenue">
+          Escribe a <a href={`mailto:${CONTACTO}`}>{CONTACTO}</a>.
+        </p>
+      </article>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .encabezado {
+    margin: 8px 0 18px;
+  }
+  .acento {
+    color: var(--marca-200);
+  }
+  .intro {
+    max-width: 64ch;
+  }
+
+  .rejilla {
+    display: grid;
+    gap: 14px;
+  }
+  .tarjeta {
+    padding: 16px;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-tarjeta);
+    background: var(--gradiente-panel);
+    box-shadow: var(--sombra-sm);
+  }
+  .tarjeta h4 {
+    font-size: 20px;
+  }
+  .tarjeta p {
+    font-size: 13px;
+  }
+  .nota {
+    font-size: 12px;
+    margin-bottom: 0;
+  }
+  .nota + .nota {
+    margin-top: 8px;
+  }
+  a {
+    color: var(--marca-200);
+  }
+
+  @media (min-width: 720px) {
+    .rejilla {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+</style>
