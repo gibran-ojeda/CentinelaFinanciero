@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import func, select
 
 from cli.seed import DEFAULT_SEEDS_DIR, run_seed
-from cli.tasas import ImportError_, import_csv
+from cli.tasas import ImportError_, import_csv, listar_pendientes
 from core.db import session_scope
 from domain.enums import EstadoTasa, FuenteTasa
 from domain.orm import Producto, Tasa
@@ -223,3 +223,61 @@ async def test_defaults_to_manual_and_current(tmp_path: Path) -> None:
     assert tasa is not None
     assert tasa.fuente is FuenteTasa.MANUAL
     assert tasa.estado is EstadoTasa.VIGENTE
+
+
+# ─── Lista de revisión ────────────────────────────────────────
+
+
+async def test_the_review_list_names_what_cannot_be_published() -> None:
+    """Lo que el sitio público no puede mostrar, y por qué en cada caso.
+
+    Dos motivos distintos caen en la misma lista: una tasa que existe pero no
+    se confirmó contra la institución, y un producto sin ninguna tasa. Los dos
+    son invisibles con `mostrar_datos_demo=false`, así que los dos son trabajo
+    de la misma sesión de revisión.
+    """
+    await run_seed()
+    await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
+
+    lista = await listar_pendientes()
+    motivos = {p.motivo for p in lista.pendientes}
+
+    assert motivos == {"sin verificar", "sin tasa"}
+    assert sum(p.motivo == "sin verificar" for p in lista.pendientes) == 30
+
+    # Ninguna de las siete VIGENTE aparece: CETES y BONDDIA salen de fuente
+    # primaria, y las dos ficticias no tienen fuente que verificar.
+    slugs = {p.producto_slug for p in lista.pendientes}
+    assert "cetes-28" not in slugs
+    assert "bonddia" not in slugs
+
+
+async def test_the_review_list_carries_the_official_url_to_open() -> None:
+    """La URL que hay que abrir es la curada, no la de la tasa anterior.
+
+    `fuente_url` dice de dónde salió el dato la última vez —hoy, de un
+    agregador— y eso es justamente lo que se va a corregir. Lo que sirve para
+    verificar es la página de la propia institución.
+    """
+    await run_seed()
+    await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
+
+    lista = await listar_pendientes()
+    urls = lista.urls_oficiales["Finsus"]
+
+    assert [u for u, _ in urls] == ["https://www.finsus.mx/inversion"]
+    # La marca de JavaScript viaja: esa página no se lee con un cliente HTTP
+    # plano y quien revisa tiene que abrirla en el navegador.
+    assert urls[0][1] is True
+
+    rendido = lista.render()
+    assert "https://www.finsus.mx/inversion" in rendido
+    assert "requiere JS" in rendido
+
+
+async def test_an_empty_review_list_says_so() -> None:
+    await run_seed()
+    lista = await listar_pendientes()
+    lista.pendientes.clear()
+
+    assert "Nada pendiente" in lista.render()
