@@ -139,7 +139,6 @@ async def revisar(
     )
 
     motivo = _motivo(extraida, vigente, comparada, diferencia, tolerancia)
-    publica = motivo is None
 
     tasa = Tasa(
         producto_id=producto.id,
@@ -149,13 +148,16 @@ async def revisar(
         fecha_dato=fecha,
         fuente=FuenteTasa.FETCH_DIRIGIDO,
         fuente_url=url,
-        estado=EstadoTasa.VIGENTE if publica else EstadoTasa.PENDIENTE_REVISION,
+        estado=EstadoTasa.VIGENTE if motivo is None else EstadoTasa.PENDIENTE_REVISION,
         notas=extraida.condiciones,
     )
     session.add(tasa)
     await session.flush()
 
-    if publica:
+    # Se ramifica sobre `motivo is None` y no sobre una bandera aparte: el
+    # motivo *es* la razón de no publicar, así que su ausencia y la publicación
+    # son el mismo hecho — y así el tipo queda estrecho más abajo.
+    if motivo is None:
         log.info(
             "revision_publicada",
             producto=producto.slug,

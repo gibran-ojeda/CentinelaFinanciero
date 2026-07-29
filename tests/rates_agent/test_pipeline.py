@@ -190,7 +190,9 @@ async def test_an_unknown_tenor_is_a_catalogue_gap() -> None:
     """
     await _solo_una_fuente()
     modelo = ModeloFalso(
-        tasas=[{"producto": "Plazo 360", "tipo": "PLAZO", "plazo_dias": 360, "tasa_nominal": "8.69"}]
+        tasas=[
+            {"producto": "Plazo 360", "tipo": "PLAZO", "plazo_dias": 360, "tasa_nominal": "8.69"}
+        ]
     )
 
     reporte = await pipeline.correr(
