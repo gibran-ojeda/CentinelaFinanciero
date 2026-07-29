@@ -42,10 +42,27 @@ async def test_a_source_without_data_is_not_out_of_sla(api_lectura: AsyncClient)
 async def test_reports_the_latest_date_and_the_count(api_lectura: AsyncClient) -> None:
     cuerpo = (await api_lectura.get("/api/v1/meta/frescura")).json()
 
+    # Siete: las cinco gubernamentales verificadas y las dos de instituciones
+    # ilustrativas. Las otras treinta del catálogo son de agregador y no cuentan.
     manual = next(f for f in cuerpo["fuentes"] if f["fuente"] == FuenteTasa.MANUAL)
-    assert manual["observaciones"] == 37
+    assert manual["observaciones"] == 7
     assert manual["ultima_actualizacion"] == "2026-07-25"
     assert manual["sla_dias"] == SLA_POR_FUENTE[FuenteTasa.MANUAL]
+
+
+@pytest.mark.usefixtures("catalogo_cargado")
+async def test_the_aggregator_source_is_not_in_the_freshness_report(
+    api_lectura: AsyncClient,
+) -> None:
+    """Este endpoint mide la frescura de lo que se sirve.
+
+    Un dato de agregador no se sirve nunca, así que una fila suya en rojo sería
+    una alarma sobre algo que no llega a ningún usuario.
+    """
+    cuerpo = (await api_lectura.get("/api/v1/meta/frescura")).json()
+
+    assert FuenteTasa.AGREGADOR not in {f["fuente"] for f in cuerpo["fuentes"]}
+    assert FuenteTasa.AGREGADOR not in SLA_POR_FUENTE
 
 
 @pytest.mark.usefixtures("catalogo_cargado")
