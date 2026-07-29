@@ -49,6 +49,24 @@ def build_parser() -> argparse.ArgumentParser:
         "pendientes",
         help="lista de revisión: qué falta verificar para que salga al sitio público",
     )
+    fetch = tasas_sub.add_parser(
+        "fetch",
+        help="lee las páginas de las instituciones y encola lo que cambió",
+    )
+    # El job del VPS corre `--sin-navegador`; la pasada de las páginas con
+    # JavaScript se hace desde local con `--solo-navegador` mientras Chromium
+    # no viva en la imagen. Ver docs/despliegue.md.
+    grupo = fetch.add_mutually_exclusive_group()
+    grupo.add_argument(
+        "--solo-navegador",
+        action="store_true",
+        help="sólo las fuentes que necesitan JavaScript",
+    )
+    grupo.add_argument(
+        "--sin-navegador",
+        action="store_true",
+        help="sólo las fuentes que rinden a un cliente HTTP plano",
+    )
 
     revs = sub.add_parser("revisiones", help="cola de revisión humana de tasas")
     revs_sub = revs.add_subparsers(dest="subcomando", required=True)
@@ -108,6 +126,16 @@ async def _run(args: argparse.Namespace) -> int:
                 print("Pendientes de verificar contra la fuente oficial:")
                 print(lista.render())
                 return 0
+            if args.subcomando == "fetch":
+                reporte = await tasas_module.correr_fetch(
+                    solo_navegador=args.solo_navegador, sin_navegador=args.sin_navegador
+                )
+                print("Lectura de tasas:")
+                print(reporte.render())
+                # Que una fuente falle no es un fallo del comando: se reporta y
+                # la siguiente corrida lo reintenta. Sólo el techo de gasto,
+                # que corta la corrida a medias, merece salida distinta de 0.
+                return 1 if reporte.presupuesto_agotado else 0
             resultado = await tasas_module.import_csv(args.csv, dry_run=args.dry_run)
             titulo = "Simulación de alta de tasas" if args.dry_run else "Alta de tasas"
             print(f"{titulo}:")

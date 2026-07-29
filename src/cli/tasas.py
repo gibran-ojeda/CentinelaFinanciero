@@ -24,8 +24,11 @@ from sqlalchemy.orm import selectinload
 from api.services.tasas_vigentes import tasas_vigentes_por_producto
 from core.db import session_scope
 from core.logging import get_logger
+from core.settings import settings
 from domain.enums import EstadoTasa, FuenteTasa
 from domain.orm import FuenteTasas, Institucion, Producto, Tasa
+from rates_agent import pipeline
+from rates_agent.pipeline import ReporteCorrida
 
 log = get_logger(__name__)
 
@@ -301,12 +304,45 @@ async def listar_pendientes() -> ListaRevision:
     return lista
 
 
+# ─── Lectura automática ───────────────────────────────────────
+
+
+async def correr_fetch(
+    *, solo_navegador: bool = False, sin_navegador: bool = False
+) -> ReporteCorrida:
+    """Corre el pipeline de lectura desde la terminal.
+
+    Es el mismo código que ejecuta el job semanal: si fueran dos, el que se
+    corre a mano acabaría comportándose distinto del que corre solo, y el
+    reparto entre el VPS y la máquina local dejaría de ser una decisión de
+    dónde ejecutar para convertirse en dos implementaciones.
+
+    Con `--solo-navegador` se levanta Chromium; sin eso, el cliente HTTP plano
+    basta y no hace falta tener Playwright instalado.
+    """
+    solo_js: bool | None = True if solo_navegador else (False if sin_navegador else None)
+
+    fetcher = None
+    if solo_js is not False:
+        # Sólo se arma la cadena con navegador cuando puede hacer falta.
+        from rates_agent.fetcher import Fetcher, TransporteHttpx
+        from rates_agent.navegador import TransporteNavegador
+
+        agente = settings.fetch_user_agent
+        fetcher = Fetcher(
+            [TransporteHttpx(user_agent=agente), TransporteNavegador(user_agent=agente)]
+        )
+
+    return await pipeline.correr(fetcher=fetcher, solo_requieren_js=solo_js)
+
+
 __all__ = [
     "TASA_MAXIMA_PLAUSIBLE",
     "ImportReport",
     "ImportError_",
     "ListaRevision",
     "ProductoPendiente",
+    "correr_fetch",
     "import_csv",
     "listar_pendientes",
 ]

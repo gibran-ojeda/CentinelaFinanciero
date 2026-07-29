@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     scheduler_heartbeat_enabled: bool = True
     scheduler_heartbeat_interval_seconds: int = 60
     scheduler_banderas_enabled: bool = True
+    scheduler_tasas_enabled: bool = True
     scheduler_lock_ttl_seconds: int = 300
     scheduler_timezone: str = "America/Mexico_City"
 
@@ -112,6 +113,12 @@ class Settings(BaseSettings):
 
     cache_comparador_ttl_seconds: int = 300
     banderas_recompute_enabled: bool = True
+    tasas_fetch_enabled: bool = True
+    #: El job del VPS sólo lee lo que rinde sin navegador. En `true` mientras
+    #: Chromium no esté en la imagen del scheduler: las fuentes que necesitan
+    #: JavaScript se corren desde local con `cli tasas fetch --solo-navegador`.
+    #: Ver la sección «Navegador en el VPS» de docs/despliegue.md.
+    tasas_fetch_solo_sin_js: bool = True
     config_cache_ttl_seconds: int = 60
 
     # ─── Fuentes de datos (fases 7 y 9) ───────────────────────
