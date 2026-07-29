@@ -130,6 +130,28 @@ class Settings(BaseSettings):
     #: esperado son centavos por semana.
     llm_cost_daily_limit_usd: float = 1.0
 
+    # ─── Descarga de páginas de tasas (fase 9) ────────────────
+    #: El bot se identifica y da dónde reclamar. No se imita un navegador para
+    #: esquivar un WAF: si una institución bloquea a un bot identificado, esa
+    #: fuente pasa a lectura manual.
+    fetch_user_agent: str = (
+        "Mozilla/5.0 (compatible; CentinelaFinancieroBot/1.0; "
+        "+https://centinelafinanciero.lat/aviso-legal)"
+    )
+    fetch_timeout_seconds: float = 20.0
+    #: Reintentos **además** del intento inicial, y sólo ante errores que el
+    #: tiempo puede curar.
+    fetch_max_reintentos: int = 1
+    #: Errores duros por host antes de dejarlo para la siguiente corrida.
+    fetch_umbral_circuito: int = 2
+    #: Backoff temporal ante una cadena degradada por algo transitorio. Los
+    #: valores vienen de NarrativeAlpha, donde están calibrados en producción:
+    #: cinco minutos y luego veinte. No reducir sin medir.
+    fetch_esperas_backoff_s: list[float] = [300.0, 1200.0]
+    #: Menos texto que esto es una página que no se pudo leer, no una sin tasas.
+    fetch_min_caracteres: int = 200
+    fetch_respetar_robots: bool = True
+
     @field_validator("log_format", mode="before")
     @classmethod
     def _empty_string_is_unset(cls, value: Any) -> Any:
