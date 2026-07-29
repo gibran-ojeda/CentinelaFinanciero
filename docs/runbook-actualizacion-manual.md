@@ -1,16 +1,38 @@
 # Runbook: actualización manual de tasas
 
-> El ciclo semanal que mantiene vivo el catálogo hasta que las fases 7–9 automaticen la ingesta. Toma entre 20 y 45 minutos.
+> El ciclo semanal que mantiene vivo el catálogo. Con la lectura automática funcionando son diez o quince minutos: la mayor parte es resolver la cola de revisión.
 
-## Por qué a mano, y hasta cuándo
+## Qué hace la máquina y qué haces tú
 
-Las tasas de SOFIPOs y bancos digitales no tienen API: se publican en la página de cada institución, en tablas que cambian de sitio con cada rediseño. La [§15 del foundation](../foundation-comparador-financiero-mx.md) descarta el scraping por selectores CSS y lo resuelve en la **fase 9** con fetch dirigido y extracción por LLM. Mientras tanto, lo hace una persona.
+Las tasas de SOFIPOs y bancos digitales no tienen API: se publican en la página de cada institución, en tablas que cambian de sitio con cada rediseño. La [§15 del foundation](../foundation-comparador-financiero-mx.md) descarta el scraping por selectores CSS y lo resuelve con fetch dirigido y extracción por LLM — eso es el job `tasas_fetch_dirigido`, que corre los lunes.
 
-Ocho de las páginas del catálogo no rinden contenido sin ejecutar JavaScript. Hay que abrirlas en un navegador de verdad; un cliente HTTP plano devuelve 403 o una página vacía.
+Lo que **no** es automático, y no debería serlo:
+
+- **La primera lectura de cualquier producto pasa por tus manos.** Coincidir con un dato sin verificar no lo verifica.
+- **Un cambio por encima de la tolerancia**, también.
+- **Un plazo que el catálogo no conoce** es un hueco que se cierra en `seeds/productos.yaml`. La máquina lo señala; no lo inventa.
+
+A partir de la segunda lectura, un movimiento pequeño de una tasa ya aprobada se publica solo. Ése es el caso frecuente y es donde está el ahorro.
 
 ---
 
 ## El ciclo
+
+### 0. La pasada de las páginas con JavaScript
+
+El job del lunes lee solo las diez fuentes que rinden a un cliente HTTP plano. Las otras ocho necesitan un navegador, que **no está en la imagen del VPS** — el porqué y qué lo reabre están en [despliegue.md](despliegue.md#navegador-en-el-vps--decisión-aplazada). Se corren desde la máquina local, con el mismo código:
+
+```bash
+python -m cli tasas fetch --solo-navegador
+```
+
+Requiere el extra del navegador una sola vez:
+
+```bash
+pip install -e '.[browser]' && playwright install chromium
+```
+
+Lo que encuentre entra por la misma cola de revisión que el job. Si esta pasada se salta dos semanas seguidas, es la señal de que el paso manual no se sostiene y toca reabrir la decisión.
 
 ### 1. Qué falta
 
@@ -22,9 +44,20 @@ Imprime, agrupado por institución, lo que **no puede salir al sitio público**:
 
 La URL sale de `seeds/fuentes_tasas.yaml`, no de la tasa guardada: esa última dice de dónde salió el dato la vez anterior, que es justo lo que se está corrigiendo.
 
-### 2. Abrir cada página y anotar
+### 2. Resolver la cola de revisión
 
-De cada producto hace falta: **tasa nominal anual**, **plazo en días**, **GAT nominal y real si la institución las publica**, y la **fecha** que aparezca en la página (fecha de cálculo de la GAT, o la del día si no hay otra).
+```bash
+python -m cli revisiones list
+python -m cli revisiones approve <id> --revisor <quien>
+```
+
+Lo que las corridas encolaron, agrupado por institución, con la diferencia en puntos y el enlace para comprobarlo. Aprobar publica la tasa; rechazar la descarta. Ninguna de las dos borra nada.
+
+Al final de esa salida aparecen los **huecos de catálogo**: plazos que una institución publica y el catálogo no tiene. Ésos no se aprueban — se cierran dando de alta el producto en `seeds/productos.yaml` y corriendo `python -m cli seed`.
+
+### 3. Lo que la lectura automática no consiguió
+
+De cada producto que quede pendiente hace falta: **tasa nominal anual**, **plazo en días**, **GAT nominal y real si la institución las publica**, y la **fecha** que aparezca en la página (fecha de cálculo de la GAT, o la del día si no hay otra).
 
 Tres cosas que se ven seguido y hay que resistir:
 
@@ -32,7 +65,7 @@ Tres cosas que se ven seguido y hay que resistir:
 - **Los plazos son los de la institución**, no los de CETES. Si Finsus publica 30/90/180/360, el producto es de 30 días — no de 28 porque CETES lo sea.
 - **Una GAT que no cuadra con la nominal** no se corrige a ojo: se captura tal como la publica la institución. Si es inconsistente, la bandera 🟡 de §5.2 está para decirlo.
 
-### 3. Actualizar el CSV
+### 4. Actualizar el CSV
 
 Cada fila de `seeds/tasas.csv` es una **observación nueva**, no una edición. La tabla es append-only: la vigente de un producto es la más reciente en estado `VIGENTE`.
 
@@ -45,7 +78,7 @@ finsus-plazo-360,8.69,8.69,4.56,2026-07-28,MANUAL,https://www.finsus.mx/inversio
 - `estado=VIGENTE` sólo si se leyó de la propia institución. Si el dato viene de un agregador o hay dudas, `PENDIENTE_REVISION` — y entonces no sale al sitio público, que es lo correcto.
 - Lo que no se pudo verificar **se deja como está**. Una tasa vieja marcada es mejor que una inventada.
 
-### 4. Importar
+### 5. Importar
 
 ```bash
 python -m cli tasas import seeds/tasas.csv --dry-run   # primero en seco
@@ -61,7 +94,7 @@ docker compose exec -T api python -m cli tasas import seeds/tasas.csv
 
 La clave natural es `(producto, fecha_dato, fuente)`: reimportar el mismo CSV no duplica nada.
 
-### 5. Comprobar en el sitio
+### 6. Comprobar en el sitio
 
 ```bash
 curl -s https://centinelafinanciero.lat/ | grep -o 'Datos al [^<]*'
@@ -69,7 +102,7 @@ curl -s https://centinelafinanciero.lat/ | grep -o 'Datos al [^<]*'
 
 Y a ojo: que la fila esté, que la fecha haya cambiado y que el enlace de la fuente lleve a donde debe.
 
-### 6. Revisar el scheduler
+### 7. Revisar el scheduler
 
 ```bash
 docker compose exec -T api python -m cli config list --grupo scheduler
@@ -79,7 +112,7 @@ docker compose exec -T db psql -U centinela -d centinela \
 
 Si el recomputo de banderas lleva días sin correr, algo se apagó y nadie se enteró.
 
-### 7. Copia del respaldo fuera del VPS
+### 8. Copia del respaldo fuera del VPS
 
 ```bash
 scp <usuario>@<vps>:~/centinela-financiero/backups/centinela-*.sql.gz ~/respaldos-centinela/
