@@ -30,6 +30,8 @@ from domain.enums import EstadoTasa, FuenteTasa
 from domain.orm import FuenteTasas, Institucion, Producto, Tasa
 from rates_agent import pipeline
 from rates_agent.pipeline import ReporteCorrida
+from scheduler.bitacora import registrar_corrida
+from scheduler.jobs.tasas import JOB_ID as JOB_ID_FETCH
 
 log = get_logger(__name__)
 
@@ -350,7 +352,16 @@ async def correr_fetch(
         transportes.append(TransporteNavegador(user_agent=agente))
 
     fetcher = Fetcher(transportes, esperas_backoff_s=esperas)
-    return await pipeline.correr(fetcher=fetcher, solo_requieren_js=solo_js)
+
+    # La corrida deja su fila en `job_runs` aunque la dispare una persona. Sin
+    # esto los huecos de catálogo sólo existirían en la consola: `cli revisiones
+    # list` los lee de la última corrida, y una pasada local es una corrida
+    # igual de real que la del lunes.
+    async with registrar_corrida(JOB_ID_FETCH) as corrida:
+        reporte = await pipeline.correr(fetcher=fetcher, solo_requieren_js=solo_js)
+        corrida.metricas.update(reporte.como_metricas())
+        corrida.metricas["disparada_por"] = "cli"
+    return reporte
 
 
 __all__ = [
