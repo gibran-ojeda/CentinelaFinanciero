@@ -280,3 +280,54 @@ def test_the_job_is_registered_with_a_lock_long_enough_for_the_backoff() -> None
     # El backoff temporal puede sumar 25 minutos por sí solo.
     assert spec.lock_ttl_seconds is not None
     assert spec.lock_ttl_seconds >= 1500
+
+
+async def test_amount_tiers_of_one_product_are_a_catalogue_gap() -> None:
+    """Openbank publica 13% hasta $30 000 y 7% de ahí en adelante.
+
+    Las dos van al mismo producto, y `tasas` tiene clave única
+    `(producto, fecha, fuente)`: la segunda chocaría. Elegir una tampoco vale
+    — publicar el 13% sería el «hasta 13%» que el extractor tiene prohibido.
+    """
+    await _solo_una_fuente()
+    modelo = ModeloFalso(
+        tasas=[
+            {"producto": "Tramo 1", "tipo": "PLAZO", "plazo_dias": 364, "tasa_nominal": "13.00"},
+            {"producto": "Tramo 2", "tipo": "PLAZO", "plazo_dias": 364, "tasa_nominal": "7.00"},
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.publicadas == 0
+    assert reporte.en_revision == 0
+    assert len(reporte.huecos_catalogo) == 2
+    assert {h["tasa_nominal"] for h in reporte.huecos_catalogo} == {"13.00", "7.00"}
+
+
+async def test_an_unexpected_failure_in_one_source_spares_the_rest() -> None:
+    """Una violación de clave única con Openbank se llevó dos fuentes sanas."""
+    await run_seed()
+    async with session_scope() as session:
+        fuentes = (await session.execute(select(FuenteTasas))).scalars().all()
+        activas = {"https://www.finsus.mx/inversion", "https://www.supertasas.com/"}
+        for fuente in fuentes:
+            fuente.activa = fuente.url in activas
+
+    class ModeloQueRevienta(ModeloFalso):
+        async def completar(self, **kwargs: object) -> RespuestaLLM:
+            self.llamadas += 1
+            if self.llamadas == 1:
+                raise RuntimeError("algo inesperado")
+            return await super().completar(**kwargs)
+
+    modelo = ModeloQueRevienta(tasas=[TASA_364])
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA, PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.fallidas == 1
+    assert reporte.leidas == 2  # la segunda fuente sí se procesó
+    assert any("RuntimeError" in e for e in reporte.errores)

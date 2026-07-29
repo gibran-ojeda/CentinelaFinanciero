@@ -147,7 +147,7 @@ Para escribir sobre la base real hace falta pedirlo: `CONTENEDOR=centinela-db CO
 
 **Estado: aplazada, no descartada.** Fecha: 2026-07-29.
 
-Ocho de las dieciocho fuentes de tasas se pintan con JavaScript y sólo rinden a un navegador. `TransporteNavegador` está escrito y probado, y la cadena del [fetcher](../src/rates_agent/fetcher.py) lo acepta como segundo eslabón sin tocar nada — pero **no se instala en la imagen**, y el job del VPS corre sólo las diez que rinden a un cliente HTTP plano (`tasas_fetch_solo_sin_js=true` en el ConfigStore).
+Once de las dieciocho fuentes de tasas se pintan con JavaScript y sólo rinden a un navegador. `TransporteNavegador` está escrito y probado, y la cadena del [fetcher](../src/rates_agent/fetcher.py) lo acepta como segundo eslabón sin tocar nada — pero **no se instala en la imagen**, y el job del VPS corre sólo las siete que rinden a un cliente HTTP plano (`tasas_fetch_solo_sin_js=true` en el ConfigStore).
 
 **Por qué no.** Dos costos, y uno es bloqueante:
 
@@ -170,7 +170,7 @@ El resultado entra por la misma cola de revisión. La diferencia con la opción 
 
 1. `free -h` muestra ≥ 1 GB libre de forma sostenida tras el despliegue.
 2. El ciclo semanal se salta la pasada local dos semanas seguidas — señal de que el paso manual no se sostiene.
-3. Las fuentes que necesitan navegador pasan de ocho a más de la mitad del catálogo.
+3. Las fuentes que necesitan navegador pasan de once a más de la mitad del catálogo.
 
 **Qué costaría hacerlo.** Poco código: `playwright install chromium` en [docker/app/Dockerfile](../docker/app/Dockerfile), subir el límite del scheduler en el overlay, poner `tasas_fetch_solo_sin_js=false` en el ConfigStore — y decidir si el peso extra justifica separar la imagen única en dos.
 

@@ -22,6 +22,7 @@ from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config_store import effective
@@ -121,6 +122,30 @@ async def revisar(
     """
     fecha = fecha_dato or date.today()
     tolerancia = Decimal(str(effective.tolerancia_revision_pp))
+
+    # `tasas` tiene clave única `(producto, fecha, fuente)`, así que una
+    # segunda corrida el mismo día chocaría contra la observación de la
+    # primera. Pasa de verdad: un reintento del job un lunes que falló a la
+    # mitad. Se comprueba antes de escribir para que reintentar sea barato en
+    # vez de imposible.
+    ya_registrada = await session.scalar(
+        select(Tasa).where(
+            Tasa.producto_id == producto.id,
+            Tasa.fecha_dato == fecha,
+            Tasa.fuente == FuenteTasa.FETCH_DIRIGIDO,
+        )
+    )
+    if ya_registrada is not None:
+        log.info(
+            "revision_ya_registrada_hoy",
+            producto=producto.slug,
+            tasa=str(ya_registrada.tasa_nominal),
+        )
+        return Resultado(
+            Decision.SIN_CAMBIO,
+            "ya hay una lectura de esta fuente para hoy",
+            tasa_id=ya_registrada.id,
+        )
 
     if vigente is not None and vigente.tasa_nominal == extraida.tasa_nominal:
         # Lo más común en un ciclo semanal: la institución no movió nada.

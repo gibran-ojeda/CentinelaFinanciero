@@ -20,7 +20,7 @@ A partir de la segunda lectura, un movimiento pequeño de una tasa ya aprobada s
 
 ### 0. La pasada de las páginas con JavaScript
 
-El job del lunes lee solo las diez fuentes que rinden a un cliente HTTP plano. Las otras ocho necesitan un navegador, que **no está en la imagen del VPS** — el porqué y qué lo reabre están en [despliegue.md](despliegue.md#navegador-en-el-vps--decisión-aplazada). Se corren desde la máquina local, con el mismo código:
+El job del lunes lee solo las siete fuentes que rinden a un cliente HTTP plano. Las otras once necesitan un navegador, que **no está en la imagen del VPS** — el porqué y qué lo reabre están en [despliegue.md](despliegue.md#navegador-en-el-vps--decisión-aplazada). Se corren desde la máquina local, con el mismo código:
 
 ```bash
 python -m cli tasas fetch --solo-navegador

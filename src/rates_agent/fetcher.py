@@ -123,7 +123,10 @@ class TransporteHttpx:
         except httpx.TimeoutException as exc:
             raise ErrorDescarga(f"timeout tras {timeout_s}s", transitorio=True) from exc
         except httpx.HTTPError as exc:
-            raise ErrorDescarga(f"error de red: {exc}", transitorio=True) from exc
+            # `str(exc)` viene vacío en varias excepciones de httpx —un
+            # `ReadError` de TLS, por ejemplo— y un log que dice «error de red:»
+            # y nada más no sirve para diagnosticar nada.
+            raise ErrorDescarga(f"error de red: {_detalle(exc)}", transitorio=True) from exc
 
         if resp.status_code >= 400:
             raise ErrorDescarga(
@@ -139,6 +142,16 @@ class TransporteHttpx:
 
 
 # ─── El fetcher ───────────────────────────────────────────────
+
+
+def _detalle(exc: Exception) -> str:
+    """Mensaje de la excepción, o su tipo cuando viene vacía.
+
+    Varias excepciones de httpx llegan sin texto (`ReadError`, `ConnectError`
+    sobre TLS). Sin esto el log dice «error de red:» y punto, que no distingue
+    un handshake fallido de un DNS que no resuelve.
+    """
+    return str(exc).strip() or type(exc).__name__
 
 
 def _host(url: str) -> str:
@@ -263,7 +276,7 @@ class Fetcher:
             ) as cliente:
                 resp = await cliente.get(destino, timeout=10.0)
         except httpx.HTTPError as exc:
-            log.info("robots_ilegible", url=destino, error=str(exc)[:120])
+            log.info("robots_ilegible", url=destino, error=_detalle(exc)[:120])
             return None
         if resp.status_code >= 400:
             return None

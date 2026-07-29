@@ -248,3 +248,30 @@ def test_the_report_counts_each_decision() -> None:
     reporte.registrar(Resultado(Decision.SIN_CAMBIO, ""))
 
     assert (reporte.publicadas, reporte.en_revision, reporte.sin_cambio) == (1, 2, 1)
+
+
+async def test_a_second_run_the_same_day_is_idempotent() -> None:
+    """Un reintento del job un lunes que falló a la mitad no puede reventar.
+
+    `tasas` tiene clave única `(producto, fecha, fuente)`: sin esta
+    comprobación, la segunda corrida choca en cada producto ya encolado.
+    """
+    await run_seed()
+    producto = await _producto()
+
+    async with session_scope() as session:
+        primera = await revisar(
+            session, _extraida("8.69"), producto=producto, vigente=None, referencia=None, url=URL
+        )
+
+    async with session_scope() as session:
+        segunda = await revisar(
+            session, _extraida("8.75"), producto=producto, vigente=None, referencia=None, url=URL
+        )
+
+    assert primera.decision is Decision.EN_REVISION
+    assert segunda.decision is Decision.SIN_CAMBIO
+    assert "ya hay una lectura" in segunda.motivo
+    # Una sola observación y una sola revisión: nada duplicado.
+    assert await _contar(Tasa) == 1
+    assert await _contar(RevisionTasa) == 1

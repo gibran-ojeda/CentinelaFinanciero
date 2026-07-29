@@ -2,7 +2,7 @@
 
 Existe por dos motivos que se ven en el catálogo real:
 
-- **Páginas que se pintan con JavaScript.** Ocho de las dieciocho fuentes
+- **Páginas que se pintan con JavaScript.** Once de las dieciocho fuentes
   devuelven un `<div id="root">` vacío a un cliente HTTP: la tabla de tasas la
   monta el navegador. `trafilatura` sobre ese HTML no encuentra nada, y con
   razón — no hay nada.

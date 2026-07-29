@@ -270,11 +270,14 @@ async def test_the_browser_transport_says_what_to_install_when_absent() -> None:
     No revienta la corrida: el resto de la cadena sigue y las páginas que sí
     rinden por httpx se leen igual.
     """
-    import sys
+    import importlib.util
 
     from rates_agent.navegador import TransporteNavegador
 
-    if "playwright" in sys.modules:
+    # `find_spec` y no `sys.modules`: playwright no se importa hasta que el
+    # transporte lo intenta, así que mirar los módulos cargados diría siempre
+    # que falta — y el test pasaría sin probar nada donde sí está instalado.
+    if importlib.util.find_spec("playwright") is not None:
         pytest.skip("playwright instalado: este caso cubre el entorno sin el extra")
 
     t = TransporteNavegador(user_agent="prueba")

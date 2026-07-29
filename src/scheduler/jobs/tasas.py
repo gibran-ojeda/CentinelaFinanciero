@@ -9,7 +9,7 @@ Doble gate como el resto: `SCHEDULER_TASAS_ENABLED` decide si se registra, y
 
 **Mientras Chromium no viva en la imagen**, el job del VPS corre sólo las
 fuentes que rinden a un cliente HTTP plano (`solo_requieren_js=False`). Las
-otras ocho se leen desde la máquina local con `python -m cli tasas fetch
+otras once se leen desde la máquina local con `python -m cli tasas fetch
 --solo-navegador`, que llama a la misma función. Ver `docs/despliegue.md`.
 """
 

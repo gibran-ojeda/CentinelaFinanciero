@@ -138,6 +138,14 @@ async def correr(
                 reporte.presupuesto_agotado = True
                 log.warning("corrida_cortada_por_presupuesto", pendientes=url)
                 break
+            except Exception as exc:  # noqa: BLE001 — una fuente no tumba la corrida
+                # Cualquier cosa inesperada procesando **una** fuente se anota
+                # y se sigue con las demás. Lo aprendí de la peor manera: una
+                # violación de clave única con Openbank se llevó por delante
+                # las dos fuentes que faltaban, que no tenían nada que ver.
+                reporte.fallidas += 1
+                reporte.errores.append(f"{institucion}: {type(exc).__name__}: {str(exc)[:200]}")
+                log.exception("fuente_fallida", institucion=institucion, url=url)
     finally:
         reporte.hosts_en_circuito = fetcher.hosts_en_circuito
         if propios:
@@ -232,9 +240,16 @@ async def _decidir(
             session, [p.id for p in productos.values()], incluir_pendientes=True
         )
 
-        for extraida in extraidas:
+        for extraida, colisiona in _con_colisiones(extraidas):
             producto = productos.get(_clave(extraida.tipo, extraida.plazo_dias))
-            if producto is None:
+            if producto is None or colisiona:
+                # Dos motivos distintos, mismo destino: o el catálogo no tiene
+                # ese plazo, o la institución publica **varios tramos por monto
+                # para el mismo producto** —Openbank da 13 % hasta $30 000 y
+                # 7 % de ahí en adelante— y el catálogo tiene un solo producto
+                # donde hacen falta tres. Ninguno de los dos casos se resuelve
+                # eligiendo uno: publicar el 13 % sería exactamente el
+                # «hasta 13 %» que el extractor tiene prohibido inventar.
                 reporte.huecos_catalogo.append(
                     HuecoCatalogo(
                         institucion=institucion,
@@ -249,6 +264,7 @@ async def _decidir(
                     institucion=institucion,
                     plazo_dias=extraida.plazo_dias,
                     tasa=str(extraida.tasa_nominal),
+                    motivo="tramos por monto" if colisiona else "plazo desconocido",
                 )
                 continue
 
@@ -269,6 +285,21 @@ async def _decidir(
                     reporte.en_revision += 1
                 case Decision.SIN_CAMBIO:
                     reporte.sin_cambio += 1
+
+
+def _con_colisiones(extraidas: list[TasaExtraida]) -> list[tuple[TasaExtraida, bool]]:
+    """Cada tasa con una marca de si comparte `(tipo, plazo)` con otra.
+
+    Pasa cuando una institución publica **tramos por monto** del mismo
+    producto. `tasas` tiene una clave única `(producto, fecha, fuente)`, así
+    que dos tramos el mismo día chocarían — y elegir uno sería publicar una
+    tasa que sólo aplica a una parte del dinero.
+    """
+    cuantas: dict[tuple[str, int | None], int] = {}
+    for extraida in extraidas:
+        clave = _clave(extraida.tipo, extraida.plazo_dias)
+        cuantas[clave] = cuantas.get(clave, 0) + 1
+    return [(e, cuantas[_clave(e.tipo, e.plazo_dias)] > 1) for e in extraidas]
 
 
 async def _productos_de(session: Any, institucion: str) -> dict[tuple[str, int | None], Producto]:
