@@ -16,6 +16,7 @@ from pathlib import Path
 
 from core.db import dispose_engine
 from core.logging import configure_logging, get_logger
+from domain.enums import EstadoRevision
 
 log = get_logger(__name__)
 
@@ -48,6 +49,27 @@ def build_parser() -> argparse.ArgumentParser:
         "pendientes",
         help="lista de revisión: qué falta verificar para que salga al sitio público",
     )
+
+    revs = sub.add_parser("revisiones", help="cola de revisión humana de tasas")
+    revs_sub = revs.add_subparsers(dest="subcomando", required=True)
+
+    listar_revs = revs_sub.add_parser("list", help="pendientes, con su diferencia y su fuente")
+    listar_revs.add_argument(
+        "--estado",
+        type=EstadoRevision,
+        choices=list(EstadoRevision),
+        default=EstadoRevision.PENDIENTE,
+    )
+
+    for accion, ayuda in (("approve", "publica la tasa"), ("reject", "la descarta")):
+        parser_accion = revs_sub.add_parser(accion, help=ayuda)
+        parser_accion.add_argument("revision_id", type=int)
+        # Quién decidió es parte del registro: §19 pide poder reconstruir por
+        # qué una tasa está publicada, y "alguien" no reconstruye nada.
+        parser_accion.add_argument(
+            "--revisor", default=os.environ.get("USER", "cli"), help="quién resuelve"
+        )
+        parser_accion.add_argument("--comentario", default=None)
 
     config = sub.add_parser("config", help="inspección y ajuste del ConfigStore")
     config_sub = config.add_subparsers(dest="subcomando", required=True)
@@ -93,6 +115,22 @@ async def _run(args: argparse.Namespace) -> int:
             # Una fila rechazada es un fallo operativo: el CSV traía un dato
             # que no se pudo cargar y alguien tiene que enterarse.
             return 1 if resultado.errores else 0
+        case "revisiones":
+            from cli import revisiones as revisiones_module
+
+            if args.subcomando == "list":
+                print("Cola de revisión:")
+                print(await revisiones_module.listar(args.estado))
+                return 0
+            print(
+                await revisiones_module.resolver(
+                    args.revision_id,
+                    aprobar=args.subcomando == "approve",
+                    revisor=args.revisor,
+                    comentario=args.comentario,
+                )
+            )
+            return 0
         case "config":
             match args.subcomando:
                 case "list":
