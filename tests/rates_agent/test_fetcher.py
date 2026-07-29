@@ -234,9 +234,9 @@ async def test_the_content_hash_is_stable_and_detects_change() -> None:
     """Si el hash no cambió, la corrida no gasta un token en esa página."""
     igual = await _fetcher(TransporteFalso("httpx", PAGINA)).descargar(URL)
     otra_vez = await _fetcher(TransporteFalso("httpx", PAGINA)).descargar(URL)
-    distinta = await _fetcher(
-        TransporteFalso("httpx", PAGINA.replace("8.69", "9.10"))
-    ).descargar(URL)
+    distinta = await _fetcher(TransporteFalso("httpx", PAGINA.replace("8.69", "9.10"))).descargar(
+        URL
+    )
 
     assert igual is not None and otra_vez is not None and distinta is not None
     assert igual.hash_contenido == otra_vez.hash_contenido

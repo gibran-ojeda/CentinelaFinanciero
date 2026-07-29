@@ -188,9 +188,7 @@ class TestExtraer:
         )
         cliente, doble = _cliente(cuerpo)
 
-        resultado = await extraer(
-            cliente, institucion="X", url="https://x.test/", contenido="…"
-        )
+        resultado = await extraer(cliente, institucion="X", url="https://x.test/", contenido="…")
 
         assert len(resultado.tasas) == 1
         assert resultado.tasas[0].plazo_dias == 180
@@ -212,9 +210,7 @@ class TestExtraer:
         )
         cliente, doble = _cliente(malo, bueno)
 
-        resultado = await extraer(
-            cliente, institucion="X", url="https://x.test/", contenido="…"
-        )
+        resultado = await extraer(cliente, institucion="X", url="https://x.test/", contenido="…")
 
         assert doble.llamadas == 2
         assert "no fue válida" in doble.ultimo_usuario
