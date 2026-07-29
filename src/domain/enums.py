@@ -78,7 +78,28 @@ class FuenteTasa(StrEnum):
     """Procedencia del dato. Determina el SLA de frescura y si pasa revisión."""
 
     MANUAL = "MANUAL"
-    """Carga por CLI. Es la fuente del MVP (fases 1-6)."""
+    """Carga por CLI leyendo la publicación de la propia institución."""
+
+    AGREGADOR = "AGREGADOR"
+    """Dato recopilado por un tercero (otro comparador, la prensa).
+
+    **Nunca puede estar VIGENTE**, y por tanto nunca llega al sitio público:
+    un comparador que republica lo que recopiló otro no tiene fuente propia y
+    no puede responder de un número que nadie de aquí leyó en su origen. La
+    invariante se hace cumplir al escribir —en el alta por CSV y en el
+    reviewer— y no filtrando al leer, para que no dependa de que cada consulta
+    se acuerde de excluirla.
+
+    En modo demostración sí se muestra, marcada «sin verificar» como cualquier
+    otra `PENDIENTE_REVISION`. Ese switch existe para que un entorno recién
+    levantado no parezca vacío y la fase 6 lo apaga antes de exponer nada.
+
+    Existe por una razón operativa: sirve de **contraste**. Cuando llega la
+    lectura oficial, el valor del agregador es el `valor_anterior` contra el
+    que el reviewer mide la diferencia — que coincidan respalda la lectura, y
+    una discrepancia grande la manda a revisión humana. En cuanto la lectura
+    oficial la sustituye, la fila se retira del catálogo semilla.
+    """
 
     BANXICO_API = "BANXICO_API"
     """SIE de Banxico. Nivel 1: determinista (fase 7)."""

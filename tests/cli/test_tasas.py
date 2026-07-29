@@ -281,3 +281,56 @@ async def test_an_empty_review_list_says_so() -> None:
     lista.pendientes.clear()
 
     assert "Nada pendiente" in lista.render()
+
+
+# ─── La invariante del agregador ──────────────────────────────
+
+
+async def test_an_aggregator_rate_cannot_be_current(tmp_path: Path) -> None:
+    """Lo que recopiló un tercero no se publica, y el alta lo impide.
+
+    Se hace valer al escribir y no filtrando al leer: así no depende de que
+    cada consulta futura se acuerde de excluirlo.
+    """
+    await run_seed()
+    ruta = _csv(
+        tmp_path,
+        "cetes-28,6.18,,,2026-07-23,AGREGADOR,https://ejemplo.mx/,VIGENTE,",
+    )
+
+    report = await import_csv(ruta)
+
+    assert report.creadas == 0
+    assert len(report.errores) == 1
+    assert "AGREGADOR no puede estar VIGENTE" in report.errores[0]
+    assert await _contar_tasas() == 0
+
+
+async def test_an_aggregator_rate_is_accepted_as_pending(tmp_path: Path) -> None:
+    """Pendiente sí: es el contraste contra el que se medirá la lectura oficial."""
+    await run_seed()
+    ruta = _csv(
+        tmp_path,
+        "cetes-28,6.18,,,2026-07-23,AGREGADOR,https://ejemplo.mx/,PENDIENTE_REVISION,",
+    )
+
+    report = await import_csv(ruta)
+
+    assert report.creadas == 1
+    assert report.errores == []
+
+
+async def test_the_seed_holds_no_aggregator_rate_as_current() -> None:
+    """El catálogo semilla cumple la invariante: 30 de agregador, ninguna vigente."""
+    await run_seed()
+    await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
+
+    async with session_scope() as session:
+        agregadas = (
+            (await session.execute(select(Tasa).where(Tasa.fuente == FuenteTasa.AGREGADOR)))
+            .scalars()
+            .all()
+        )
+
+    assert len(agregadas) == 30
+    assert all(t.estado is EstadoTasa.PENDIENTE_REVISION for t in agregadas)

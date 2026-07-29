@@ -132,6 +132,19 @@ async def import_csv(path: Path, *, dry_run: bool = False) -> ImportReport:
             fuente = FuenteTasa((fila.get("fuente") or "MANUAL").strip() or "MANUAL")
             estado = EstadoTasa((fila.get("estado") or "VIGENTE").strip() or "VIGENTE")
 
+            # La invariante del agregador, en el punto de escritura: un dato que
+            # recopiló un tercero no puede quedar vigente, porque el sitio lo
+            # publicaría afirmando una procedencia que no es suya. Se hace valer
+            # aquí y no filtrando al leer, para que no dependa de que cada
+            # consulta futura se acuerde de excluirlo.
+            if fuente is FuenteTasa.AGREGADOR and estado is EstadoTasa.VIGENTE:
+                report.errores.append(
+                    f"fila {numero}: una tasa de fuente AGREGADOR no puede estar VIGENTE. "
+                    f"Se publica lo que publica la institución, no lo que recopiló un "
+                    f"tercero; el dato de agregador sólo sirve de contraste."
+                )
+                continue
+
             clave = (producto.id, fecha_dato, fuente)
             if clave in existentes:
                 report.duplicadas += 1
