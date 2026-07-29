@@ -118,6 +118,18 @@ class Settings(BaseSettings):
     banxico_token: SecretStr = SecretStr("")
     deepseek_api_key: SecretStr = SecretStr("")
 
+    # ─── LLM (extracción de tasas, fase 9) ────────────────────
+    llm_base_url: str = "https://api.deepseek.com/v1"
+    #: `deepseek-chat` y `deepseek-reasoner` los retiró DeepSeek el 2026-07-24.
+    #: Se usa el económico: la extracción es leer una tabla, no razonar. Un
+    #: razonador además gasta el presupuesto de tokens pensando y devuelve el
+    #: contenido vacío (visto en NarrativeAlpha).
+    llm_modelo_extraccion: str = "deepseek-v4-flash"
+    llm_timeout_seconds: float = 90.0
+    #: Techo duro de gasto diario (D2). Red contra bucles, no presupuesto: lo
+    #: esperado son centavos por semana.
+    llm_cost_daily_limit_usd: float = 1.0
+
     @field_validator("log_format", mode="before")
     @classmethod
     def _empty_string_is_unset(cls, value: Any) -> Any:
