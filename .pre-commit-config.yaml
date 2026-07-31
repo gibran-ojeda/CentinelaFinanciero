@@ -34,10 +34,14 @@ repos:
     hooks:
       - id: mypy
         files: ^src/
+        # Cada una está aquí porque sin ella mypy ve `Any` donde el código real
+        # tiene un tipo, y un `Any` silencioso es peor que un error: convierte
+        # el hook en un sello de goma justo en los módulos que más lo necesitan.
         additional_dependencies:
           - pydantic>=2.0
           - pydantic-settings>=2.0
           - sqlalchemy[asyncio]>=2.0
           - structlog>=24.0
           - fastapi>=0.110
+          - httpx>=0.27
           - types-PyYAML

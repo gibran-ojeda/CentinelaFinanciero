@@ -15,17 +15,17 @@ queda registrada con quién la tomó.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 
 from fastapi import APIRouter, HTTPException, Path
-from sqlalchemy import desc, select
+from sqlalchemy import select
 
 from api.dependencies import AdminDep, SessionDep
 from api.schemas import AltaTasa, ResolucionRevision, RevisionPendiente, TasaCreada
-from api.services import cache
+from api.services import cache, revisiones
 from core.logging import get_logger
 from domain.enums import EstadoRevision, EstadoTasa
-from domain.orm import Institucion, Producto, RevisionTasa, Tasa
+from domain.orm import Institucion, Producto, Tasa
 
 log = get_logger(__name__)
 
@@ -115,37 +115,22 @@ async def listar_revisiones(
     _actor: AdminDep,
     estado: EstadoRevision = EstadoRevision.PENDIENTE,
 ) -> list[RevisionPendiente]:
-    # Se traen los nombres en el mismo viaje: quien revisa necesita saber de
-    # qué institución y producto habla cada fila para poder decidir, y una
-    # cola que sólo muestre ids obliga a buscarlos a mano.
-    filas = (
-        (
-            await session.execute(
-                select(RevisionTasa, Producto.nombre, Institucion.nombre)
-                .join(Tasa, Tasa.id == RevisionTasa.tasa_id)
-                .join(Producto, Producto.id == Tasa.producto_id)
-                .join(Institucion, Institucion.id == Producto.institucion_id)
-                .where(RevisionTasa.estado == estado)
-                .order_by(desc(RevisionTasa.created_at))
-            )
-        )
-        .tuples()
-        .all()
-    )
-
+    # La consulta vive en `services.revisiones` porque la CLI del operador usa
+    # exactamente la misma cola: dos implementaciones acabarían discrepando, y
+    # la que se usa a diario es la otra.
     return [
         RevisionPendiente(
-            id=revision.id,
-            tasa_id=revision.tasa_id,
-            producto=producto,
-            institucion=institucion,
-            motivo=revision.motivo,
-            valor_anterior=revision.valor_anterior,
-            valor_nuevo=revision.valor_nuevo,
-            estado=revision.estado.value,
-            created_at=revision.created_at,
+            id=fila.id,
+            tasa_id=fila.tasa_id,
+            producto=fila.producto,
+            institucion=fila.institucion,
+            motivo=fila.motivo,
+            valor_anterior=fila.valor_anterior,
+            valor_nuevo=fila.valor_nuevo,
+            estado=fila.estado.value,
+            created_at=fila.creada_en,
         )
-        for revision, producto, institucion in filas
+        for fila in await revisiones.listar(session, estado=estado)
     ]
 
 
@@ -165,29 +150,18 @@ async def resolver_revision(
     _actor: AdminDep,
     revision_id: int = Path(gt=0),
 ) -> RevisionPendiente:
-    revision = await session.get(RevisionTasa, revision_id)
-    if revision is None:
-        raise HTTPException(status_code=404, detail=f"No existe la revisión {revision_id}")
-
-    if revision.estado is not EstadoRevision.PENDIENTE:
-        # Resolver dos veces sobrescribiría quién decidió y cuándo.
-        raise HTTPException(
-            status_code=409,
-            detail=f"La revisión {revision_id} ya está {revision.estado.value}",
+    try:
+        revision = await revisiones.resolver(
+            session,
+            revision_id,
+            aprobar=resolucion.aprobar,
+            revisor=resolucion.revisor,
+            comentario=resolucion.comentario,
         )
-
-    tasa = await session.get(Tasa, revision.tasa_id)
-    if tasa is None:
-        raise HTTPException(status_code=404, detail=f"La tasa {revision.tasa_id} ya no existe")
-
-    revision.estado = EstadoRevision.APROBADA if resolucion.aprobar else EstadoRevision.RECHAZADA
-    revision.revisor = resolucion.revisor
-    revision.resuelto_at = datetime.now(UTC)
-    if resolucion.comentario:
-        revision.motivo = f"{revision.motivo} | {resolucion.comentario}"
-
-    # Aprobar publica la tasa; rechazar la descarta. No se borra nada.
-    tasa.estado = EstadoTasa.VIGENTE if resolucion.aprobar else EstadoTasa.RECHAZADA
+    except revisiones.RevisionNoEncontrada as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except revisiones.RevisionYaResuelta as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     await session.commit()
     await session.refresh(revision)
@@ -195,12 +169,8 @@ async def resolver_revision(
     if resolucion.aprobar:
         await cache.invalidar()
 
-    log.info(
-        "revision_resuelta",
-        revision_id=revision_id,
-        aprobada=resolucion.aprobar,
-        revisor=resolucion.revisor,
-    )
+    tasa = await session.get(Tasa, revision.tasa_id)
+    assert tasa is not None  # `resolver` ya la habría rechazado si no existiera
 
     nombres = (
         await session.execute(

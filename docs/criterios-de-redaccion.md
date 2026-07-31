@@ -50,6 +50,14 @@ Un reparto sin su criterio a la vista es una recomendación disfrazada de cálcu
 
 No hay patrocinio, no hay orden pagado, no se cobra a las instituciones listadas y no se intermedia ninguna contratación. Mientras eso sea cierto, se dice. El día que deje de serlo, se dice también — y se reabre D5 (ver abajo).
 
+### 6. El número sale de quien lo ofrece o de quien lo regula
+
+La institución en su propia página, la autoridad (SIE de Banxico, CNBV) o el emisor. **Un agregador no es fuente publicable**: otro comparador, la prensa financiera, un foro. No es un impedimento legal — es que republicar lo que recopiló otro comparador deja al sitio sin fuente propia. No podría responder de un número que nadie de aquí leyó en su origen, no controla cuándo se actualiza, y hereda en silencio los errores ajenos.
+
+El uso legítimo de un agregador es de **contraste**: guardado con `FuenteTasa.AGREGADOR`, su valor es el término contra el que se mide la primera lectura oficial. La invariante «AGREGADOR nunca VIGENTE» se hace cumplir al escribir, en [cli/tasas.py](../src/cli/tasas.py), y no filtrando al leer — así no depende de que cada consulta futura se acuerde de excluirlo.
+
+Corolario para el copy: la frase del pie «cada tasa muestra su fecha de actualización y su fuente» sólo es cierta si la fuente es la de origen. Enlazar a un agregador la volvería falsa.
+
 ---
 
 ## Auditoría del copy vigente (2026-07-27)
@@ -96,5 +104,6 @@ D5 se cierra **sin revisión legal profesional**, como aceptación de riesgo doc
 - Alta de un instrumento que sea un valor bursátil.
 - Uso de logotipos de las instituciones, más allá del nombre y la denominación.
 - Cualquier redacción que atribuya insolvencia, quiebra o mala fe a una institución identificada.
+- Publicar un dato cuya procedencia sea un agregador. Además de romper el criterio 6, redistribuir la recopilación de un tercero es un terreno distinto del de citar a la fuente original.
 
 Esto **no es asesoría legal** y no pretende serlo. Es el criterio con el que se escribe y la lista de condiciones bajo las que ese criterio deja de bastar.

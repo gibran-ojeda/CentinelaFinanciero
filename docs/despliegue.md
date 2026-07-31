@@ -143,6 +143,39 @@ Para escribir sobre la base real hace falta pedirlo: `CONTENEDOR=centinela-db CO
 
 ---
 
+## Navegador en el VPS — decisión aplazada
+
+**Estado: aplazada, no descartada.** Fecha: 2026-07-29.
+
+Once de las dieciocho fuentes de tasas se pintan con JavaScript y sólo rinden a un navegador. `TransporteNavegador` está escrito y probado, y la cadena del [fetcher](../src/rates_agent/fetcher.py) lo acepta como segundo eslabón sin tocar nada — pero **no se instala en la imagen**, y el job del VPS corre sólo las siete que rinden a un cliente HTTP plano (`tasas_fetch_solo_sin_js=true` en el ConfigStore).
+
+**Por qué no.** Dos costos, y uno es bloqueante:
+
+| | Costo |
+|---|---|
+| Disco | ~450 MB en la **imagen única**, que también sirve la API. §13 del foundation es «build una vez, deploy N», así que el peso lo paga cada servicio |
+| RAM | Chromium usa ~300 MB al cargar una página. El límite del scheduler en [docker-compose.prod.yml](../docker-compose.prod.yml) es **256 MB**: tal cual, el OOM killer lo mata a media corrida |
+
+Lo bloqueante es la RAM. Subirlo a ~768 MB en un VPS que ya sostiene nueve contenedores de NarrativeAlpha no es un compromiso que se tome sin medir, y esa medición es la tarea 1 de la fase 06.
+
+**Qué se hace mientras.** El mismo código, desde la máquina local, como paso del [ciclo semanal](runbook-actualizacion-manual.md):
+
+```bash
+python -m cli tasas fetch --solo-navegador
+```
+
+El resultado entra por la misma cola de revisión. La diferencia con la opción completa es **quién dispara la corrida**, no qué hace ni cómo se aprueba.
+
+**Qué la reabre.** Cualquiera de estas tres:
+
+1. `free -h` muestra ≥ 1 GB libre de forma sostenida tras el despliegue.
+2. El ciclo semanal se salta la pasada local dos semanas seguidas — señal de que el paso manual no se sostiene.
+3. Las fuentes que necesitan navegador pasan de once a más de la mitad del catálogo.
+
+**Qué costaría hacerlo.** Poco código: `playwright install chromium` en [docker/app/Dockerfile](../docker/app/Dockerfile), subir el límite del scheduler en el overlay, poner `tasas_fetch_solo_sin_js=false` en el ConfigStore — y decidir si el peso extra justifica separar la imagen única en dos.
+
+---
+
 ## Cosas que muerden en este VPS
 
 - **`ufw` dropea `docker0 → host`.** Un contenedor de Centinela en bridge no alcanza nada publicado en el loopback del host — causa documentada de 502 en NarrativeAlpha. Si algún día Centinela necesita consumir un servicio del vecino (su SearXNG, por ejemplo), la vía es adjuntar el contenedor a la red bridge de NarrativeAlpha como red externa, nunca pasar por la gateway de Docker.

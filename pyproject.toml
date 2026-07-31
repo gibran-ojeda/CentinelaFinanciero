@@ -44,11 +44,18 @@ ingest = [
     "pandas>=2.1",
     "openpyxl>=3.1",
 ]
-# Extracción y research con LLM (fase 9). DeepSeek se consume vía API
-# compatible con OpenAI, por eso basta el SDK de openai.
+# Extracción con LLM (fase 9, nivel 2).
+#
+# Sin el SDK de `openai`: DeepSeek se consume con httpx directo, que ya es una
+# dependencia base. Lo único que hace falta es un POST con JSON, y el SDK
+# traería su propio pool, sus reintentos y su jerarquía de errores — tres cosas
+# que habría que domar para que encajaran con las de `llm/`.
 llm = [
-    "openai>=1.0",
     "trafilatura>=1.6",
+]
+# Búsqueda abierta (fase 9, nivel 3): descubrimiento de instituciones nuevas y
+# cambios de URL. Todavía no se usa.
+research = [
     "ddgs>=9.0",
 ]
 # Sólo para las pocas páginas de tasas que renderizan por JavaScript (fase 9).
@@ -59,8 +66,10 @@ mcp = [
     "mcp[cli]>=1.28,<2",
 ]
 # Conjunto que instala la imagen Docker única: api + scheduler + cli.
+# `llm` va dentro porque el job semanal de tasas corre en el scheduler y
+# necesita extraer el texto de cada página.
 app = [
-    "centinela-financiero[api,scheduler]",
+    "centinela-financiero[api,scheduler,llm]",
 ]
 dev = [
     "pytest>=8.0",

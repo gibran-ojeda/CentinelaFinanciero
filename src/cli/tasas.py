@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -24,8 +25,13 @@ from sqlalchemy.orm import selectinload
 from api.services.tasas_vigentes import tasas_vigentes_por_producto
 from core.db import session_scope
 from core.logging import get_logger
+from core.settings import settings
 from domain.enums import EstadoTasa, FuenteTasa
 from domain.orm import FuenteTasas, Institucion, Producto, Tasa
+from rates_agent import pipeline
+from rates_agent.pipeline import ReporteCorrida
+from scheduler.bitacora import registrar_corrida
+from scheduler.jobs.tasas import JOB_ID as JOB_ID_FETCH
 
 log = get_logger(__name__)
 
@@ -131,6 +137,19 @@ async def import_csv(path: Path, *, dry_run: bool = False) -> ImportReport:
 
             fuente = FuenteTasa((fila.get("fuente") or "MANUAL").strip() or "MANUAL")
             estado = EstadoTasa((fila.get("estado") or "VIGENTE").strip() or "VIGENTE")
+
+            # La invariante del agregador, en el punto de escritura: un dato que
+            # recopiló un tercero no puede quedar vigente, porque el sitio lo
+            # publicaría afirmando una procedencia que no es suya. Se hace valer
+            # aquí y no filtrando al leer, para que no dependa de que cada
+            # consulta futura se acuerde de excluirlo.
+            if fuente is FuenteTasa.AGREGADOR and estado is EstadoTasa.VIGENTE:
+                report.errores.append(
+                    f"fila {numero}: una tasa de fuente AGREGADOR no puede estar VIGENTE. "
+                    f"Se publica lo que publica la institución, no lo que recopiló un "
+                    f"tercero; el dato de agregador sólo sirve de contraste."
+                )
+                continue
 
             clave = (producto.id, fecha_dato, fuente)
             if clave in existentes:
@@ -288,12 +307,70 @@ async def listar_pendientes() -> ListaRevision:
     return lista
 
 
+# ─── Lectura automática ───────────────────────────────────────
+
+
+#: Backoff temporal para una corrida interactiva. Los 300 y 1200 segundos que
+#: usa el job están calibrados para algo desatendido a las seis de la mañana;
+#: delante de una terminal son veinticinco minutos mirando un cursor. Se
+#: reintenta una vez, corto, y lo que no salga se reporta para la próxima.
+ESPERAS_INTERACTIVAS: tuple[float, ...] = (20.0,)
+
+
+async def correr_fetch(
+    *,
+    solo_navegador: bool = False,
+    sin_navegador: bool = False,
+    esperas_backoff_s: tuple[float, ...] | None = None,
+) -> ReporteCorrida:
+    """Corre el pipeline de lectura desde la terminal.
+
+    Es el mismo código que ejecuta el job semanal: si fueran dos, el que se
+    corre a mano acabaría comportándose distinto del que corre solo, y el
+    reparto entre el VPS y la máquina local dejaría de ser una decisión de
+    dónde ejecutar para convertirse en dos implementaciones.
+
+    Lo único que cambia es la **espera**, y por una razón de quién mira: un job
+    desatendido puede permitirse esperar veinte minutos a que un sitio deje de
+    limitar; una persona en una terminal, no.
+
+    Con `--solo-navegador` se levanta Chromium; sin eso basta el cliente HTTP
+    plano y no hace falta tener Playwright instalado.
+    """
+    solo_js: bool | None = True if solo_navegador else (False if sin_navegador else None)
+    agente = settings.fetch_user_agent
+    esperas = ESPERAS_INTERACTIVAS if esperas_backoff_s is None else esperas_backoff_s
+
+    from rates_agent.fetcher import Fetcher, TransporteHttpx
+
+    transportes: list[Any] = [TransporteHttpx(user_agent=agente)]
+    if solo_js is not False:
+        # El navegador sólo se arma cuando puede hacer falta: importar
+        # playwright sin tenerlo instalado revienta el comando entero.
+        from rates_agent.navegador import TransporteNavegador
+
+        transportes.append(TransporteNavegador(user_agent=agente))
+
+    fetcher = Fetcher(transportes, esperas_backoff_s=esperas)
+
+    # La corrida deja su fila en `job_runs` aunque la dispare una persona. Sin
+    # esto los huecos de catálogo sólo existirían en la consola: `cli revisiones
+    # list` los lee de la última corrida, y una pasada local es una corrida
+    # igual de real que la del lunes.
+    async with registrar_corrida(JOB_ID_FETCH) as corrida:
+        reporte = await pipeline.correr(fetcher=fetcher, solo_requieren_js=solo_js)
+        corrida.metricas.update(reporte.como_metricas())
+        corrida.metricas["disparada_por"] = "cli"
+    return reporte
+
+
 __all__ = [
     "TASA_MAXIMA_PLAUSIBLE",
     "ImportReport",
     "ImportError_",
     "ListaRevision",
     "ProductoPendiente",
+    "correr_fetch",
     "import_csv",
     "listar_pendientes",
 ]

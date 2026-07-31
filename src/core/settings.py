@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     scheduler_heartbeat_enabled: bool = True
     scheduler_heartbeat_interval_seconds: int = 60
     scheduler_banderas_enabled: bool = True
+    scheduler_tasas_enabled: bool = True
     scheduler_lock_ttl_seconds: int = 300
     scheduler_timezone: str = "America/Mexico_City"
 
@@ -112,11 +113,51 @@ class Settings(BaseSettings):
 
     cache_comparador_ttl_seconds: int = 300
     banderas_recompute_enabled: bool = True
+    tasas_fetch_enabled: bool = True
+    #: El job del VPS sólo lee lo que rinde sin navegador. En `true` mientras
+    #: Chromium no esté en la imagen del scheduler: las fuentes que necesitan
+    #: JavaScript se corren desde local con `cli tasas fetch --solo-navegador`.
+    #: Ver la sección «Navegador en el VPS» de docs/despliegue.md.
+    tasas_fetch_solo_sin_js: bool = True
     config_cache_ttl_seconds: int = 60
 
     # ─── Fuentes de datos (fases 7 y 9) ───────────────────────
     banxico_token: SecretStr = SecretStr("")
     deepseek_api_key: SecretStr = SecretStr("")
+
+    # ─── LLM (extracción de tasas, fase 9) ────────────────────
+    llm_base_url: str = "https://api.deepseek.com/v1"
+    #: `deepseek-chat` y `deepseek-reasoner` los retiró DeepSeek el 2026-07-24.
+    #: Se usa el económico: la extracción es leer una tabla, no razonar. Un
+    #: razonador además gasta el presupuesto de tokens pensando y devuelve el
+    #: contenido vacío (visto en NarrativeAlpha).
+    llm_modelo_extraccion: str = "deepseek-v4-flash"
+    llm_timeout_seconds: float = 90.0
+    #: Techo duro de gasto diario (D2). Red contra bucles, no presupuesto: lo
+    #: esperado son centavos por semana.
+    llm_cost_daily_limit_usd: float = 1.0
+
+    # ─── Descarga de páginas de tasas (fase 9) ────────────────
+    #: El bot se identifica y da dónde reclamar. No se imita un navegador para
+    #: esquivar un WAF: si una institución bloquea a un bot identificado, esa
+    #: fuente pasa a lectura manual.
+    fetch_user_agent: str = (
+        "Mozilla/5.0 (compatible; CentinelaFinancieroBot/1.0; "
+        "+https://centinelafinanciero.lat/aviso-legal)"
+    )
+    fetch_timeout_seconds: float = 20.0
+    #: Reintentos **además** del intento inicial, y sólo ante errores que el
+    #: tiempo puede curar.
+    fetch_max_reintentos: int = 1
+    #: Errores duros por host antes de dejarlo para la siguiente corrida.
+    fetch_umbral_circuito: int = 2
+    #: Backoff temporal ante una cadena degradada por algo transitorio. Los
+    #: valores vienen de NarrativeAlpha, donde están calibrados en producción:
+    #: cinco minutos y luego veinte. No reducir sin medir.
+    fetch_esperas_backoff_s: list[float] = [300.0, 1200.0]
+    #: Menos texto que esto es una página que no se pudo leer, no una sin tasas.
+    fetch_min_caracteres: int = 200
+    fetch_respetar_robots: bool = True
 
     @field_validator("log_format", mode="before")
     @classmethod

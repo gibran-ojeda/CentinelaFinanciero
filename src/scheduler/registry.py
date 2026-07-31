@@ -23,7 +23,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from core.settings import settings
-from scheduler.jobs import banderas, heartbeat
+from scheduler.jobs import banderas, heartbeat, tasas
 
 JobFunc = Callable[[], Awaitable[None]]
 
@@ -78,6 +78,21 @@ def build_registry() -> tuple[JobSpec, ...]:
             # Recorre todo el catálogo: puede tardar más que el default.
             lock_ttl_seconds=900,
             tags=("dominio",),
+        ),
+        JobSpec(
+            id=tasas.JOB_ID,
+            func=tasas.tasas_fetch_dirigido,
+            # Lunes temprano: las instituciones publican cambios con el inicio
+            # de semana, y a esa hora sus sitios están descansados.
+            trigger=CronTrigger(day_of_week="mon", hour=6, minute=0),
+            name="Lectura semanal de tasas",
+            enabled=settings.scheduler_tasas_enabled,
+            # Dieciocho páginas, con reintentos y hasta veinte minutos de
+            # backoff temporal si toda la cadena cae por rate-limit. El TTL
+            # tiene que cubrir el peor caso o el lock caduca a media corrida y
+            # otra instancia empieza encima.
+            lock_ttl_seconds=3600,
+            tags=("ingesta",),
         ),
     )
 

@@ -26,6 +26,10 @@ from domain.orm import Tasa
 router = APIRouter(prefix="/api/v1/meta", tags=["meta"])
 
 #: Días que puede tener un dato antes de considerarse desactualizado.
+#: Días de antigüedad tolerables por fuente. Se recorre este diccionario y no
+#: el enum: `AGREGADOR` queda fuera **a propósito**, porque este endpoint mide
+#: la frescura de lo que se sirve y un dato de agregador no se sirve nunca.
+#: Incluirlo pondría una fila en rojo por datos que no llegan a nadie.
 SLA_POR_FUENTE: dict[FuenteTasa, int] = {
     FuenteTasa.BANXICO_API: 2,
     FuenteTasa.CNBV: 100,

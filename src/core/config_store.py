@@ -182,6 +182,22 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         "scheduler",
         "Kill-switch caliente del recomputo de banderas",
     ),
+    ConfigKeySpec(
+        "tasas_fetch_enabled",
+        "bool",
+        "scheduler",
+        "Kill-switch caliente de la lectura semanal de tasas",
+    ),
+    ConfigKeySpec(
+        "tasas_fetch_solo_sin_js",
+        "bool",
+        "scheduler",
+        (
+            "El job sólo lee las fuentes que rinden sin navegador. En true "
+            "mientras Chromium no esté en la imagen: las que necesitan JS se "
+            "corren desde local con `cli tasas fetch --solo-navegador`"
+        ),
+    ),
     ConfigKeySpec("config_cache_ttl_seconds", "int", "scheduler", "TTL del snapshot de config"),
 )
 
