@@ -71,4 +71,19 @@ fi
 echo "── migraciones ──"
 $COMPOSE exec -T api alembic upgrade head < /dev/null
 
+# Migrar crea las tablas; no las llena. Y una base vacía no es un despliegue a
+# medias silencioso: sin parámetros fiscales, `_params_fiscales` devuelve 503 en
+# todo lo que calcula —comparador, calculadora, instituciones—, la portada no
+# renderiza, el healthcheck de `web` nunca pasa a healthy y el gate de humo
+# muere. El primer despliegue en un VPS limpio es exactamente ese caso.
+#
+# Corre en cada despliegue y no sólo en el primero porque las dos son
+# idempotentes: `seed` hace upsert por clave natural y `tasas import` salta las
+# observaciones que ya existen (las cuenta como «ya existentes»). Así el
+# catálogo del VPS es siempre el del commit desplegado, sin un paso manual que
+# alguien tenga que recordar.
+echo "── catálogo semilla ──"
+$COMPOSE exec -T api python -m cli seed < /dev/null
+$COMPOSE exec -T api python -m cli tasas import seeds/tasas.csv < /dev/null
+
 echo "── despliegue aplicado; faltan los gates ──"
