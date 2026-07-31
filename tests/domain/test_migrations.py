@@ -72,6 +72,31 @@ def _tablas(url: str) -> set[str]:
         engine.dispose()
 
 
+def _foto_del_esquema(url: str) -> dict[str, object]:
+    """Tablas, columnas, nulabilidad y restricciones CHECK.
+
+    Los CHECK entran porque hay migraciones que no tocan ninguna columna: la
+    que sincronizó `ck_fuente_valido` con `FuenteTasa` sólo cambia una lista de
+    valores, y una foto que mirase únicamente las columnas la daría por
+    inexistente — con lo que su reversibilidad no quedaría comprobada.
+    """
+    engine = create_engine(url)
+    try:
+        inspector = inspect(engine)
+        return {
+            tabla: (
+                sorted((c["name"], bool(c["nullable"])) for c in inspector.get_columns(tabla)),
+                sorted(
+                    (c["name"] or "", " ".join(str(c["sqltext"]).split()))
+                    for c in inspector.get_check_constraints(tabla)
+                ),
+            )
+            for tabla in sorted(set(inspector.get_table_names()) - {"alembic_version"})
+        }
+    finally:
+        engine.dispose()
+
+
 def test_upgrade_builds_the_whole_schema_from_an_empty_database(sync_url: str) -> None:
     assert _tablas(sync_url) == set()
 
@@ -92,32 +117,27 @@ def test_downgrade_to_base_leaves_nothing_behind(sync_url: str) -> None:
 
 
 def test_the_last_migration_is_reversible_on_its_own(sync_url: str) -> None:
-    """Un paso atrás deshace **ese** paso, no el esquema entero.
+    """Un paso atrás deshace **ese** paso, y volver a darlo lo restaura.
 
     Es el escenario de un rollback en producción: se despliega una revisión,
-    algo falla y se retrocede una sola. Este test valía `== {alembic_version}`
-    cuando sólo existía la migración inicial; con una cadena, esa aserción
-    dejaba de comprobar la reversibilidad y pasaba a comprobar que no hubiera
-    más de una migración.
+    algo falla y se retrocede una sola — el `alembic downgrade -1` del runbook.
+
+    Se comprueba con una foto del esquema antes y después del viaje de ida y
+    vuelta, en vez de nombrar lo que hace la última migración. Nombrarlo
+    obligaba a reescribir este test con cada migración nueva, y un test que hay
+    que reescribir para que vuelva a pasar deja de comprobar nada: se convierte
+    en un trámite. Esta versión no hay que tocarla nunca más.
     """
     config = _alembic_config(sync_url)
     command.upgrade(config, "head")
+    antes = _foto_del_esquema(sync_url)
 
-    engine = create_engine(sync_url)
-    try:
-        antes = {c["name"] for c in inspect(engine).get_columns("instituciones")}
-        assert "es_demostracion" in antes
-
-        command.downgrade(config, "-1")
-
-        despues = {c["name"] for c in inspect(engine).get_columns("instituciones")}
-        assert "es_demostracion" not in despues
-        assert antes - despues == {"es_demostracion"}
-    finally:
-        engine.dispose()
-
-    # El resto del esquema sigue en pie: un paso atrás no es un `downgrade base`.
+    command.downgrade(config, "-1")
+    # Un paso atrás no es un `downgrade base`: el resto del esquema sigue en pie.
     assert TABLAS_ESPERADAS <= _tablas(sync_url)
+
+    command.upgrade(config, "head")
+    assert _foto_del_esquema(sync_url) == antes
 
 
 def test_upgrade_is_reapplicable_after_a_downgrade(sync_url: str) -> None:
