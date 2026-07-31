@@ -53,8 +53,31 @@ jobs:
           printf '%s\n' "${{ secrets.VPS_HOST_KEY }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_deploy ~/.ssh/known_hosts
 
+          # Comprobar aquí que la llave se puede leer, y no tres pasos después.
+          # `ssh-keygen -y` deriva la pública desde la privada: si el archivo
+          # está mutilado —CRLF de un pegado desde Windows, una línea perdida
+          # al seleccionar con el ratón— no puede, y falla con un mensaje que
+          # se entiende. Sin esto, el síntoma es un `error in libcrypto` de
+          # OpenSSL seguido de intentos de contraseña, que no se parece en nada
+          # a su causa.
+          if ! ssh-keygen -y -f ~/.ssh/id_deploy > /dev/null 2>&1; then
+            echo "::error::VPS_SSH_KEY no es una clave privada válida. Suele ser CRLF o un pegado truncado. Vuelve a fijarla leyendo el archivo, sin portapapeles: gh secret set VPS_SSH_KEY < ~/.ssh/centinela_deploy"
+            exit 1
+          fi
+
       - name: Desplegar
         run: |
+          # Las dos opciones del `ssh` de abajo, que aquí no son manía:
+          #
+          #   BatchMode=yes      prohíbe cualquier prompt. Sin él, una llave que
+          #     no carga hace que ssh degrade a contraseña — y ssh lee la
+          #     contraseña de **stdin**, que es esta misma tubería. El resultado
+          #     fue mandar las primeras líneas del script como intentos de
+          #     autenticación hasta agotar MaxAuthTries, y un fallo de 16
+          #     segundos que no se parecía a su causa.
+          #   IdentitiesOnly=yes obliga a usar esta llave y no otra que el
+          #     agente ofrezca. Sin él, un día podría entrar con una credencial
+          #     distinta y el secreto seguiría mal sin que nadie lo supiera.
           {
             echo "REF='${{ steps.ref.outputs.valor }}'"
             echo "POSTGRES_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}'"
@@ -68,6 +91,7 @@ jobs:
             echo "DEEPSEEK_API_KEY='${{ secrets.DEEPSEEK_API_KEY }}'"
             cat scripts/desplegar.sh
           } | ssh -i ~/.ssh/id_deploy \
+                -o IdentitiesOnly=yes -o BatchMode=yes \
                 "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" 'bash -s'
 
       - name: Gates
@@ -79,6 +103,7 @@ jobs:
             echo "API_READ_KEY='${{ secrets.API_READ_KEY }}'"
             echo 'cd ~/centinela-financiero && exec bash scripts/gates.sh'
           } | ssh -i ~/.ssh/id_deploy \
+                -o IdentitiesOnly=yes -o BatchMode=yes \
                 "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" 'bash -s'
 
       - name: Qué hacer si algo de esto falló
