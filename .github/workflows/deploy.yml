@@ -61,6 +61,11 @@ jobs:
             echo "API_READ_KEY='${{ secrets.API_READ_KEY }}'"
             echo "API_ADMIN_KEY='${{ secrets.API_ADMIN_KEY }}'"
             echo "SITE_URL='${{ secrets.SITE_URL }}'"
+            # Opcionales: si el secreto no existe llegan vacías y el
+            # despliegue sigue. Lo que no funciona sin ellas son los jobs de
+            # ingesta de las fases 7 y 9, no el sitio.
+            echo "BANXICO_TOKEN='${{ secrets.BANXICO_TOKEN }}'"
+            echo "DEEPSEEK_API_KEY='${{ secrets.DEEPSEEK_API_KEY }}'"
             cat scripts/desplegar.sh
           } | ssh -i ~/.ssh/id_deploy \
                 "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" 'bash -s'

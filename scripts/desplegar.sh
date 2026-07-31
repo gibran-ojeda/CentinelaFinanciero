@@ -9,7 +9,8 @@
 # `ps` para cualquiera con cuenta en la máquina.
 #
 # Variables que espera: REF, POSTGRES_PASSWORD, API_READ_KEY, API_ADMIN_KEY,
-# SITE_URL.
+# SITE_URL. Opcionales: BANXICO_TOKEN y DEEPSEEK_API_KEY — sin ellas el stack
+# sirve igual, sólo quedan sin llave los jobs de las fases 7 y 9.
 #
 # Ojo con los `< /dev/null`: bash lee este archivo de stdin a medida que lo
 # ejecuta. Un comando que consuma stdin se traga lo que queda del script y la
@@ -50,6 +51,8 @@ API_ADMIN_KEY=${API_ADMIN_KEY}
 SITE_URL=${SITE_URL}
 LOG_LEVEL=INFO
 LOG_FORMAT=json
+BANXICO_TOKEN=${BANXICO_TOKEN:-}
+DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
 ENV
 
 $COMPOSE build < /dev/null

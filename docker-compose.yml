@@ -34,6 +34,16 @@ x-app-env: &app-env
   REDIS_PORT: 6379
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   LOG_FORMAT: ${LOG_FORMAT:-}
+  # Fuentes de datos de las fases 7 y 9. Van aquí y no basta con tenerlas en el
+  # `.env`: este compose no declara `env_file:`, así que el archivo sólo sirve
+  # para la interpolación `${...}` de aquí. Lo que no esté en este mapa **no
+  # entra al contenedor**, por mucho que esté escrito en el `.env`.
+  #
+  # Opcionales a propósito (`:-`): sin ellas el stack sirve igual y lo único que
+  # queda sin llave son los jobs de ingesta. El de tasas se apaga con su
+  # kill-switch caliente, `cli config set tasas_fetch_enabled false`.
+  BANXICO_TOKEN: ${BANXICO_TOKEN:-}
+  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
 
 services:
   db:
