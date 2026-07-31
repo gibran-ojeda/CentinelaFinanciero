@@ -24,6 +24,7 @@ import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.services import cache
 from core.db import session_scope
 from core.logging import get_logger
 from domain.enums import (
@@ -411,6 +412,11 @@ async def run_seed(seeds_dir: Path | None = None) -> SeedReport:
         await _seed_indicadores(
             session, _read_csv(directorio / "indicadores.csv"), instituciones, report
         )
+
+    # El catálogo es la mitad de cada fila del comparador: instituciones,
+    # productos y sus plazos. Sembrar sin invalidar deja la vista sirviendo un
+    # catálogo que ya no existe — y en el despliegue, uno vacío.
+    await cache.invalidar()
 
     log.info(
         "seed_completado",

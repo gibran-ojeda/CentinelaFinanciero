@@ -48,6 +48,55 @@ async def test_imports_the_full_seed_dataset() -> None:
     assert await _contar_tasas() == 37
 
 
+async def test_importing_invalidates_the_comparador_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sin esto el sitio queda en blanco cinco minutos después de cada deploy.
+
+    El script de despliegue espera a que la API esté sana y **luego** siembra.
+    En ese hueco, el healthcheck de `web` pide la portada cada 30 s, la API la
+    calcula con la tabla vacía y la cachea con el TTL del ConfigStore. Un alta
+    que no invalida deja servida esa respuesta vacía todo el TTL — y hace
+    fallar el gate de la portada en un despliegue que estaba bien.
+    """
+    await run_seed()
+    llamadas = 0
+
+    async def _espia() -> int:
+        nonlocal llamadas
+        llamadas += 1
+        return 0
+
+    monkeypatch.setattr("cli.tasas.cache.invalidar", _espia)
+
+    await import_csv(_csv(tmp_path, "cetes-28,6.18,,,2026-07-23,MANUAL,,VIGENTE,"))
+    assert llamadas == 1
+
+    # Se invalida aunque no se cree nada: la respuesta vacía cacheada durante el
+    # despliegue sigue ahí, y una reimportación idempotente es justo lo que hace
+    # el despliegue en cada corrida a partir de la primera.
+    await import_csv(_csv(tmp_path, "cetes-28,6.18,,,2026-07-23,MANUAL,,VIGENTE,"))
+    assert llamadas == 2
+
+
+async def test_a_dry_run_does_not_touch_the_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Una simulación no escribe, así que no hay nada que invalidar."""
+    await run_seed()
+    llamadas = 0
+
+    async def _espia() -> int:
+        nonlocal llamadas
+        llamadas += 1
+        return 0
+
+    monkeypatch.setattr("cli.tasas.cache.invalidar", _espia)
+
+    await import_csv(_csv(tmp_path, "cetes-28,6.18,,,2026-07-23,MANUAL,,VIGENTE,"), dry_run=True)
+    assert llamadas == 0
+
+
 async def test_seed_dataset_publishes_only_verified_rates() -> None:
     """La regla del catálogo: sólo lo verificado en fuente primaria va VIGENTE."""
     await run_seed()

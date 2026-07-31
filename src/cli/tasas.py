@@ -22,6 +22,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from api.services import cache
 from api.services.tasas_vigentes import tasas_vigentes_por_producto
 from core.db import session_scope
 from core.logging import get_logger
@@ -175,6 +176,17 @@ async def import_csv(path: Path, *, dry_run: bool = False) -> ImportReport:
 
         if dry_run:
             await session.rollback()
+
+    # Siempre que el alta haya sido real, aunque no creara nada. Escribir tasas
+    # sin invalidar deja al comparador sirviendo una respuesta que ya no
+    # corresponde, y el caso que muerde no es el de las altas: es el del
+    # despliegue. El script espera a que la API esté sana y **después** siembra,
+    # así que entre una cosa y otra el healthcheck de `web` pide la portada, la
+    # API la calcula vacía y la cachea cinco minutos. Un import que no invalida
+    # deja el sitio en blanco todo ese rato — y hace fallar el gate de la
+    # portada en un despliegue perfectamente bueno.
+    if not dry_run:
+        await cache.invalidar()
 
     log.info(
         "tasas_importadas",
