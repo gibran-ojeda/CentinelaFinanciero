@@ -137,6 +137,58 @@ async def test_an_unapplied_migration_fails_the_gate() -> None:
 
 
 @pytest.mark.usefixtures("base_migrada")
+async def test_an_enum_value_the_database_rejects_fails_the_gate() -> None:
+    """El caso que llegó a producción y nadie vio venir.
+
+    La fase 9 añadió `FuenteTasa.AGREGADOR` al enum. El ORM deriva el CHECK del
+    enum, así que `Base.metadata` quedó bien; la base conservó los cinco valores
+    literales de la migración inicial. En desarrollo no se notó —la base ya
+    tenía las filas con la etiqueta vieja— y reventó en el primer despliegue
+    sobre una base limpia, al sembrar el catálogo.
+
+    Se simula estrechando el CHECK, que es exactamente el estado en el que
+    quedó la base real antes de la migración correctiva.
+    """
+    await _sql("ALTER TABLE tasas DROP CONSTRAINT ck_fuente_valido")
+    await _sql(
+        "ALTER TABLE tasas ADD CONSTRAINT ck_fuente_valido CHECK "
+        "(fuente IN ('MANUAL', 'BANXICO_API', 'CNBV', 'FETCH_DIRIGIDO', 'LLM_RESEARCH'))"
+    )
+
+    reporte = await comprobar_esquema()
+
+    assert not reporte.ok
+    # En el head y aun así incapaz de aceptar un valor que el código usa: el
+    # número de revisión no basta, que es la razón de ser de este gate.
+    assert reporte.migraciones_al_dia
+    assert len(reporte.enumeraciones) == 1
+    assert "ck_fuente_valido" in reporte.enumeraciones[0]
+    assert "AGREGADOR" in reporte.enumeraciones[0]
+
+
+@pytest.mark.usefixtures("base_migrada")
+async def test_an_enum_value_only_the_database_knows_is_not_drift() -> None:
+    """Al revés no rompe nada, y avisar obligaría a migrar cada valor retirado.
+
+    Una base que acepta más de lo que el enum usa no puede provocar un fallo en
+    caliente: nadie va a escribir ese valor. Marcarlo pediría una migración por
+    cada miembro que alguien quite del enum, y un gate que pide trabajo sin
+    evitar un fallo acaba desactivado.
+    """
+    await _sql("ALTER TABLE tasas DROP CONSTRAINT ck_fuente_valido")
+    await _sql(
+        "ALTER TABLE tasas ADD CONSTRAINT ck_fuente_valido CHECK "
+        "(fuente IN ('MANUAL', 'AGREGADOR', 'BANXICO_API', 'CNBV', 'FETCH_DIRIGIDO', "
+        "'LLM_RESEARCH', 'UN_VALOR_QUE_YA_NADIE_USA'))"
+    )
+
+    reporte = await comprobar_esquema()
+
+    assert reporte.enumeraciones == []
+    assert reporte.ok
+
+
+@pytest.mark.usefixtures("base_migrada")
 async def test_alembic_version_is_not_reported_as_an_extra_table() -> None:
     """Alembic la mantiene ella; no está en el metadata y no es deriva."""
     reporte = await comprobar_esquema()

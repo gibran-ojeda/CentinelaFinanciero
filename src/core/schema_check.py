@@ -16,24 +16,37 @@ Dos preguntas, y las dos importan:
 2. ¿Coincide el esquema real con el del ORM? Puede estar en el head y aun así
    diferir: alguien tocó la base a mano, o una migración se escribió a medias.
 
+3. ¿Aceptan las restricciones de enumeración los valores que el código usa? El
+   ORM las deriva del enum (`_enum_check()` en orm.py) y la migración las
+   escribió literales, así que añadir un miembro al enum sin migración deja la
+   base rechazando un valor que el código da por válido. Pasó de verdad con
+   `FuenteTasa.AGREGADOR`: el despliegue murió al sembrar, en la base limpia
+   donde nadie lo había probado.
+
 Lo que **no** comprueba: tipos exactos por dialecto ni índices. Comparar
 `VARCHAR(64)` contra `String(64)` a través de todos los dialectos es una fuente
 de falsos positivos que acabaría con alguien desactivando el gate — que es el
-peor resultado posible. Tablas, columnas y nulabilidad cubren lo que rompe en
-producción.
+peor resultado posible. Tablas, columnas, nulabilidad y enumeraciones cubren lo
+que rompe en producción.
+
+Las enumeraciones sí se comparan, y no contradice lo anterior: los dos lados
+son conjuntos de literales, no tipos de un dialecto, así que la comparación es
+exacta y no puede producir un falso positivo.
 """
 
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import inspect, text
+from sqlalchemy import CheckConstraint, Table, inspect, text
 from sqlalchemy.engine import Connection
+from sqlalchemy.engine.reflection import Inspector
 
 from core.db import dispose_engine, get_engine
 from core.logging import configure_logging, get_logger
@@ -43,6 +56,22 @@ log = get_logger(__name__)
 
 #: Alembic la mantiene ella misma; no está en el metadata del ORM.
 TABLAS_IGNORADAS = frozenset({"alembic_version"})
+
+#: Cómo nombra `_enum_check()` las restricciones que deriva de un enum. Sólo
+#: ésas se comparan por valores: las demás (`tasa_nominal >= 0`) no son listas.
+_PATRON_ENUM = re.compile(r"^ck_[a-z_]+_valido$")
+
+
+def _valores_de(sql: str) -> frozenset[str]:
+    """Los literales de un CHECK de enumeración, venga de donde venga.
+
+    Sirve para las dos formas del mismo predicado: la del ORM,
+    `fuente IN ('MANUAL', ...)`, y la que devuelve Postgres al leerlo,
+    `(fuente)::text = ANY (ARRAY['MANUAL'::character varying, ...])`. En las dos
+    lo único entrecomillado son los valores — los `::tipo` van sin comillas—,
+    así que basta con quedarse con eso y comparar conjuntos.
+    """
+    return frozenset(re.findall(r"'([^']*)'", sql))
 
 
 @dataclass(slots=True)
@@ -54,6 +83,7 @@ class ReporteEsquema:
     columnas_faltantes: list[str] = field(default_factory=list)
     columnas_sobrantes: list[str] = field(default_factory=list)
     nulabilidad: list[str] = field(default_factory=list)
+    enumeraciones: list[str] = field(default_factory=list)
     revision_bd: str | None = None
     revision_head: str | None = None
 
@@ -73,6 +103,7 @@ class ReporteEsquema:
             *(f"falta la columna {c}" for c in self.columnas_faltantes),
             *(f"sobra la columna {c} (no está en el ORM)" for c in self.columnas_sobrantes),
             *self.nulabilidad,
+            *self.enumeraciones,
         ]
 
     def render(self) -> str:
@@ -151,6 +182,40 @@ def _comparar(conn: Connection, reporte: ReporteEsquema) -> None:
                     f"{'nullable' if esperada else 'NOT NULL'} y la base la tiene "
                     f"{'nullable' if real else 'NOT NULL'}"
                 )
+
+        _comparar_enumeraciones(inspector, tabla, reporte)
+
+
+def _comparar_enumeraciones(inspector: Inspector, tabla: Table, reporte: ReporteEsquema) -> None:
+    """Que la base acepte los valores que el enum del código ya usa.
+
+    Se comprueba en la dirección que rompe: un miembro nuevo del enum que la
+    base todavía rechaza. Al revés —la base acepta uno que el enum ya retiró—
+    no rompe nada en caliente, y avisarlo obligaría a una migración por cada
+    valor obsoleto que nadie escribe ya.
+    """
+    reales: dict[str, str] = {}
+    for reflejada in inspector.get_check_constraints(tabla.name):
+        nombre_real = reflejada.get("name")
+        if isinstance(nombre_real, str):
+            reales[nombre_real] = reflejada["sqltext"]
+
+    for con in tabla.constraints:
+        if not isinstance(con, CheckConstraint) or not isinstance(con.name, str):
+            continue
+        if not _PATRON_ENUM.match(con.name):
+            continue
+
+        if con.name not in reales:
+            reporte.enumeraciones.append(f"{tabla.name}: falta la restricción {con.name}")
+            continue
+
+        faltan = _valores_de(str(con.sqltext)) - _valores_de(reales[con.name])
+        if faltan:
+            reporte.enumeraciones.append(
+                f"{tabla.name}.{con.name}: la base rechaza {sorted(faltan)}, que el ORM ya "
+                f"usa. Falta la migración que actualice la restricción."
+            )
 
 
 async def comprobar_esquema() -> ReporteEsquema:
