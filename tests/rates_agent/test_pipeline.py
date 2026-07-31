@@ -83,6 +83,12 @@ def _fetcher(*transportes: TransporteFalso) -> Fetcher:
         respetar_robots=False,
         esperas_backoff_s=(),
         espera_base_s=0.001,
+        # El umbral de «página vacía» es del fetcher y lo prueba `test_fetcher`.
+        # Aquí sólo hace ruido: `PAGINA` extrae 195 caracteres con trafilatura
+        # 2.2 y 201 con 2.1 —la versión nueva ya no dibuja las tablas con
+        # barras—, así que contra el valor de producción (200) estos tests
+        # dependían de qué versión resolviera pip ese día. Y resolvió otra.
+        min_caracteres=1,
     )
 
 
