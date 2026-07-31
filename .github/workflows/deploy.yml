@@ -99,8 +99,15 @@ jobs:
           # `gates.sh` sale del repo ya actualizado en el VPS, no de este
           # checkout: se comprueba el commit que se acaba de desplegar con las
           # comprobaciones de ese mismo commit.
+          #
+          # `export` y no una asignación a secas, que es lo que había: aquí el
+          # script NO se concatena a este mismo shell —como sí hace el paso de
+          # arriba con `cat scripts/desplegar.sh`— sino que `exec bash` arranca
+          # un proceso nuevo, y una variable de shell sin exportar no lo cruza.
+          # El gate abortaba por «falta API_READ_KEY» sin llegar a comprobar
+          # nada, que es la peor forma de fallar: parece un secreto mal puesto.
           {
-            echo "API_READ_KEY='${{ secrets.API_READ_KEY }}'"
+            echo "export API_READ_KEY='${{ secrets.API_READ_KEY }}'"
             echo 'cd ~/centinela-financiero && exec bash scripts/gates.sh'
           } | ssh -i ~/.ssh/id_deploy \
                 -o IdentitiesOnly=yes -o BatchMode=yes \
