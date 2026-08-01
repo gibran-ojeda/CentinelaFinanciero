@@ -125,6 +125,13 @@ class Settings(BaseSettings):
     banxico_token: SecretStr = SecretStr("")
     deepseek_api_key: SecretStr = SecretStr("")
 
+    # ─── Banxico / SIE (fase 7) ───────────────────────────────
+    banxico_timeout_seconds: float = 30.0
+    #: Cuántas veces se reintenta un lote **además** del intento inicial, y sólo
+    #: ante lo que el tiempo cura. Un token inválido no entra aquí: llega como
+    #: 400 y se propaga en el primer intento.
+    banxico_max_reintentos: int = 2
+
     # ─── LLM (extracción de tasas, fase 9) ────────────────────
     llm_base_url: str = "https://api.deepseek.com/v1"
     #: `deepseek-chat` y `deepseek-reasoner` los retiró DeepSeek el 2026-07-24.
