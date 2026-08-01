@@ -181,10 +181,14 @@ El resultado entra por la misma cola de revisión. La diferencia con la opción 
 - **`ufw` dropea `docker0 → host`.** Un contenedor de Centinela en bridge no alcanza nada publicado en el loopback del host — causa documentada de 502 en NarrativeAlpha. Si algún día Centinela necesita consumir un servicio del vecino (su SearXNG, por ejemplo), la vía es adjuntar el contenedor a la red bridge de NarrativeAlpha como red externa, nunca pasar por la gateway de Docker.
 - **Centinela no levanta Caddy.** 80/443 los tiene el de NarrativeAlpha en `network_mode: host`.
 - **`SITE_URL` es obligatoria en producción.** El overlay falla si no está, a propósito: sin ella la canónica y el `sitemap.xml` anunciarían el loopback y el fallo sería invisible hasta que el índice estuviera hecho.
-- **Antes de difundir el sitio**, apagar el modo demostración:
+- **La política de transición del lanzamiento** publica las tasas en
+  `PENDIENTE_REVISION` etiquetadas «sin verificar» hasta que su lectura oficial
+  las sustituye (`mostrar_tasas_sin_verificar`, encendida por diseño). Para
+  ocultar lo no verificado sin deploy:
 
   ```bash
-  docker compose exec -T api python -m cli config set mostrar_datos_demo false --motivo "lanzamiento público"
+  docker compose exec -T api python -m cli config set mostrar_tasas_sin_verificar false --motivo "solo verificado"
   ```
 
-  Y comprobar que `/api/v1/meta/frescura` devuelve `modo_demo: false`.
+  El estado es observable en `/api/v1/meta/frescura`
+  (`mostrar_tasas_sin_verificar`).

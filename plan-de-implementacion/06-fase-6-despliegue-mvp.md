@@ -73,7 +73,7 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 - **Respaldos**: [`scripts/respaldar.sh`](../scripts/respaldar.sh) — `pg_dump` diario del contenedor `centinela-db` con nombre y retención propios (14 días), sin colisionar con los de NarrativeAlpha; copia fuera del VPS por `scp` en el ciclo semanal; [`scripts/restaurar.sh`](../scripts/restaurar.sh) restaura en un Postgres desechable y comprueba que los datos estén.
 - [`docs/runbook-actualizacion-manual.md`](../docs/runbook-actualizacion-manual.md) — ciclo semanal operativo, apoyado en `python -m cli tasas pendientes`:
   1. `cli tasas pendientes` lista lo que no puede salir al sitio, con la URL oficial de cada institución.
-  2. Abrir cada página —ocho necesitan navegador de verdad— y anotar tasa, plazo, GAT y fecha.
+  2. Abrir cada página —once necesitan navegador de verdad— y anotar tasa, plazo, GAT y fecha.
   3. Actualizar `seeds/tasas.csv` y correr `python -m cli tasas import`.
   4. Verificar en el sitio que la fecha cambió y que el enlace a la fuente lleva a donde debe.
 - Monitoreo mínimo: uptime monitor externo sobre el dominio y revisión de `job_runs` incluida en el runbook.
@@ -89,12 +89,14 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 7. **Antes de apuntar el DNS**, ejecutar el primer ciclo del runbook manual completo (revisar las URLs oficiales → CSV → import → verificar en sitio). Va **antes** del lanzamiento y no después: con el modo demo apagado, el catálogo verificado son cinco filas de CETES y BONDDIA, y un comparador de SOFIPOs y bancos que no muestra ninguna de las dos cosas no sirve. Lo que no se logre verificar contra la página de la propia institución se queda en `PENDIENTE_REVISION` y lo recupera la fase 9.
 8. Configurar el uptime monitor.
 9. **Apagar el modo demo**: `python -m cli config set mostrar_datos_demo false --motivo "lanzamiento público"`. Mientras esté encendido, el comparador publica las instituciones ilustrativas (◆) y las tasas en `PENDIENTE_REVISION` — marcadas, pero publicadas. Un sitio abierto a internet sólo debe servir lo verificado. Verificar después que `/api/v1/meta/frescura` devuelve `modo_demo: false`.
+
+   > **Nota (2026-07-31):** superado por la política de transición del lanzamiento. Las instituciones ilustrativas se **purgaron** del producto (seeds y base), y la bandera pasó a llamarse `mostrar_tasas_sin_verificar` y **queda encendida**: las tasas de agregador se publican etiquetadas «sin verificar» hasta que la lectura oficial de cada producto las sustituye. El interruptor se conserva para ocultar lo no verificado sin deploy. Ver `docs/criterios-de-redaccion.md` §3.
 10. **D5 está resuelta** (ver [criterios de redacción](../docs/criterios-de-redaccion.md)). Lo que queda de ella en esta fase es publicar `/aviso-legal` y `/privacidad` con el `contacto@` ya operativo, y releer los cinco criterios antes de difundir el sitio.
 
 ## Criterios de aceptación
 
 - [ ] `https://centinelafinanciero.lat` responde con TLS válido; la API interna (8010) no es alcanzable desde internet.
-- [ ] `mostrar_datos_demo` está en `false`: ninguna institución ◆ ni ninguna tasa sin verificar aparece en el sitio público.
+- [ ] ~~`mostrar_datos_demo` está en `false`: ninguna institución ◆ ni ninguna tasa sin verificar aparece en el sitio público.~~ **Superado (2026-07-31)**: ver la nota del paso 9 — las ficticias se purgaron y lo pendiente se publica etiquetado bajo `mostrar_tasas_sin_verificar`.
 - [ ] `https://narrative-alpha.cloud` sigue respondiendo 200 y todos los contenedores `narrativealpha-*` siguen `healthy` — cero regresión en el vecino.
 - [ ] Ningún puerto de Centinela colisiona con los de NarrativeAlpha (verificar con `ss -tlnp`).
 - [ ] Los volúmenes y contenedores de Centinela llevan prefijo propio; `docker volume ls` no muestra ambigüedad.
