@@ -32,6 +32,7 @@ datos malinterpretados».
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 SECTOR_BANCA = "Banca Múltiple"
 SECTOR_SOFIPO = "Sociedades Financieras Populares"
@@ -49,6 +50,13 @@ class Fuente:
     tema: str
     extension: str
     descripcion: str
+    #: Columna de `indicadores_financieros` que **sólo** llena esta fuente. Es
+    #: cómo se sabe si un periodo ya se cargó sin necesidad de una tabla de
+    #: control: si esa columna ya tiene valor para ese periodo, esta fuente ya
+    #: corrió. Preguntar sólo por el periodo no bastaría — el boletín de
+    #: SOFIPOs y el PDF de NICAP pueden coincidir en mes, y el segundo se
+    #: saltaría por el trabajo del primero.
+    columna_testigo: str
 
 
 #: Boletín estadístico de banca múltiple. **Mensual.** Trae IMOR, ICOR, ICAP y
@@ -60,6 +68,7 @@ BOLETIN_BANCA = Fuente(
     tema=TEMA_BOLETINES,
     extension="xlsx",
     descripcion="Boletín estadístico de banca múltiple (mensual)",
+    columna_testigo="imor",
 )
 
 #: Boletín estadístico de SOFIPOs. **Trimestral**, y por eso va siempre más
@@ -70,6 +79,7 @@ BOLETIN_SOFIPO = Fuente(
     tema=TEMA_BOLETINES,
     extension="xlsx",
     descripcion="Boletín estadístico de SOFIPOs (trimestral)",
+    columna_testigo="imor",
 )
 
 #: Nivel de capitalización de SOFIPOs. Mensual y **sólo en PDF**: es la única
@@ -81,6 +91,7 @@ NCYAT_SOFIPO = Fuente(
     tema=TEMA_NCYAT,
     extension="pdf",
     descripcion="Nivel de capitalización de SOFIPOs (mensual, PDF)",
+    columna_testigo="nicap_nivel",
 )
 
 FUENTES: tuple[Fuente, ...] = (BOLETIN_BANCA, BOLETIN_SOFIPO, NCYAT_SOFIPO)
@@ -106,6 +117,16 @@ class Concepto:
     #: Cuántas columnas ocupa el bloque. El parser busca dentro de ese rango la
     #: que corresponda al periodo del boletín.
     ancho: int = 3
+    #: A qué multiplicar para llegar a pesos. **Las dos publicaciones usan
+    #: unidades distintas**: banca múltiple viene en millones («Millones de
+    #: pesos y porcentajes») y SOFIPOs en miles («miles de pesos»). Cargar sin
+    #: convertir dejaría la captación de un banco mil veces por debajo de la de
+    #: una SOFIPO, y el comparador las pone una al lado de la otra.
+    factor: Decimal = Decimal(1)
+
+
+MILLONES = Decimal(1_000_000)
+MILES = Decimal(1_000)
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,7 +161,8 @@ BANCA_CARTERA = Hoja(
     fila_datos=7,
     col_institucion=2,
     conceptos=(
-        Concepto("cartera_total", 3, "Cartera total"),
+        Concepto("cartera_total", 3, "Cartera total", factor=MILLONES),
+        # IMOR e ICOR son porcentajes: no se convierten.
         Concepto("imor", 6, "IMOR"),
         Concepto("icor", 9, "ICOR"),
     ),
@@ -166,7 +188,7 @@ BANCA_CAPTACION = Hoja(
     fila_periodo=6,
     fila_datos=7,
     col_institucion=2,
-    conceptos=(Concepto("captacion", 3, "Captación total"),),
+    conceptos=(Concepto("captacion", 3, "Captación total", factor=MILLONES),),
 )
 
 #: SOFIPOs: cartera por etapa e índice de morosidad.
@@ -177,8 +199,8 @@ SOFIPO_CARTERA = Hoja(
     fila_datos=14,
     col_institucion=5,
     conceptos=(
-        Concepto("cartera_vigente", 6, "Cartera de crédito etapa 1"),
-        Concepto("cartera_etapa3", 9, "Cartera de crédito etapa 3"),
+        Concepto("cartera_vigente", 6, "Cartera de crédito etapa 1", factor=MILES),
+        Concepto("cartera_etapa3", 9, "Cartera de crédito etapa 3", factor=MILES),
         Concepto("imor", 12, "Índice de morosidad"),
     ),
 )
@@ -190,7 +212,7 @@ SOFIPO_ACTIVO = Hoja(
     fila_periodo=13,
     fila_datos=14,
     col_institucion=5,
-    conceptos=(Concepto("activo_total", 12, "Activo total"),),
+    conceptos=(Concepto("activo_total", 12, "Activo total", factor=MILES),),
 )
 
 #: SOFIPOs: captación tradicional y su tasa implícita.
@@ -200,7 +222,7 @@ SOFIPO_CAPTACION = Hoja(
     fila_periodo=13,
     fila_datos=14,
     col_institucion=5,
-    conceptos=(Concepto("captacion", 10, "Captación tradicional"),),
+    conceptos=(Concepto("captacion", 10, "Captación tradicional", factor=MILES),),
 )
 
 HOJAS_BANCA: tuple[Hoja, ...] = (BANCA_CARTERA, BANCA_CAPITAL, BANCA_CAPTACION)

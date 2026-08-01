@@ -117,6 +117,42 @@ def test_the_sector_total_is_not_an_institution() -> None:
     assert "Total del sector" not in nombres
 
 
+# ─── Unidades ─────────────────────────────────────────────────
+
+
+def test_both_bulletins_end_up_in_pesos() -> None:
+    """Banca publica en millones y SOFIPOs en miles.
+
+    Cargar sin convertir dejaría la captación de un banco mil veces por debajo
+    de la de una SOFIPO, y el comparador las pone en la misma columna. Es un
+    error que no se ve: los dos números son plausibles por separado.
+    """
+    banca = combinar(
+        *[leer_hoja(BANCA, hoja, periodo=PERIODO_BANCA) for hoja in fuentes.HOJAS_BANCA]
+    )
+    sofipos = combinar(
+        *[leer_hoja(SOFIPOS, hoja, periodo=PERIODO_SOFIPO) for hoja in fuentes.HOJAS_SOFIPO]
+    )
+
+    # BBVA: 2,246,386.53 millones de pesos en el boletín.
+    bbva = banca["BBVA México"].numero("captacion")
+    assert bbva is not None
+    assert Decimal("2.2e12") < bbva < Decimal("2.3e12")
+
+    # Nu México: 105,918,459.46 miles de pesos.
+    nu = sofipos["Nu México"].numero("captacion")
+    assert nu is not None
+    assert Decimal("1.05e11") < nu < Decimal("1.06e11")
+
+
+def test_percentages_are_not_scaled() -> None:
+    lectura = combinar(
+        *[leer_hoja(SOFIPOS, hoja, periodo=PERIODO_SOFIPO) for hoja in fuentes.HOJAS_SOFIPO]
+    )
+
+    assert lectura["Libertad"].numero("imor") == Decimal("44.37")
+
+
 # ─── Fallo ruidoso ────────────────────────────────────────────
 
 

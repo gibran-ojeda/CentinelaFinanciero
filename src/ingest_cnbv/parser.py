@@ -215,14 +215,19 @@ def leer_hoja(
             continue
 
         valores: dict[str, Decimal | str | None] = {}
-        for campo, indice in columnas.items():
-            crudo = _celda(fila, indice)
+        for concepto in hoja.conceptos:
+            crudo = _celda(fila, columnas[concepto.campo])
             numero = _a_decimal(crudo)
-            # `categoria` es un nivel romano (I–V), no una cifra: se conserva
-            # como texto. El resto se guarda como Decimal o como nada.
-            valores[campo] = (
-                str(crudo).strip() if numero is None and campo == "categoria" and crudo else numero
-            )
+            if numero is not None:
+                # A pesos. Banca múltiple publica en millones y SOFIPOs en
+                # miles; los porcentajes llevan factor 1.
+                valores[concepto.campo] = numero * concepto.factor
+            elif concepto.campo == "categoria" and crudo:
+                # La categoría de alerta temprana es un romano (I–V), no una
+                # cifra: se conserva como texto.
+                valores[concepto.campo] = str(crudo).strip()
+            else:
+                valores[concepto.campo] = None
         resultado.append(FilaInstitucion(nombre_cnbv=etiqueta, valores=valores))
 
     if not resultado:
