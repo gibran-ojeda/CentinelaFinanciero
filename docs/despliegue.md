@@ -24,7 +24,7 @@ Nada se publica fuera del loopback. A internet sólo llega lo que Caddy sirve.
 free -h && df -h / && docker stats --no-stream
 ```
 
-El overlay de producción reserva ~1.5 GB de techo entre los cinco servicios (db 512M · api 384M · web 256M · scheduler 256M · redis 128M). El uso real medido en local es de ~175 MB. Si la RAM libre no da, se bajan los límites en `docker-compose.prod.yml` antes de seguir.
+El overlay de producción reserva ~2.0 GB de techo entre los cinco servicios (db 512M · api 384M · web 256M · scheduler **768M** · redis 128M) — el scheduler sube por Chromium, y su condición es la medición registrada en «Navegador en el VPS», más abajo. Si la RAM disponible no da, el repliegue inmediato es `cli config set tasas_fetch_solo_sin_js true` y bajar el límite en `docker-compose.prod.yml`.
 
 **2. Dominio.** `centinelafinanciero.lat` (D1b), con un registro A al VPS. Activar también el reenvío de `contacto@centinelafinanciero.lat` — es el canal que publica el [aviso legal](../frontend/src/pages/aviso-legal.astro) y tiene que existir el día que el sitio sea público.
 
@@ -153,36 +153,47 @@ Para escribir sobre la base real hace falta pedirlo: `CONTENEDOR=centinela-db CO
 
 ---
 
-## Navegador en el VPS — decisión aplazada
+## Navegador en el VPS — decisión aplicada
 
-**Estado: aplazada, no descartada.** Fecha: 2026-07-29.
+**Estado: aplicada.** Aplazada el 2026-07-29 por la RAM; revertida la
+prórroga el 2026-08-01 por decisión del propietario, **condicionada a la
+medición de abajo antes del merge**.
 
-Once de las dieciocho fuentes de tasas se pintan con JavaScript y sólo rinden a un navegador. `TransporteNavegador` está escrito y probado, y la cadena del [fetcher](../src/rates_agent/fetcher.py) lo acepta como segundo eslabón sin tocar nada — pero **no se instala en la imagen**, y el job del VPS corre sólo las de nivel 2 que rinden a un cliente HTTP plano — tres: las dos de cetesdirecto y la de Supertasas (`tasas_fetch_solo_sin_js=true` en el ConfigStore; las cuatro portadas de nivel 3 sin JS alimentan al researcher, no al extractor).
+Once de las dieciocho fuentes de tasas se pintan con JavaScript. Chromium
+viaja ahora en la imagen (capa propia del [Dockerfile](../docker/app/Dockerfile),
+`playwright install --with-deps chromium` con `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`
+para que el uid sin privilegios pueda leerlo), el job del lunes arma su cadena
+httpx + navegador y cubre las dieciocho fuentes, y el límite del scheduler
+subió a **768M** en el overlay. La pasada semanal desde la laptop deja de ser
+un modo de operación; los flags `--solo-navegador` / `--sin-navegador` de la
+CLI quedan como filtros de depuración.
 
-**Por qué no.** Dos costos, y uno es bloqueante:
+**El repliegue, en dos niveles:**
 
-| | Costo |
-|---|---|
-| Disco | ~450 MB en la **imagen única**, que también sirve la API. §13 del foundation es «build una vez, deploy N», así que el peso lo paga cada servicio |
-| RAM | Chromium usa ~300 MB al cargar una página. El límite del scheduler en [docker-compose.prod.yml](../docker-compose.prod.yml) es **256 MB**: tal cual, el OOM killer lo mata a media corrida |
+1. **Sin deploy** — si la RAM protesta (OOM del scheduler, `available` en
+   caída): `docker compose exec -T api python -m cli config set
+   tasas_fetch_solo_sin_js true --motivo "RAM medida AAAA-MM-DD"`. El job
+   vuelve a solo-httpx y Chromium ni se construye.
+2. **Revert** — los tres últimos commits de la cola (docs, flip del default,
+   imagen): Actions → deploy → Run workflow con el SHA anterior a la cola en
+   `ref`, o `git revert` del rango. No hay migraciones en la cola.
 
-Lo bloqueante es la RAM. Subirlo a ~768 MB en un VPS que ya sostiene nueve contenedores de NarrativeAlpha no es un compromiso que se tome sin medir, y esa medición es la tarea 1 de la fase 06.
+**Medición** (la condición del 768M; este registro es el rastro que el
+aplazamiento nunca tuvo):
 
-**Qué se hace mientras.** El mismo código, desde la máquina local, como paso del [ciclo semanal](runbook-actualizacion-manual.md):
-
-```bash
-python -m cli tasas fetch --solo-navegador
+```
+Medición: pendiente de registrar.
+  - free -h (columna available, 3-4 muestras en un día normal): ____
+  - pico de MEM del scheduler durante una corrida con navegador
+    (docker stats centinela-scheduler-1 en paralelo a
+     docker compose ... exec -T scheduler python -m cli tasas fetch): ____
+  - duración de la corrida completa: ____
 ```
 
-El resultado entra por la misma cola de revisión. La diferencia con la opción completa es **quién dispara la corrida**, no qué hace ni cómo se aprueba.
-
-**Qué la reabre.** Cualquiera de estas tres:
-
-1. `free -h` muestra ≥ 1 GB en la columna **available** de forma sostenida tras el despliegue (`available`, no `free`: `free` no cuenta el page cache recuperable y subestima lo que de verdad hay).
-2. El ciclo semanal se salta la pasada local dos semanas seguidas — señal de que el paso manual no se sostiene.
-3. Las fuentes que necesitan navegador pasan de once a más de la mitad del catálogo.
-
-**Qué costaría hacerlo.** Poco código: `playwright install chromium` en [docker/app/Dockerfile](../docker/app/Dockerfile), subir el límite del scheduler en el overlay, poner `tasas_fetch_solo_sin_js=false` en el ConfigStore — y decidir si el peso extra justifica separar la imagen única en dos.
+Criterio: **≥ 1 GiB en `available` de forma sostenida** (`available`, no
+`free`: `free` no cuenta el page cache recuperable y subestima lo que de
+verdad hay), y el pico del scheduler lejos del límite. Si no se cumple,
+aplicar el repliegue de arriba.
 
 ---
 

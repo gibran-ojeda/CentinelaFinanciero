@@ -4,10 +4,12 @@
 # Nivel 3 = sólo descubrimiento y verificación con búsqueda abierta.
 #
 # `requiere_js: true` marca las páginas que no rinden contenido sin ejecutar
-# JavaScript y que necesitarán Playwright. Se sabe porque al construir este
-# catálogo (2026-07-25) devolvieron 403 o una página vacía a un cliente HTTP
-# plano — exactamente el motivo por el que §15 descarta el scraping por
-# selectores CSS y opta por fetch + LLM.
+# JavaScript. Se sabe porque al construir este catálogo (2026-07-25)
+# devolvieron 403 o una página vacía a un cliente HTTP plano — exactamente el
+# motivo por el que §15 descarta el scraping por selectores CSS y opta por
+# fetch + LLM. La marca alimenta el filtro `solo_requieren_js` (depuración y
+# repliegue) y la pista «requiere JS» de `cli tasas pendientes`; la cadena
+# del job lleva navegador de serie desde que Chromium vive en la imagen.
 
 fuentes_tasas:
   - institucion: Gobierno Federal

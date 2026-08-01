@@ -78,9 +78,11 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
   4. Verificar en el sitio que la fecha cambió y que el enlace a la fuente lleva a donde debe.
 - Monitoreo mínimo: uptime monitor externo sobre el dominio y revisión de `job_runs` incluida en el runbook.
 
+  > **Nota (2026-08-01):** el ciclo manual quedó relevado por las ingestas de las fases 7-9 y por Chromium en la imagen del VPS (el job del lunes lee las dieciocho fuentes). El runbook sobrevive como procedimiento de respaldo y su paso de navegador desde laptop desapareció.
+
 ## Tareas
 
-1. **Antes de nada, verificar capacidad del VPS**: `free -h`, `df -h`, `docker stats`. Si la RAM libre no sostiene un Postgres más, decidir límites o ampliar el VPS — no descubrirlo a mitad del deploy.
+1. **Antes de nada, verificar capacidad del VPS**: `free -h`, `df -h`, `docker stats`. Si la RAM libre no sostiene un Postgres más, decidir límites o ampliar el VPS — no descubrirlo a mitad del deploy. *(Nota 2026-08-01: el resultado nunca se registró; el registro vive ahora en la sección «Navegador en el VPS» de docs/despliegue.md, donde es condición del límite de 768M del scheduler.)*
 2. Registrar el dominio `centinelafinanciero.lat` (D1b, resuelta), apuntar el DNS al VPS y activar el reenvío de `contacto@centinelafinanciero.lat` a la bandeja del operador — es el canal de corrección que publica el aviso legal.
 3. Escribir el compose de producción con la asignación de puertos y los límites de memoria; levantar el stack en el VPS **sin** tocar Caddy todavía y verificar por túnel SSH que el sitio responde en `127.0.0.1:8011`.
 4. Añadir el site block al Caddyfile de NarrativeAlpha, recargar Caddy y verificar que **ambos** dominios responden.
