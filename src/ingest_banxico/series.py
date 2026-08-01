@@ -122,6 +122,16 @@ CATALOGO: tuple[Serie, ...] = (
 
 POR_CLAVE: dict[str, Serie] = {serie.clave: serie for serie in CATALOGO}
 
+#: Página pública del SIE con los resultados de la subasta semanal de valores
+#: gubernamentales. Es la que se guarda como `fuente_url` de cada tasa de
+#: CETES: se abre sin token, se lee, y contiene las cuatro series de arriba —
+#: comprobado. El endpoint del API no serviría aquí, porque §11 pide un enlace
+#: que una persona pueda seguir hasta el número, y ése exige credencial.
+URL_PUBLICA_SUBASTA = (
+    "https://www.banxico.org.mx/SieInternet/consultarDirectorioInternetAction.do"
+    "?sector=18&accion=consultarCuadro&idCuadro=CF107&locale=es"
+)
+
 #: Serie de subasta → plazo del producto CETES que le corresponde en el
 #: catálogo. Los cuatro productos ya existen en `seeds/productos.yaml` con
 #: exactamente estos plazos.
@@ -157,6 +167,7 @@ __all__ = [
     "TIIE_28",
     "TIPO_DE_CAMBIO_FIX",
     "UDI",
+    "URL_PUBLICA_SUBASTA",
     "Serie",
     "claves",
 ]
