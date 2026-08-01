@@ -34,6 +34,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from domain.enums import CategoriaInstitucion
+
 SECTOR_BANCA = "Banca Múltiple"
 SECTOR_SOFIPO = "Sociedades Financieras Populares"
 
@@ -57,6 +59,14 @@ class Fuente:
     #: SOFIPOs y el PDF de NICAP pueden coincidir en mes, y el segundo se
     #: saltaría por el trabajo del primero.
     columna_testigo: str
+    #: Figuras del catálogo que esta publicación cubre. **Acota el reporte de
+    #: mapeo, nunca el casamiento**: la CNBV publica a Nu México entre las
+    #: SOFIPOs aunque el catálogo lo tenga como banco digital, y filtrar
+    #: candidatas por figura lo dejaría sin indicadores. Lo que sí corrige es
+    #: el ruido: sin esto, «sin_nombre_cnbv» nombraba al Gobierno Federal en
+    #: cada corrida y el boletín de banca listaba a cada SOFIPO como «sin
+    #: datos» — y una señal con ruido permanente se aprende a ignorar.
+    categorias: frozenset[CategoriaInstitucion]
 
 
 #: Boletín estadístico de banca múltiple. **Mensual.** Trae IMOR, ICOR, ICAP y
@@ -69,6 +79,9 @@ BOLETIN_BANCA = Fuente(
     extension="xlsx",
     descripcion="Boletín estadístico de banca múltiple (mensual)",
     columna_testigo="imor",
+    categorias=frozenset(
+        {CategoriaInstitucion.BANCO_DIGITAL, CategoriaInstitucion.BANCO_TRADICIONAL}
+    ),
 )
 
 #: Boletín estadístico de SOFIPOs. **Trimestral**, y por eso va siempre más
@@ -80,6 +93,7 @@ BOLETIN_SOFIPO = Fuente(
     extension="xlsx",
     descripcion="Boletín estadístico de SOFIPOs (trimestral)",
     columna_testigo="imor",
+    categorias=frozenset({CategoriaInstitucion.SOFIPO}),
 )
 
 #: Nivel de capitalización de SOFIPOs. Mensual y **sólo en PDF**: es la única
@@ -92,6 +106,7 @@ NCYAT_SOFIPO = Fuente(
     extension="pdf",
     descripcion="Nivel de capitalización de SOFIPOs (mensual, PDF)",
     columna_testigo="nicap_nivel",
+    categorias=frozenset({CategoriaInstitucion.SOFIPO}),
 )
 
 FUENTES: tuple[Fuente, ...] = (BOLETIN_BANCA, BOLETIN_SOFIPO, NCYAT_SOFIPO)
