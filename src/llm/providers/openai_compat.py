@@ -6,6 +6,7 @@ distinta. Un solo proveedor cubre todo lo que este proyecto necesita.
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any, Literal
 
@@ -17,6 +18,7 @@ from llm.providers.base import (
     ErrorLimiteDePeticiones,
     ErrorProveedor,
     ErrorTiempoAgotado,
+    LlamadaHerramienta,
     ProveedorLLM,
     RespuestaLLM,
 )
@@ -93,20 +95,30 @@ class ProveedorOpenAICompat(ProveedorLLM):
         temperatura: float = 0.0,
         max_tokens: int = 4000,
         formato: Literal["texto", "json"] = "json",
+        mensajes: list[dict[str, Any]] | None = None,
+        herramientas: list[dict[str, Any]] | None = None,
     ) -> RespuestaLLM:
         if not self._api_key:
             raise ErrorProveedor(f"{self.nombre}: no hay API key configurada")
 
         cuerpo: dict[str, Any] = {
             "model": self.modelo,
-            "messages": [
+            "messages": mensajes
+            or [
                 {"role": "system", "content": sistema},
                 {"role": "user", "content": usuario},
             ],
             "temperature": temperatura,
             "max_tokens": max_tokens,
         }
-        if formato == "json":
+        if herramientas:
+            cuerpo["tools"] = herramientas
+            cuerpo["tool_choice"] = "auto"
+        if formato == "json" and not herramientas:
+            # `response_format` y `tools` juntos no se llevan: el modelo tiene
+            # que poder contestar con una llamada a herramienta, que no es un
+            # objeto JSON del esquema pedido. El JSON se exige en la última
+            # ronda, cuando ya se retiraron las herramientas.
             cuerpo["response_format"] = {"type": "json_object"}
 
         inicio = time.monotonic()
@@ -149,6 +161,7 @@ class ProveedorOpenAICompat(ProveedorLLM):
             latencia_ms=latencia_ms,
             finish_reason=eleccion.get("finish_reason"),
             razonamiento=(mensaje.get("reasoning_content") or None),
+            herramientas=_llamadas(mensaje.get("tool_calls")),
             crudo=datos,
         )
         log.info(
@@ -159,6 +172,7 @@ class ProveedorOpenAICompat(ProveedorLLM):
             costo_usd=round(respuesta.costo_usd, 6),
             latencia_ms=latencia_ms,
             finish_reason=respuesta.finish_reason,
+            herramientas=len(respuesta.herramientas) or None,
         )
         return respuesta
 
@@ -174,6 +188,39 @@ class ProveedorOpenAICompat(ProveedorLLM):
         if self._cliente is not None:
             await self._cliente.aclose()
             self._cliente = None
+
+
+def _llamadas(crudas: object) -> tuple[LlamadaHerramienta, ...]:
+    """`tool_calls` del mensaje a la forma normalizada.
+
+    Un modelo puede mandar argumentos que no son JSON válido — pasa, y más con
+    modelos económicos. No se lanza: se conserva el crudo para que el tool-loop
+    le devuelva el error como resultado de la herramienta y le dé otra
+    oportunidad, que es más barato que abortar la corrida.
+    """
+    if not isinstance(crudas, list):
+        return ()
+    llamadas: list[LlamadaHerramienta] = []
+    for cruda in crudas:
+        if not isinstance(cruda, dict):
+            continue
+        funcion = cruda.get("function")
+        if not isinstance(funcion, dict):
+            continue
+        argumentos_crudos = str(funcion.get("arguments") or "")
+        try:
+            argumentos = json.loads(argumentos_crudos) if argumentos_crudos else {}
+        except ValueError:
+            argumentos = {}
+        llamadas.append(
+            LlamadaHerramienta(
+                id=str(cruda.get("id") or ""),
+                nombre=str(funcion.get("name") or ""),
+                argumentos=argumentos if isinstance(argumentos, dict) else {},
+                argumentos_crudos=argumentos_crudos,
+            )
+        )
+    return tuple(llamadas)
 
 
 def _segundos(crudo: str | None) -> float | None:

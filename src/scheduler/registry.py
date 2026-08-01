@@ -23,7 +23,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from core.settings import settings
-from scheduler.jobs import banderas, banxico, cnbv, heartbeat, tasas
+from scheduler.jobs import banderas, banxico, cnbv, heartbeat, research, tasas
 
 JobFunc = Callable[[], Awaitable[None]]
 
@@ -130,6 +130,19 @@ def build_registry() -> tuple[JobSpec, ...]:
             # backoff temporal si toda la cadena cae por rate-limit. El TTL
             # tiene que cubrir el peor caso o el lock caduca a media corrida y
             # otra instancia empieza encima.
+            lock_ttl_seconds=3600,
+            tags=("ingesta",),
+        ),
+        JobSpec(
+            id=research.JOB_ID,
+            func=research.tasas_research_abierta,
+            # Miércoles: para entonces ya se sabe qué instituciones quedaron
+            # sin dato fresco el lunes, que son las que este job investiga.
+            trigger=CronTrigger(day_of_week="wed", hour=6, minute=0),
+            name="Búsqueda abierta de tasas stale",
+            enabled=settings.scheduler_research_enabled,
+            # Un tool-loop por institución, con varias vueltas al modelo y una
+            # búsqueda por vuelta. Es el job más lento del sistema.
             lock_ttl_seconds=3600,
             tags=("ingesta",),
         ),

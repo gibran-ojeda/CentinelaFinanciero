@@ -82,8 +82,16 @@ class ClienteLLM:
         usuario: str,
         temperatura: float = 0.0,
         max_tokens: int = 4000,
+        mensajes: list[dict[str, Any]] | None = None,
+        herramientas: list[dict[str, Any]] | None = None,
     ) -> RespuestaLLM:
-        """Una llamada, con presupuesto y reintentos. Devuelve la respuesta cruda."""
+        """Una llamada, con presupuesto y reintentos. Devuelve la respuesta cruda.
+
+        `mensajes` y `herramientas` son para el tool-loop del researcher: la
+        conversación entera y los esquemas de las tools. El techo de gasto se
+        comprueba **en cada vuelta**, que es lo que impide que un loop que no
+        converge se lleve el presupuesto del día.
+        """
         if not await cost_tracker.disponible(self._limite):
             raise ErrorPresupuestoAgotado(
                 f"techo diario de ${self._limite:.2f} USD alcanzado; la corrida no gasta más"
@@ -97,6 +105,8 @@ class ClienteLLM:
                     usuario=usuario,
                     temperatura=temperatura,
                     max_tokens=max_tokens,
+                    mensajes=mensajes,
+                    herramientas=herramientas,
                 )
             except TRANSITORIOS as exc:
                 ultimo = exc

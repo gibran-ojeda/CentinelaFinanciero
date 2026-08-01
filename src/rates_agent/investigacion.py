@@ -1,0 +1,355 @@
+"""La corrida del nivel 3: a quién investigar y qué hacer con lo que salga.
+
+`researcher` sabe buscar una institución; esto sabe **cuáles** y qué pasa
+después. La distinción importa porque a quién se investiga es la decisión que
+mantiene el costo abajo: el nivel 3 cuesta varias llamadas al modelo por
+institución, así que correrlo sobre el catálogo entero sería pagar por lo que el
+nivel 2 ya resuelve más barato y mejor.
+
+**Sólo se investigan las que lo necesitan**: sin fuente activa para el fetch
+dirigido, o con la tasa vigente más vieja que el SLA de su fuente. Si el fetch
+del lunes trajo la tasa de Klar, el miércoles no se busca a Klar.
+
+Lo que encuentre pasa por el **mismo `reviewer`** que el nivel 2, con
+`fuente=LLM_RESEARCH`. La regla no cambia: la primera lectura de un producto
+siempre la aprueba una persona, y ninguna decisión de publicar la toma un modelo.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.services.tasas_vigentes import tasas_vigentes_por_producto
+from core.db import session_scope
+from core.frescura import SLA_POR_FUENTE
+from core.logging import get_logger
+from domain.enums import EstadoTasa, FuenteTasa, TipoProducto
+from domain.orm import FuenteTasas, Institucion, Producto, Tasa
+from llm.client import ClienteLLM
+from llm.providers.base import ErrorPresupuestoAgotado, ErrorProveedor
+from rates_agent.extractor import TasaExtraida
+from rates_agent.researcher import Hallazgo, investigar
+from rates_agent.reviewer import Decision, revisar
+from rates_agent.search import SearchExecutor
+
+log = get_logger(__name__)
+
+
+@dataclass(slots=True)
+class ReporteInvestigacion:
+    """Qué pasó en la corrida de búsqueda abierta."""
+
+    candidatas: int = 0
+    investigadas: int = 0
+    hallazgos: int = 0
+    publicadas: int = 0
+    en_revision: int = 0
+    sin_cambio: int = 0
+    sin_datos: int = 0
+    descartados_por_url: int = 0
+    busquedas: int = 0
+    tokens: int = 0
+    costo_usd: float = 0.0
+    degradada: bool = False
+    presupuesto_agotado: bool = False
+    errores: list[str] = field(default_factory=list)
+
+    def como_metricas(self) -> dict[str, Any]:
+        return {
+            "candidatas": self.candidatas,
+            "investigadas": self.investigadas,
+            "hallazgos": self.hallazgos,
+            "publicadas": self.publicadas,
+            "en_revision": self.en_revision,
+            "sin_cambio": self.sin_cambio,
+            "sin_datos": self.sin_datos,
+            "descartados_por_url": self.descartados_por_url,
+            "busquedas": self.busquedas,
+            "tokens": self.tokens,
+            "costo_usd": round(self.costo_usd, 6),
+            "degradada": self.degradada,
+            "presupuesto_agotado": self.presupuesto_agotado,
+            "errores": self.errores[:20],
+        }
+
+    def render(self) -> str:
+        lineas = [
+            f"  candidatas              {self.candidatas:>4}",
+            f"  investigadas            {self.investigadas:>4}",
+            f"  hallazgos               {self.hallazgos:>4}",
+            f"    publicados            {self.publicadas:>4}",
+            f"    a revisión            {self.en_revision:>4}",
+            f"    sin cambio            {self.sin_cambio:>4}",
+            f"  sin datos               {self.sin_datos:>4}",
+            f"  búsquedas               {self.busquedas:>4}",
+            f"  costo USD               {self.costo_usd:.6f}",
+        ]
+        if self.descartados_por_url:
+            lineas.append(
+                f"  ⚠ {self.descartados_por_url} hallazgos citaban una URL que "
+                f"ninguna búsqueda devolvió"
+            )
+        if self.degradada:
+            lineas.append("  ⚠ ningún motor de búsqueda respondió: corrida degradada")
+        if self.presupuesto_agotado:
+            lineas.append("  ⚠ el techo de gasto diario cortó la corrida")
+        for error in self.errores[:10]:
+            lineas.append(f"    - {error}")
+        return "\n".join(lineas)
+
+
+@dataclass(frozen=True, slots=True)
+class Candidata:
+    """Una institución que merece el nivel 3, y por qué."""
+
+    id: int
+    nombre: str
+    categoria: str
+    sitio: str | None
+    motivo: str
+
+
+async def correr(
+    *,
+    cliente: ClienteLLM | None = None,
+    ejecutor: SearchExecutor | None = None,
+    hoy: date | None = None,
+    limite: int | None = None,
+) -> ReporteInvestigacion:
+    """Investiga las instituciones stale y encola lo que encuentre."""
+    reporte = ReporteInvestigacion()
+    propio = cliente is None
+    cliente = cliente or ClienteLLM()
+    hoy = hoy or datetime.now(UTC).date()
+
+    try:
+        candidatas = await _candidatas(hoy)
+        reporte.candidatas = len(candidatas)
+        for candidata in candidatas[: limite or len(candidatas)]:
+            # Un ejecutor por institución: el circuito y las URLs vistas son de
+            # esa investigación y no deben cruzarse entre instituciones — una
+            # URL que salió buscando Klar no autoriza un hallazgo de Stori.
+            suyo = ejecutor or SearchExecutor()
+            try:
+                await _investigar_una(reporte, cliente, suyo, candidata, hoy)
+            except ErrorPresupuestoAgotado:
+                reporte.presupuesto_agotado = True
+                log.warning("research_cortado_por_presupuesto", institucion=candidata.nombre)
+                break
+            except ErrorProveedor as exc:
+                reporte.errores.append(f"{candidata.nombre}: {exc}")
+                log.warning("research_fallido", institucion=candidata.nombre, error=str(exc)[:200])
+            reporte.investigadas += 1
+    finally:
+        if propio:
+            await cliente.cerrar()
+
+    log.info("research_corrida", **reporte.como_metricas())
+    return reporte
+
+
+async def _investigar_una(
+    reporte: ReporteInvestigacion,
+    cliente: ClienteLLM,
+    ejecutor: SearchExecutor,
+    candidata: Candidata,
+    hoy: date,
+) -> None:
+    async with session_scope() as session:
+        productos = await _productos_de(session, candidata.id)
+        vigentes = await tasas_vigentes_por_producto(
+            session, [p.id for p in productos], incluir_pendientes=True
+        )
+        contexto = _contexto(productos, vigentes)
+
+    resultado = await investigar(
+        cliente,
+        institucion=candidata.nombre,
+        categoria=candidata.categoria,
+        sitio=candidata.sitio,
+        productos=[_describir(p) for p in productos],
+        contexto=contexto,
+        ejecutor=ejecutor,
+        hoy=hoy,
+    )
+
+    reporte.hallazgos += len(resultado.hallazgos)
+    reporte.busquedas += resultado.busquedas
+    reporte.tokens += resultado.tokens
+    reporte.costo_usd += resultado.costo_usd
+    reporte.descartados_por_url += len(resultado.descartados_por_url)
+    if resultado.sin_datos:
+        reporte.sin_datos += 1
+    if resultado.busquedas and not resultado.urls_vistas:
+        # Se buscó y ningún motor devolvió nada: la cadena entera cayó.
+        reporte.degradada = True
+
+    if not resultado.hallazgos:
+        return
+
+    async with session_scope() as session:
+        productos = await _productos_de(session, candidata.id)
+        por_clave = {(p.tipo.value, p.plazo_dias): p for p in productos}
+        vigentes = await tasas_vigentes_por_producto(
+            session, [p.id for p in productos], incluir_pendientes=True
+        )
+        for hallazgo in resultado.hallazgos:
+            producto = por_clave.get((hallazgo.tipo.value, hallazgo.plazo_dias))
+            if producto is None:
+                # Igual que en el nivel 2: un plazo que el catálogo no conoce
+                # es un hueco de catálogo, no una tasa que forzar al producto
+                # más parecido.
+                reporte.errores.append(
+                    f"{candidata.nombre}: plazo {hallazgo.plazo_dias} sin producto"
+                )
+                continue
+
+            candidato = vigentes.get(producto.id)
+            vigente = candidato if candidato and candidato.estado is EstadoTasa.VIGENTE else None
+            decision = await revisar(
+                session,
+                _como_extraida(hallazgo),
+                producto=producto,
+                vigente=vigente,
+                referencia=candidato if vigente is None else None,
+                url=hallazgo.url,
+                fuente=FuenteTasa.LLM_RESEARCH,
+            )
+            match decision.decision:
+                case Decision.PUBLICADA:
+                    reporte.publicadas += 1
+                case Decision.EN_REVISION:
+                    reporte.en_revision += 1
+                case Decision.SIN_CAMBIO:
+                    reporte.sin_cambio += 1
+
+
+def _como_extraida(hallazgo: Hallazgo) -> TasaExtraida:
+    """El hallazgo, en la forma que el reviewer ya sabe juzgar."""
+    return TasaExtraida(
+        producto=hallazgo.producto,
+        tipo=hallazgo.tipo,
+        plazo_dias=hallazgo.plazo_dias,
+        tasa_nominal=hallazgo.tasa_nominal,
+        gat_nominal=hallazgo.gat_nominal,
+        gat_real=hallazgo.gat_real,
+        condiciones=hallazgo.notas,
+        confianza=hallazgo.confianza,
+    )
+
+
+async def _candidatas(hoy: date) -> list[Candidata]:
+    """Instituciones que el nivel 2 no está cubriendo.
+
+    Dos motivos, y ninguno es «por si acaso»:
+
+    - **Sin fuente activa**: no hay URL curada, así que el fetch dirigido ni
+      siquiera la intenta. Descubrirla es justo para lo que sirve el nivel 3.
+    - **Stale**: su tasa vigente más reciente pasó del SLA de su fuente. O el
+      fetch está fallando en silencio, o la institución movió su página.
+    """
+    async with session_scope() as session:
+        instituciones = (
+            (
+                await session.execute(
+                    select(Institucion).where(
+                        Institucion.activa.is_(True),
+                        Institucion.es_demostracion.is_(False),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        con_fuente = set(
+            (
+                await session.execute(
+                    select(FuenteTasas.institucion_id).where(FuenteTasas.activa.is_(True))
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        ultimas = dict(
+            (
+                await session.execute(
+                    select(Producto.institucion_id, func.max(Tasa.fecha_dato))
+                    .join(Tasa, Tasa.producto_id == Producto.id)
+                    .where(Tasa.estado == EstadoTasa.VIGENTE)
+                    .group_by(Producto.institucion_id)
+                )
+            )
+            .tuples()
+            .all()
+        )
+
+        candidatas: list[Candidata] = []
+        for institucion in instituciones:
+            ultima = ultimas.get(institucion.id)
+            sla = SLA_POR_FUENTE[FuenteTasa.FETCH_DIRIGIDO]
+            if ultima is None:
+                motivo = "sin ninguna tasa vigente"
+            elif ultima < hoy - timedelta(days=sla):
+                motivo = f"su última tasa es del {ultima} (SLA {sla} días)"
+            elif institucion.id not in con_fuente:
+                motivo = "sin fuente activa para el fetch dirigido"
+            else:
+                continue
+            candidatas.append(
+                Candidata(
+                    id=institucion.id,
+                    nombre=institucion.nombre,
+                    categoria=institucion.categoria.value,
+                    sitio=institucion.url_sitio,
+                    motivo=motivo,
+                )
+            )
+
+    for candidata in candidatas:
+        log.info("research_candidata", institucion=candidata.nombre, motivo=candidata.motivo)
+    return candidatas
+
+
+async def _productos_de(session: AsyncSession, institucion_id: int) -> list[Producto]:
+    return list(
+        (
+            await session.execute(
+                select(Producto).where(
+                    Producto.institucion_id == institucion_id, Producto.activo.is_(True)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _describir(producto: Producto) -> str:
+    if producto.tipo is TipoProducto.VISTA:
+        return f"{producto.nombre} (a la vista)"
+    return f"{producto.nombre} ({producto.plazo_dias} días)"
+
+
+def _contexto(productos: list[Producto], vigentes: dict[int, Tasa]) -> str:
+    """Lo último que se sabe, para que el modelo pueda contrastar."""
+    lineas = []
+    for producto in productos:
+        tasa = vigentes.get(producto.id)
+        if tasa is None:
+            lineas.append(f"- {producto.nombre}: sin lectura previa")
+        else:
+            lineas.append(
+                f"- {producto.nombre}: {tasa.tasa_nominal}% "
+                f"(leída el {tasa.fecha_dato}, fuente {tasa.fuente.value})"
+            )
+    return "\n".join(lineas) or "sin lecturas previas"
+
+
+__all__ = ["Candidata", "ReporteInvestigacion", "correr"]

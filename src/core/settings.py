@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     scheduler_banxico_enabled: bool = True
     scheduler_cnbv_enabled: bool = True
     scheduler_frescura_enabled: bool = True
+    #: Nivel 3. Arranca **apagado**: la búsqueda abierta es el camino más caro
+    #: y menos preciso, y sólo debe encenderse cuando el nivel 2 lleva semanas
+    #: corriendo y se sabe qué instituciones deja fuera de verdad.
+    scheduler_research_enabled: bool = False
     scheduler_lock_ttl_seconds: int = 300
     scheduler_timezone: str = "America/Mexico_City"
 
@@ -127,6 +131,8 @@ class Settings(BaseSettings):
     banxico_sync_enabled: bool = True
     #: Kill-switch caliente de la ingesta de la CNBV.
     cnbv_ingesta_enabled: bool = True
+    #: Kill-switch caliente de la búsqueda abierta (nivel 3).
+    tasas_research_enabled: bool = True
     config_cache_ttl_seconds: int = 60
 
     # ─── Fuentes de datos (fases 7 y 9) ───────────────────────
@@ -183,6 +189,19 @@ class Settings(BaseSettings):
     fetch_min_caracteres: int = 200
     fetch_respetar_robots: bool = True
 
+    # ─── Búsqueda abierta (fase 9, nivel 3) ───────────────────
+    #: Cadena de motores, en orden. Se recorren hasta que uno devuelva algo.
+    #: `ddgs` es un metabuscador: estos son sus backends, no servicios propios.
+    #: **Aquí es donde se cambia de proveedor sin tocar código** — si la
+    #: calibración pide el SearXNG del VPS, se declara en esta variable.
+    research_motores: str = "duckduckgo,google,brave"
+    research_max_reintentos: int = 1
+    #: Cuántas vueltas de tool-use antes de retirar las herramientas y exigir
+    #: el JSON final. Sin tope, un modelo que no converge gasta el presupuesto
+    #: del día buscando.
+    research_max_rondas: int = 4
+    #: Resultados por búsqueda. Más contexto es más tokens por vuelta.
+    research_resultados_por_busqueda: int = 6
 
     @field_validator("log_format", mode="before")
     @classmethod
