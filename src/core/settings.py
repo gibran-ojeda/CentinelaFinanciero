@@ -126,11 +126,11 @@ class Settings(BaseSettings):
     cache_comparador_ttl_seconds: int = 300
     banderas_recompute_enabled: bool = True
     tasas_fetch_enabled: bool = True
-    #: El job del VPS sólo lee lo que rinde sin navegador. En `true` mientras
-    #: Chromium no esté en la imagen del scheduler: las fuentes que necesitan
-    #: JavaScript se corren desde local con `cli tasas fetch --solo-navegador`.
-    #: Ver la sección «Navegador en el VPS» de docs/despliegue.md.
-    tasas_fetch_solo_sin_js: bool = True
+    #: Chromium vive en la imagen y el job del lunes lee las dieciocho
+    #: fuentes. `true` es ahora el repliegue: apaga el navegador sin deploy
+    #: (la cadena vuelve a solo-httpx y la consulta a las fuentes sin JS) si
+    #: la RAM del VPS protesta. Ver «Navegador en el VPS» en docs/despliegue.md.
+    tasas_fetch_solo_sin_js: bool = False
     #: Kill-switch caliente de la ingesta de Banxico. Sin `BANXICO_TOKEN` el
     #: job se omite igualmente, así que esto es para apagarla teniéndolo.
     banxico_sync_enabled: bool = True

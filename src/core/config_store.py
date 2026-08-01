@@ -193,9 +193,9 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         "bool",
         "scheduler",
         (
-            "El job sólo lee las fuentes que rinden sin navegador. En true "
-            "mientras Chromium no esté en la imagen: las que necesitan JS se "
-            "corren desde local con `cli tasas fetch --solo-navegador`"
+            "Repliegue del navegador sin deploy: en true, el job del lunes "
+            "vuelve a solo-httpx y a las fuentes sin JavaScript (p. ej. si la "
+            "RAM del VPS protesta)"
         ),
     ),
     ConfigKeySpec(

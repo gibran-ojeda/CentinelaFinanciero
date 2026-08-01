@@ -7,10 +7,10 @@ tolerancia. Es el nivel 2 de §15 del foundation.
 Doble gate como el resto: `SCHEDULER_TASAS_ENABLED` decide si se registra, y
 `tasas_fetch_enabled` del ConfigStore lo apaga en caliente sin reiniciar nada.
 
-**Mientras Chromium no viva en la imagen**, el job del VPS corre sólo las
-fuentes que rinden a un cliente HTTP plano (`solo_requieren_js=False`). Las
-otras once se leen desde la máquina local con `python -m cli tasas fetch
---solo-navegador`, que llama a la misma función. Ver `docs/despliegue.md`.
+Chromium vive en la imagen: la cadena del job lleva httpx y el navegador, y
+la corrida cubre las dieciocho fuentes. El repliegue es la llave caliente
+`tasas_fetch_solo_sin_js`, que devuelve el job a solo-httpx sin deploy — ver
+`docs/despliegue.md`, «Navegador en el VPS».
 """
 
 from __future__ import annotations

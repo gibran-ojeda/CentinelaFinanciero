@@ -1,8 +1,8 @@
 """La corrida completa: leer, extraer y decidir, fuente por fuente.
 
-Una sola función para el job semanal y para el comando de la CLI. No hay dos
-caminos que puedan divergir — que es justo el riesgo mientras el navegador
-no esté en el VPS y la pasada de las páginas con JavaScript se dispare a mano.
+Una sola función para el job semanal y para el comando de la CLI: dos caminos
+acabarían divergiendo, y la corrida a mano dejaría de reproducir a la del
+lunes justo cuando se usa para depurarla.
 
 El orden importa y ahorra dinero:
 
@@ -119,8 +119,9 @@ async def correr(
     Args:
         solo_requieren_js: `True` corre sólo las páginas que necesitan
             navegador; `False`, sólo las que no. `None` (por defecto), todas.
-            Es lo que permite repartir la corrida entre el VPS y la máquina
-            local mientras Chromium no viva en la imagen.
+            Es el filtro de depuración de la CLI — repetir una mitad de la
+            corrida sin pagar la otra — y el que usa el repliegue
+            `tasas_fetch_solo_sin_js`.
     """
     reporte = ReporteCorrida()
     propios = fetcher is None or cliente is None

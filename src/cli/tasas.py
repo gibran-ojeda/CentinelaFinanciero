@@ -452,17 +452,17 @@ async def correr_fetch(
 ) -> ReporteCorrida:
     """Corre el pipeline de lectura desde la terminal.
 
-    Es el mismo código que ejecuta el job semanal: si fueran dos, el que se
-    corre a mano acabaría comportándose distinto del que corre solo, y el
-    reparto entre el VPS y la máquina local dejaría de ser una decisión de
-    dónde ejecutar para convertirse en dos implementaciones.
+    Es el mismo código que ejecuta el job semanal: si fueran dos, la corrida
+    a mano acabaría comportándose distinto de la del lunes. Los filtros
+    `--solo-navegador` / `--sin-navegador` son de depuración — repetir una
+    mitad de la corrida sin pagar la otra.
 
     Lo único que cambia es la **espera**, y por una razón de quién mira: un job
     desatendido puede permitirse esperar veinte minutos a que un sitio deje de
     limitar; una persona en una terminal, no.
 
-    Con `--solo-navegador` se levanta Chromium; sin eso basta el cliente HTTP
-    plano y no hace falta tener Playwright instalado.
+    Con `--sin-navegador` no se importa Playwright: una máquina sin el extra
+    `[browser]` puede correr la mitad httpx igual.
     """
     solo_js: bool | None = True if solo_navegador else (False if sin_navegador else None)
     agente = settings.fetch_user_agent

@@ -65,9 +65,9 @@ def build_parser() -> argparse.ArgumentParser:
         "fetch",
         help="lee las páginas de las instituciones y encola lo que cambió",
     )
-    # El job del VPS corre `--sin-navegador`; la pasada de las páginas con
-    # JavaScript se hace desde local con `--solo-navegador` mientras Chromium
-    # no viva en la imagen. Ver docs/despliegue.md.
+    # Filtros de depuración: el job del lunes lee todo con su propia cadena
+    # (httpx + navegador). Estos dos sirven para repetir a mano una mitad —
+    # p. ej. reintentar sólo las páginas JS tras un fallo puntual.
     grupo = fetch.add_mutually_exclusive_group()
     grupo.add_argument(
         "--solo-navegador",
