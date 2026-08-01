@@ -284,6 +284,59 @@ def test_a_total_failure_is_distinguished_from_a_partial_one() -> None:
 # ─── El job ───────────────────────────────────────────────────
 
 
+def test_the_job_chain_includes_the_browser_when_the_gate_allows_js() -> None:
+    """El hueco silencioso que este ensamblaje existe para cerrar.
+
+    Ensanchar la consulta a las fuentes JS sin darle un navegador a la cadena
+    haría que las once devolvieran HTML sin renderizar, contadas como «vacías»
+    con corrida EXITOSA — cada lunes, sin alarma. Construir el transporte no
+    lanza Chromium (el arranque es perezoso), así que esto corre sin browser.
+    """
+    import time
+
+    import core.config_store as cs
+    from scheduler.jobs.tasas import _armar_fetcher
+
+    previo = cs._snapshot
+    try:
+        cs._snapshot = cs.ConfigSnapshot(
+            values={"tasas_fetch_solo_sin_js": False}, loaded_at=time.monotonic()
+        )
+        con_navegador = [t.nombre for t in _armar_fetcher()._transportes]
+        cs._snapshot = cs.ConfigSnapshot(
+            values={"tasas_fetch_solo_sin_js": True}, loaded_at=time.monotonic()
+        )
+        solo_http = [t.nombre for t in _armar_fetcher()._transportes]
+    finally:
+        cs._snapshot = previo
+
+    assert con_navegador == ["httpx", "navegador"]
+    assert solo_http == ["httpx"]
+
+
+async def test_the_job_hands_its_own_fetcher_to_the_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """El job arma la cadena; el pipeline conserva la propiedad y la cierra."""
+    from scheduler.jobs import tasas as jobs_tasas
+
+    await run_seed()
+    capturado: dict[str, object] = {}
+
+    async def _captura(**kwargs: object) -> pipeline.ReporteCorrida:
+        capturado.update(kwargs)
+        return pipeline.ReporteCorrida()
+
+    monkeypatch.setattr(jobs_tasas.pipeline, "correr", _captura)
+
+    await jobs_tasas.tasas_fetch_dirigido()
+
+    assert capturado["fetcher"] is not None
+    # `cliente` no viaja: con las dos piezas puestas, `propios` sería False y
+    # el pipeline dejaría Chromium vivo entre corridas.
+    assert "cliente" not in capturado
+
+
 async def test_the_job_fails_when_every_source_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
