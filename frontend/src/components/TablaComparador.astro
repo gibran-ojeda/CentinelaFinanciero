@@ -16,8 +16,10 @@ import type { FilaComparador } from '~/lib/tipos';
 
 interface Props {
   filas: FilaComparador[];
+  /** Si la petición traía filtros: cambia el mensaje del estado vacío. */
+  hayFiltros?: boolean;
 }
-const { filas } = Astro.props;
+const { filas, hayFiltros = false } = Astro.props;
 
 const ETIQUETA_SEGURO: Record<string, string> = {
   SOBERANO: 'Soberano',
@@ -36,9 +38,14 @@ function coberturaCorta(fila: FilaComparador): string {
 ---
 
 {
+  /* Dos vacíos distintos: con filtros, el usuario los apretó de más; sin
+     ellos, el catálogo aún no tiene tasas publicables — decir «amplía el
+     plazo» ahí sería culpar al usuario de un estado del sistema. */
   filas.length === 0 && (
     <p class="vacio">
-      Ningún instrumento cumple estos filtros. Prueba a ampliar el plazo o a bajar el monto.
+      {hayFiltros
+        ? 'Ningún instrumento cumple estos filtros. Prueba a ampliar el plazo o a bajar el monto.'
+        : 'Aún no hay tasas publicables que mostrar. El catálogo se llena conforme se verifica cada lectura.'}
     </p>
   )
 }
@@ -71,7 +78,6 @@ function coberturaCorta(fila: FilaComparador): string {
           <a class="celda-institucion" href={`/institucion/${fila.institucion.slug}`} role="cell">
             <Avatar nombre={fila.institucion.nombre} slug={fila.institucion.slug} tamano={28} />
             <span class="nombre">{fila.institucion.nombre}</span>
-            <MarcaDato esDemostracion={fila.institucion.es_demostracion} />
           </a>
           <span class="producto tenue" role="cell">
             {fila.producto}
@@ -108,13 +114,16 @@ function coberturaCorta(fila: FilaComparador): string {
                 href={fila.procedencia.fuente_url}
                 target="_blank"
                 rel="nofollow noopener"
-                title={`Ver esta tasa en la fuente (${fila.procedencia.fuente})`}
+                title="Ver esta tasa en la fuente"
               >
                 {fecha(fila.procedencia.fecha_dato)}
               </a>
             ) : (
               fecha(fila.procedencia.fecha_dato)
             )}
+            {/* La fuente como texto, no como title=: en táctil no hay hover y
+               la procedencia es parte del dato, igual que en la ficha. */}
+            <span class="fuente-dato">{fila.procedencia.fuente}</span>
             <MarcaDato verificada={fila.procedencia.verificada} />
           </span>
         </div>
@@ -131,10 +140,7 @@ function coberturaCorta(fila: FilaComparador): string {
         <div class="tarjeta-cabecera">
           <Avatar nombre={fila.institucion.nombre} slug={fila.institucion.slug} tamano={38} />
           <a class="tarjeta-titulo" href={`/institucion/${fila.institucion.slug}`}>
-            <span class="nombre">
-              {fila.institucion.nombre}
-              <MarcaDato esDemostracion={fila.institucion.es_demostracion} />
-            </span>
+            <span class="nombre">{fila.institucion.nombre}</span>
             <span class="tenue sub">
               {fila.producto} · {plazoLargo(fila.plazo_dias, fila.tipo)}
             </span>
@@ -184,13 +190,15 @@ function coberturaCorta(fila: FilaComparador): string {
                 href={fila.procedencia.fuente_url}
                 target="_blank"
                 rel="nofollow noopener"
-                title={`Ver esta tasa en la fuente (${fila.procedencia.fuente})`}
+                title="Ver esta tasa en la fuente"
               >
                 {fecha(fila.procedencia.fecha_dato)}
               </a>
             ) : (
               fecha(fila.procedencia.fecha_dato)
             )}
+            {' · '}
+            {fila.procedencia.fuente}
             <MarcaDato verificada={fila.procedencia.verificada} />
           </span>
         </div>
@@ -298,6 +306,10 @@ function coberturaCorta(fila: FilaComparador): string {
     gap: 2px;
     align-items: flex-start;
     font-size: 12px;
+  }
+  .fuente-dato {
+    font-size: 10px;
+    letter-spacing: 0.04em;
   }
   /* Enlace discreto: subrayado punteado en vez de color, para no competir con
      los datos de la fila. Se declara el color en :hover y no antes. */

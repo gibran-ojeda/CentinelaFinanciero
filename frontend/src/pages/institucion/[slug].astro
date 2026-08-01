@@ -108,11 +108,6 @@ const jsonLd = {
         <Avatar nombre={institucion.nombre} slug={institucion.slug} tamano={46} />
         <h1>{institucion.nombre}</h1>
         <span class="pastilla">{ETIQUETA_CATEGORIA[institucion.categoria]}</span>
-        {
-          institucion.es_demostracion && (
-            <span class="pastilla demo">◆ institución de ejemplo</span>
-          )
-        }
       </div>
       {
         institucion.notas && <p class="tenue descripcion">{institucion.notas}</p>
@@ -336,10 +331,6 @@ const jsonLd = {
     background: rgba(167, 224, 219, 0.1);
     color: var(--marca-200);
     font-size: 11px;
-  }
-  .pastilla.demo {
-    background: transparent;
-    color: var(--texto-tenue-2);
   }
   .descripcion {
     max-width: 70ch;

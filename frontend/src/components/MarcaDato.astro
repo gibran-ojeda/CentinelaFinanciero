@@ -1,28 +1,18 @@
 ---
 /**
- * Los dos avisos que el usuario tiene derecho a ver, y que son distintos.
+ * El aviso que el usuario tiene derecho a ver: esta tasa es de una institución
+ * real pero no se pudo confirmar contra su fuente oficial. Va pegado al dato
+ * y no en un pie de página porque califica exactamente a ese número.
  *
- *   ◆              la institución es ficticia, sembrada para ilustrar
- *   sin verificar  la institución es real; su tasa no se pudo confirmar
- *
- * Juntarlos en un solo distintivo diría de Finsus que es inventada, que es
- * falso, o de Alcancía Fuerte que su tasa está pendiente de confirmar, que no
- * significa nada porque la institución no existe.
+ * Se sustituye solo: cuando la lectura oficial del producto llega y se
+ * aprueba, la fila deja de ser la vigente y la marca desaparece con ella.
  */
 interface Props {
-  esDemostracion?: boolean;
   verificada?: boolean;
 }
-const { esDemostracion = false, verificada = true } = Astro.props;
+const { verificada = true } = Astro.props;
 ---
 
-{
-  esDemostracion && (
-    <span class="marca demo" title="Institución ficticia, incluida para ilustrar el producto">
-      ◆<span class="solo-lectores"> institución de ejemplo</span>
-    </span>
-  )
-}
 {
   !verificada && (
     <span
@@ -39,10 +29,6 @@ const { esDemostracion = false, verificada = true } = Astro.props;
     display: inline-flex;
     align-items: center;
     flex: none;
-  }
-  .demo {
-    font-size: 11px;
-    color: var(--texto-tenue-2);
   }
   .sin-verificar {
     padding: 1px 7px;

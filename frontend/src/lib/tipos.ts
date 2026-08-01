@@ -227,7 +227,7 @@ export interface FrescuraFuente {
 export interface RespuestaFrescura {
   fuentes: FrescuraFuente[];
   ultima_actualizacion: string | null;
-  modo_demo: boolean;
+  mostrar_tasas_sin_verificar: boolean;
   generado_en: string;
   todo_dentro_de_sla: boolean;
 }
