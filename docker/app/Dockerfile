@@ -28,6 +28,13 @@ COPY alembic/ ./alembic/
 # contenedor: sin esto, ahí no hay nada que importar. Son YAML y CSV.
 COPY seeds/ ./seeds/
 
+# Y las plantillas de prompts, por la misma razón que los seeds: viven en la
+# raíz del repo, fuera de `src/`, así que `pip install` no las lleva.
+# `rates_agent/prompts.py` las busca en `Path.cwd()/"prompts"` (= /app/prompts);
+# sin esta línea, el extractor del fetch L2 y el researcher L3 mueren con
+# FileNotFoundError en la primera llamada de cada corrida.
+COPY prompts/ ./prompts/
+
 # Usuario sin privilegios: nada aquí necesita root en runtime.
 RUN useradd --create-home --uid 10001 centinela && chown -R centinela:centinela /app
 USER centinela
