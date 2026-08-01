@@ -46,8 +46,16 @@ git clone https://github.com/gibran-ojeda/brujula-financiera.git ~/centinela-fin
 | `POSTGRES_PASSWORD` | contraseña de la base |
 | `API_READ_KEY`, `API_ADMIN_KEY` | `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `SITE_URL` | `https://centinelafinanciero.lat` |
+| `BANXICO_TOKEN` | token del SIE ([solicitud](https://www.banxico.org.mx/SieAPIRest/service/v1/token)). Opcional: sin él, `banxico_sync_series` se marca OMITIDO y la UDI cae al valor de respaldo congelado |
+| `DEEPSEEK_API_KEY` | llave de DeepSeek. Opcional: sin ella, el fetch L2 de los lunes falla (FALLIDO en `job_runs`, no en silencio) |
 
-`BANXICO_TOKEN` y `DEEPSEEK_API_KEY` no hacen falta hasta las fases 7 y 9.
+También existe la **variable** de repo `SCHEDULER_RESEARCH_ENABLED` (no
+secreto): el gate frío del researcher L3. Sin definirla queda apagado.
+
+> **Ojo**: el compose no declara `env_file`, así que una variable sólo llega al
+> contenedor si está en el mapa `environment:` del servicio. Añadir una nueva
+> exige tocar tres sitios: el secreto/variable en GitHub, el heredoc de
+> `scripts/desplegar.sh` y el mapa del compose.
 
 **5. Levantar el stack sin tocar Caddy**, y comprobar por túnel:
 
@@ -168,7 +176,7 @@ El resultado entra por la misma cola de revisión. La diferencia con la opción 
 
 **Qué la reabre.** Cualquiera de estas tres:
 
-1. `free -h` muestra ≥ 1 GB libre de forma sostenida tras el despliegue.
+1. `free -h` muestra ≥ 1 GB en la columna **available** de forma sostenida tras el despliegue (`available`, no `free`: `free` no cuenta el page cache recuperable y subestima lo que de verdad hay).
 2. El ciclo semanal se salta la pasada local dos semanas seguidas — señal de que el paso manual no se sostiene.
 3. Las fuentes que necesitan navegador pasan de once a más de la mitad del catálogo.
 
