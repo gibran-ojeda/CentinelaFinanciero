@@ -147,7 +147,7 @@ Para escribir sobre la base real hace falta pedirlo: `CONTENEDOR=centinela-db CO
 
 **Estado: aplazada, no descartada.** Fecha: 2026-07-29.
 
-Once de las dieciocho fuentes de tasas se pintan con JavaScript y sólo rinden a un navegador. `TransporteNavegador` está escrito y probado, y la cadena del [fetcher](../src/rates_agent/fetcher.py) lo acepta como segundo eslabón sin tocar nada — pero **no se instala en la imagen**, y el job del VPS corre sólo las siete que rinden a un cliente HTTP plano (`tasas_fetch_solo_sin_js=true` en el ConfigStore).
+Once de las dieciocho fuentes de tasas se pintan con JavaScript y sólo rinden a un navegador. `TransporteNavegador` está escrito y probado, y la cadena del [fetcher](../src/rates_agent/fetcher.py) lo acepta como segundo eslabón sin tocar nada — pero **no se instala en la imagen**, y el job del VPS corre sólo las de nivel 2 que rinden a un cliente HTTP plano — tres: las dos de cetesdirecto y la de Supertasas (`tasas_fetch_solo_sin_js=true` en el ConfigStore; las cuatro portadas de nivel 3 sin JS alimentan al researcher, no al extractor).
 
 **Por qué no.** Dos costos, y uno es bloqueante:
 

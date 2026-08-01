@@ -217,6 +217,36 @@ async def test_an_institution_without_any_rate_is_a_candidate(
     assert len(candidatas) > 5
 
 
+async def test_an_institution_with_only_a_level3_source_is_a_candidate(
+    catalogo_cargado: None,
+) -> None:
+    """La portada de nivel 3 no cuenta como fuente del fetch dirigido.
+
+    Se le da a CAME una tasa vigente fresca para aislar el motivo: sin el
+    filtro de nivel, su portada contaba como «con fuente» y una institución
+    que el extractor jamás va a leer quedaba fuera del researcher.
+    """
+    async with session_scope() as session:
+        producto_id = await session.scalar(
+            select(Producto.id).where(Producto.slug == "came-plazo-364")
+        )
+        assert producto_id is not None
+        session.add(
+            Tasa(
+                producto_id=producto_id,
+                tasa_nominal=Decimal("9.00"),
+                fecha_dato=HOY,
+                fuente=FuenteTasa.MANUAL,
+                estado=EstadoTasa.VIGENTE,
+            )
+        )
+
+    candidatas = await investigacion._candidatas(HOY)
+
+    came = next(c for c in candidatas if c.nombre == "CAME")
+    assert came.motivo == "sin fuente activa para el fetch dirigido"
+
+
 # ─── Qué se hace con lo que sale ──────────────────────────────
 
 

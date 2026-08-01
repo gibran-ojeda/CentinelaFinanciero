@@ -104,6 +104,28 @@ async def _solo_una_fuente(url: str = "https://www.finsus.mx/inversion") -> None
 TASA_364 = {"producto": "Plazo fijo", "tipo": "PLAZO", "plazo_dias": 364, "tasa_nominal": "8.69"}
 
 
+async def test_level3_sources_are_not_fed_to_the_extractor() -> None:
+    """Las portadas de nivel 3 son del researcher, no páginas de tasas.
+
+    Dárselas al extractor paga tokens por leer marketing cada lunes y, en el
+    mejor de los casos, devuelve «vacía». `nivel` es contrato, no adorno.
+    """
+    await run_seed()
+
+    async with session_scope() as session:
+        nivel3 = set(
+            (await session.execute(select(FuenteTasas.url).where(FuenteTasas.nivel == 3)))
+            .scalars()
+            .all()
+        )
+    assert nivel3  # el seed trae las cuatro portadas de nivel 3
+
+    urls = {url for _, url, _, _ in await pipeline._fuentes(None)}
+
+    assert not urls & nivel3
+    assert urls  # y las de nivel 2 siguen entrando
+
+
 async def test_a_read_page_becomes_a_queued_review() -> None:
     """Primera lectura oficial: se encola, no se publica."""
     await _solo_una_fuente()

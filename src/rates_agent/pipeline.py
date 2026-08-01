@@ -168,6 +168,10 @@ async def _fuentes(solo_requieren_js: bool | None) -> list[tuple[int, str, str, 
             select(FuenteTasas, Institucion.nombre)
             .join(Institucion, Institucion.id == FuenteTasas.institucion_id)
             .where(FuenteTasas.activa.is_(True))
+            # Las fuentes de nivel 3 son portadas para el researcher, no
+            # páginas de tasas: dárselas al extractor paga tokens por leer
+            # marketing y, en el mejor de los casos, devuelve «vacía».
+            .where(FuenteTasas.nivel <= 2)
             .order_by(FuenteTasas.id)
         )
         if solo_requieren_js is not None:

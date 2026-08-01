@@ -270,7 +270,14 @@ async def _candidatas(hoy: date) -> list[Candidata]:
         con_fuente = set(
             (
                 await session.execute(
-                    select(FuenteTasas.institucion_id).where(FuenteTasas.activa.is_(True))
+                    select(FuenteTasas.institucion_id).where(
+                        FuenteTasas.activa.is_(True),
+                        # Una portada de nivel 3 no cuenta como fuente del
+                        # fetch dirigido: la institución cuyo único registro
+                        # es esa portada es justo la candidata que el
+                        # researcher existe para cubrir.
+                        FuenteTasas.nivel <= 2,
+                    )
                 )
             )
             .scalars()
