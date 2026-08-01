@@ -164,12 +164,12 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         "Desviación respecto a la tasa vigente que manda a revisión humana (pp)",
     ),
     ConfigKeySpec(
-        "mostrar_datos_demo",
+        "mostrar_tasas_sin_verificar",
         "bool",
         "revision",
         (
-            "Publica instituciones ilustrativas y tasas sin verificar, marcadas. "
-            "Apagar antes de exponer el sitio a internet (fase 6)"
+            "Publica las tasas en PENDIENTE_REVISION marcadas «sin verificar» "
+            "hasta que su lectura oficial las sustituya (transición del lanzamiento)"
         ),
     ),
     # Operación.

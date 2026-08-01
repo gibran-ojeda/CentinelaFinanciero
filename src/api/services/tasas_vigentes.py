@@ -7,11 +7,12 @@ comparador.
 
 Por defecto las tasas en `PENDIENTE_REVISION` **no salen por aquí**: es el
 punto donde se hace efectiva la promesa de que un dato sin verificar no se
-publica. La excepción es el modo demostración (`mostrar_datos_demo`), que las
-incluye **marcadas** con `procedencia.verificada = false` para que un entorno
-recién levantado no parezca vacío. La fase 6 lo apaga antes de exponer el sitio.
+afirma. La excepción es `mostrar_tasas_sin_verificar` —la política de
+transición del lanzamiento—, que las incluye **marcadas** con
+`procedencia.verificada = false` hasta que la lectura oficial de cada
+producto las sustituye.
 
-Aun con el modo encendido, una tasa sin verificar nunca desplaza a una
+Aun con la bandera encendida, una tasa sin verificar nunca desplaza a una
 verificada del mismo producto: primero manda el estado y sólo después la fecha.
 Sin esa precedencia, una observación pendiente más reciente ocultaría el dato
 bueno, que es justo lo contrario de lo que se busca.

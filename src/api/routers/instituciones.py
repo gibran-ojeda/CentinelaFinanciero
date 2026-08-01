@@ -69,8 +69,14 @@ async def detalle(
         if referencia.isdigit()
         else Institucion.slug == referencia
     )
+    # La ficha comparte la invariante del comparador: una institución de
+    # demostración jamás se sirve. Era la fuga que la auditoría encontró —
+    # este endpoint devolvía la ficha completa de las ficticias con la
+    # bandera vieja apagada.
     institucion = await session.scalar(
-        select(Institucion).options(selectinload(Institucion.productos)).where(criterio)
+        select(Institucion)
+        .options(selectinload(Institucion.productos))
+        .where(criterio, Institucion.es_demostracion.is_(False))
     )
     if institucion is None:
         raise HTTPException(
@@ -83,7 +89,7 @@ async def detalle(
         institucion.productos, key=lambda p: (p.tipo.value, p.plazo_dias or 0, p.nombre)
     )
     vigentes = await tasas_vigentes_por_producto(
-        session, [p.id for p in productos], incluir_pendientes=contexto.modo_demo
+        session, [p.id for p in productos], incluir_pendientes=contexto.incluir_sin_verificar
     )
 
     detalles: list[ProductoDetalle] = []

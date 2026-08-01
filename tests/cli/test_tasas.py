@@ -279,8 +279,8 @@ async def test_the_review_list_names_what_cannot_be_published() -> None:
 
     Dos motivos distintos caen en la misma lista: una tasa que existe pero no
     se confirmó contra la institución, y un producto sin ninguna tasa. Los dos
-    son invisibles con `mostrar_datos_demo=false`, así que los dos son trabajo
-    de la misma sesión de revisión.
+    son invisibles con `mostrar_tasas_sin_verificar=false`, así que los dos
+    son trabajo de la misma sesión de revisión.
     """
     await run_seed()
     await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")

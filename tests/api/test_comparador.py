@@ -21,14 +21,15 @@ from domain.orm import Bandera, Institucion
 #: `real_redis` da un Redis efímero y vacío por test. Sin él, el cache del
 #: comparador serviría a un test la respuesta que dejó el anterior.
 #:
-#: `sin_modo_demo` apaga el modo demostración para todo el módulo: los tests de
-#: filtros afirman conjuntos exactos, y con el modo encendido entran las 30
-#: tasas sin verificar del seed y el catálogo deja de ser estable. Lo que se
-#: prueba aquí es que cada filtro incluya y excluya lo que debe, no cuántas
-#: filas hay. El modo demo tiene su propia sección, que lo enciende.
+#: `solo_verificadas` apaga la bandera de transición para todo el módulo: los
+#: tests de filtros afirman conjuntos exactos, y con ella encendida entran las
+#: 30 tasas sin verificar del seed y el catálogo deja de ser estable. Lo que
+#: se prueba aquí es que cada filtro incluya y excluya lo que debe, no cuántas
+#: filas hay. La política de transición tiene su propia sección, que la
+#: enciende.
 pytestmark = [
     pytest.mark.requires_docker,
-    pytest.mark.usefixtures("comparador_poblado", "real_redis", "sin_modo_demo"),
+    pytest.mark.usefixtures("comparador_poblado", "real_redis", "solo_verificadas"),
 ]
 
 RUTA = "/api/v1/comparador"
@@ -85,11 +86,11 @@ async def test_returns_only_publishable_rates(api_lectura: AsyncClient) -> None:
     assert await _slugs(api_lectura) == SLUGS_VERIFICADOS | SLUGS_FIXTURE
 
 
-# ─── Modo demostración ────────────────────────────────────────
+# ─── Tasas sin verificar (política de transición) ─────────────
 
 
-@pytest.mark.usefixtures("con_modo_demo")
-async def test_demo_mode_adds_the_unverified_rows(
+@pytest.mark.usefixtures("con_no_verificadas")
+async def test_the_transition_policy_adds_the_unverified_rows(
     api_lectura: AsyncClient,
 ) -> None:
     slugs = await _slugs(api_lectura)
@@ -98,7 +99,7 @@ async def test_demo_mode_adds_the_unverified_rows(
     assert SLUGS_VERIFICADOS | SLUGS_FIXTURE <= slugs
 
 
-@pytest.mark.usefixtures("con_modo_demo")
+@pytest.mark.usefixtures("con_no_verificadas")
 async def test_unverified_rows_are_always_marked_as_such(api_lectura: AsyncClient) -> None:
     """Se amplía lo que se muestra, nunca lo que se afirma."""
     cuerpo = (await api_lectura.get(RUTA)).json()
@@ -117,7 +118,7 @@ async def test_unverified_rows_are_always_marked_as_such(api_lectura: AsyncClien
 async def test_turning_the_switch_off_serves_only_verified_data(
     api_lectura: AsyncClient,
 ) -> None:
-    """El paso 9 de la fase 6: no basta con no marcar, hay que no servir.
+    """El kill-switch de la transición: no basta con no marcar, hay que no servir.
 
     Queda lo verificado del seed más las tasas VIGENTE que añade la fixture
     sobre instituciones reales. Desaparecen las 30 que el seed dejó en
@@ -138,17 +139,17 @@ async def test_with_the_switch_off_no_row_is_unverified(
     assert not any(f["institucion"]["es_demostracion"] for f in cuerpo["filas"])
 
 
-@pytest.mark.usefixtures("con_modo_demo")
+@pytest.mark.usefixtures("con_no_verificadas")
 async def test_an_unverified_rate_never_supersedes_a_verified_one(
     api_lectura: AsyncClient,
 ) -> None:
     """Precedencia por estado antes que por fecha.
 
     Sin ella, una observación pendiente más reciente ocultaría el dato bueno
-    del mismo producto — justo lo contrario de lo que el modo demo busca.
+    del mismo producto — justo lo contrario de lo que la política busca.
 
-    Tiene que correr con el modo **encendido**: apagado, la tasa pendiente ni
-    siquiera es candidata y el test pasaría sin comprobar nada.
+    Tiene que correr con la bandera **encendida**: apagada, la tasa pendiente
+    ni siquiera es candidata y el test pasaría sin comprobar nada.
     """
     from datetime import timedelta
 

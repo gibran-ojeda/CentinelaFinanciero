@@ -90,9 +90,11 @@ class FuenteTasa(StrEnum):
     reviewer— y no filtrando al leer, para que no dependa de que cada consulta
     se acuerde de excluirla.
 
-    En modo demostración sí se muestra, marcada «sin verificar» como cualquier
-    otra `PENDIENTE_REVISION`. Ese switch existe para que un entorno recién
-    levantado no parezca vacío y la fase 6 lo apaga antes de exponer nada.
+    Mientras `mostrar_tasas_sin_verificar` está activa —la política de
+    transición del lanzamiento— sí se muestra, marcada «sin verificar» como
+    cualquier otra `PENDIENTE_REVISION`, hasta que la lectura oficial de su
+    producto la sustituye: la ventana de vigencia prefiere VIGENTE por
+    estado, así que la sustitución es automática producto a producto.
 
     Existe por una razón operativa: sirve de **contraste**. Cuando llega la
     lectura oficial, el valor del agregador es el `valor_anterior` contra el
@@ -123,12 +125,12 @@ class EstadoTasa(StrEnum):
 
     VIGENTE = "VIGENTE"
     PENDIENTE_REVISION = "PENDIENTE_REVISION"
-    """Fuera de tolerancia o sin verificar. **No se publica.**
+    """Fuera de tolerancia o sin verificar. **No se afirma.**
 
-    Única excepción: el modo demostración (`mostrar_datos_demo`) las muestra
-    con `procedencia.verificada = false` para que un entorno recién levantado
-    no parezca vacío. Se amplía lo que se enseña, nunca lo que se afirma, y
-    una pendiente jamás desplaza a una VIGENTE del mismo producto.
+    Mientras `mostrar_tasas_sin_verificar` está activa se publica marcada con
+    `procedencia.verificada = false` — se amplía lo que se enseña, nunca lo
+    que se afirma— y una pendiente jamás desplaza a una VIGENTE del mismo
+    producto.
     """
 
     RECHAZADA = "RECHAZADA"

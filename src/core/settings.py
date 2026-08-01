@@ -108,15 +108,16 @@ class Settings(BaseSettings):
 
     tolerancia_revision_pp: Decimal = Decimal("0.5")
 
-    #: Publica las instituciones ilustrativas (◆) y las tasas que siguen en
-    #: PENDIENTE_REVISION, siempre marcadas como tales.
+    #: Publica también las tasas que siguen en PENDIENTE_REVISION, siempre
+    #: marcadas «sin verificar» en su procedencia.
     #:
-    #: El valor por defecto es `True` y es una decisión deliberada: sin él, un
-    #: clon nuevo levanta un comparador con cinco filas de CETES y parece roto.
-    #: Lo que impide que se escape a producción no es el default sino que la
-    #: API avisa por log en cada arranque, `/api/v1/meta/frescura` lo publica
-    #: en `modo_demo`, y la checklist de la fase 6 lo apaga explícitamente.
-    mostrar_datos_demo: bool = True
+    #: Es la política de transición del lanzamiento: las lecturas de agregador
+    #: se muestran etiquetadas hasta que la lectura oficial de cada producto
+    #: las sustituya — la ventana de vigencia prefiere VIGENTE por estado, así
+    #: que la sustitución es automática producto a producto. Cuando ya no
+    #: quede nada sin verificar, la bandera deja de tener efecto; se conserva
+    #: como kill-switch para poder ocultar lo no verificado sin deploy.
+    mostrar_tasas_sin_verificar: bool = True
 
     cache_comparador_ttl_seconds: int = 300
     banderas_recompute_enabled: bool = True

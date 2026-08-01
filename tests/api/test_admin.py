@@ -13,12 +13,13 @@ from core.db import session_scope
 from domain.enums import EstadoRevision, EstadoTasa
 from domain.orm import Producto, RevisionTasa, Tasa
 
-#: `sin_modo_demo` porque lo que se prueba aquí es el pipeline de publicación:
-#: qué llega al comparador y qué no. Con el modo encendido, una tasa pendiente
-#: aparece por diseño y ya no se distinguiría de una que llegó por aprobación.
+#: `solo_verificadas` porque lo que se prueba aquí es el pipeline de
+#: publicación: qué llega al comparador y qué no. Con la bandera de transición
+#: encendida, una tasa pendiente aparece por diseño y ya no se distinguiría de
+#: una que llegó por aprobación.
 pytestmark = [
     pytest.mark.requires_docker,
-    pytest.mark.usefixtures("comparador_poblado", "sin_modo_demo"),
+    pytest.mark.usefixtures("comparador_poblado", "solo_verificadas"),
 ]
 
 

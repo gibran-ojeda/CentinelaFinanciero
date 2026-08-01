@@ -15,7 +15,7 @@ from httpx import AsyncClient
 
 pytestmark = [
     pytest.mark.requires_docker,
-    pytest.mark.usefixtures("comparador_poblado", "sin_modo_demo"),
+    pytest.mark.usefixtures("comparador_poblado", "solo_verificadas"),
 ]
 
 COMBINACION = "/api/v1/calculadora/combinacion"

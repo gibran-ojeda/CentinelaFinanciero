@@ -259,16 +259,38 @@ async def test_unknown_products_fail_loudly(api_lectura: AsyncClient) -> None:
     assert "inexistentes" in respuesta.json()["detail"]
 
 
+@pytest.mark.usefixtures("solo_verificadas")
 async def test_products_without_a_publishable_rate_fail_loudly(
     api_lectura: AsyncClient,
 ) -> None:
-    """Omitirlos en silencio haría comparar peras con nada."""
+    """Omitirlos en silencio haría comparar peras con nada.
+
+    Con la bandera de transición apagada una tasa pendiente no es publicable,
+    y la calculadora lo dice en vez de calcular sobre ella.
+    """
     respuesta = await api_lectura.post(
         RUTA,
         json={"monto": "1000", "producto_ids": [await _producto_id("finsus-plazo-28")]},
     )
     assert respuesta.status_code == 404
     assert "pendiente de verificación" in respuesta.json()["detail"]
+
+
+async def test_an_unverified_rate_computes_while_the_transition_policy_is_on(
+    api_lectura: AsyncClient,
+) -> None:
+    """El mismo criterio de publicabilidad que el comparador y la combinación.
+
+    Sin la unificación, una fila «sin verificar» visible en el comparador
+    respondía 404 al llegar aquí: tres endpoints, dos reglas.
+    """
+    cuerpo = await _calcular(
+        api_lectura, monto="10000", producto_ids=[await _producto_id("hey-vista")]
+    )
+
+    resultado = cuerpo["resultados"][0]
+    assert resultado["procedencia"]["verificada"] is False
+    assert Decimal(resultado["cascada"]["rendimiento_bruto"]) > 0
 
 
 async def test_a_non_positive_amount_is_rejected(api_lectura: AsyncClient) -> None:
