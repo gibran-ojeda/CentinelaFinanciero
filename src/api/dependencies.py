@@ -130,10 +130,23 @@ class ContextoMercado:
 
 
 async def _ultimo_valor_serie(session: AsyncSession, clave: str) -> Decimal | None:
+    """El último valor **vigente hoy** de una serie.
+
+    El filtro por fecha no es una precaución teórica: **Banxico publica la UDI
+    con diez días de anticipación.** Sin él, el «último valor» de esa serie es
+    el de dentro de una semana y media, y los límites de cobertura IPAB y
+    PROSOFIPO en pesos se calcularían con una UDI que todavía no rige. Mientras
+    la tabla se llenaba desde el seed el problema no existía, porque el CSV no
+    traía fechas futuras; en cuanto la sincronización de la fase 7 la alimenta,
+    sí.
+    """
     valor: Decimal | None = await session.scalar(
         select(ValorSerieEconomica.valor)
         .join(SerieEconomica)
-        .where(SerieEconomica.clave_banxico == clave)
+        .where(
+            SerieEconomica.clave_banxico == clave,
+            ValorSerieEconomica.fecha <= date.today(),
+        )
         .order_by(desc(ValorSerieEconomica.fecha))
         .limit(1)
     )
@@ -151,7 +164,14 @@ async def _inflacion_anual(session: AsyncSession) -> Decimal | None:
             await session.execute(
                 select(ValorSerieEconomica.fecha, ValorSerieEconomica.valor)
                 .join(SerieEconomica)
-                .where(SerieEconomica.clave_banxico == CLAVE_SERIE_INPC)
+                .where(
+                    SerieEconomica.clave_banxico == CLAVE_SERIE_INPC,
+                    # El INPC se publica con rezago y nunca por adelantado, así
+                    # que este filtro hoy no descarta nada. Va igualmente para
+                    # que las dos series se resuelvan con la misma regla: «lo
+                    # último que ya rige», no «lo último que hay».
+                    ValorSerieEconomica.fecha <= date.today(),
+                )
                 .order_by(desc(ValorSerieEconomica.fecha))
                 .limit(13)
             )
