@@ -235,6 +235,28 @@ async def test_a_source_without_data_is_not_stale(catalogo_cargado: None) -> Non
     assert llm["dentro_de_sla"] is True
 
 
+async def test_an_enabled_watched_source_with_zero_rows_is_reported(
+    catalogo_cargado: None,
+) -> None:
+    """Lo que el endpoint no puede saber, este job sí.
+
+    El endpoint trata «sin datos» como sano porque no sabe qué jobs están
+    encendidos. Con el gate encendido y cero observaciones, la fuente no es
+    «aún no se usa»: es un job que dice estar vivo y no ha entregado nada.
+    Las informativas (MANUAL, LLM) nunca entran aquí.
+    """
+    await frescura_check()
+
+    metricas = dict((await _ultima(JOB_ID_FRESCURA)).metricas or {})
+    # El seed no trae filas BANXICO_API ni FETCH_DIRIGIDO, y los gates
+    # arrancan encendidos por default.
+    assert FuenteTasa.BANXICO_API.value in metricas["vigiladas_sin_datos"]
+    assert FuenteTasa.FETCH_DIRIGIDO.value in metricas["vigiladas_sin_datos"]
+    assert FuenteTasa.MANUAL.value not in metricas["vigiladas_sin_datos"]
+    # Y no hace fallar la corrida: mirar y decirlo es el trabajo.
+    assert (await _ultima(JOB_ID_FRESCURA)).estado is EstadoJob.EXITOSO
+
+
 async def test_the_cnbv_is_measured_against_its_indicators(
     catalogo_cargado: None, descargador: DescargadorFalso
 ) -> None:

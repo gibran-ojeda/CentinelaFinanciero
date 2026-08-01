@@ -219,7 +219,8 @@ export interface FrescuraFuente {
   fuente: string;
   ultima_actualizacion: string | null;
   dias_desde_actualizacion: number | null;
-  sla_dias: number;
+  /** null = fuente informativa, sin cadencia que vigilar (MANUAL, LLM). */
+  sla_dias: number | null;
   dentro_de_sla: boolean;
   observaciones: number;
 }

@@ -9,6 +9,7 @@ import pytest
 from httpx import AsyncClient
 
 from api.routers.meta import SLA_POR_FUENTE
+from core.frescura import FUENTES_INFORMATIVAS
 from domain.enums import FuenteTasa
 
 pytestmark = [pytest.mark.requires_docker, pytest.mark.usefixtures("real_db")]
@@ -24,7 +25,8 @@ async def test_reports_every_source_even_without_data(api_lectura: AsyncClient) 
 
     assert respuesta.status_code == 200
     cuerpo = respuesta.json()
-    assert {f["fuente"] for f in cuerpo["fuentes"]} == {f.value for f in SLA_POR_FUENTE}
+    esperadas = {f.value for f in SLA_POR_FUENTE} | {f.value for f in FUENTES_INFORMATIVAS}
+    assert {f["fuente"] for f in cuerpo["fuentes"]} == esperadas
 
 
 async def test_a_source_without_data_is_not_out_of_sla(api_lectura: AsyncClient) -> None:
@@ -47,7 +49,9 @@ async def test_reports_the_latest_date_and_the_count(api_lectura: AsyncClient) -
     manual = next(f for f in cuerpo["fuentes"] if f["fuente"] == FuenteTasa.MANUAL)
     assert manual["observaciones"] == 5
     assert manual["ultima_actualizacion"] == "2026-07-25"
-    assert manual["sla_dias"] == SLA_POR_FUENTE[FuenteTasa.MANUAL]
+    # Informativa: se reporta con fecha y conteo, sin SLA que la ponga en rojo.
+    assert manual["sla_dias"] is None
+    assert manual["dentro_de_sla"] is True
 
 
 @pytest.mark.usefixtures("catalogo_cargado")
@@ -88,6 +92,16 @@ async def test_stale_data_is_flagged(api_lectura: AsyncClient, tmp_path: Path) -
 
 def test_slas_reflect_each_sources_real_cadence() -> None:
     """Banxico publica diario; la CNBV, con uno a tres meses de rezago."""
-    assert SLA_POR_FUENTE[FuenteTasa.BANXICO_API] < SLA_POR_FUENTE[FuenteTasa.MANUAL]
-    assert SLA_POR_FUENTE[FuenteTasa.MANUAL] < SLA_POR_FUENTE[FuenteTasa.CNBV]
+    assert SLA_POR_FUENTE[FuenteTasa.BANXICO_API] < SLA_POR_FUENTE[FuenteTasa.FETCH_DIRIGIDO]
+    assert SLA_POR_FUENTE[FuenteTasa.FETCH_DIRIGIDO] < SLA_POR_FUENTE[FuenteTasa.CNBV]
     assert SLA_POR_FUENTE[FuenteTasa.CNBV] >= 90
+
+
+def test_sources_without_a_cadence_carry_no_sla() -> None:
+    """MANUAL es corrección puntual y LLM_RESEARCH descubrimiento oportunista.
+
+    Exigirles una cadencia pondría sus filas en rojo permanente en cuanto las
+    fuentes automáticas las superseden — la alarma que se aprende a ignorar.
+    """
+    assert set(FUENTES_INFORMATIVAS) == {FuenteTasa.MANUAL, FuenteTasa.LLM_RESEARCH}
+    assert not set(FUENTES_INFORMATIVAS) & set(SLA_POR_FUENTE)

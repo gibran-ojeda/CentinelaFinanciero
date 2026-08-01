@@ -385,7 +385,8 @@ class FrescuraFuente(Esquema):
     fuente: str
     ultima_actualizacion: date | None
     dias_desde_actualizacion: int | None
-    sla_dias: int
+    #: `null` = fuente informativa, sin cadencia que vigilar (MANUAL, LLM).
+    sla_dias: int | None
     dentro_de_sla: bool
     observaciones: int
 
