@@ -373,6 +373,10 @@ async def correr_fetch(
         reporte = await pipeline.correr(fetcher=fetcher, solo_requieren_js=solo_js)
         corrida.metricas.update(reporte.como_metricas())
         corrida.metricas["disparada_por"] = "cli"
+        if reporte.fracaso_total:
+            # Fallida en la bitácora, pero sin lanzar: la persona delante de
+            # la terminal todavía recibe el render con la primera causa.
+            corrida.fallar(f"las {reporte.fuentes} fuentes fallaron")
     return reporte
 
 

@@ -44,6 +44,16 @@ class Corrida:
         self.estado = EstadoJob.OMITIDO
         self.metricas["motivo_omision"] = motivo
 
+    def fallar(self, motivo: str) -> None:
+        """Marca la corrida como fallida **sin lanzar**.
+
+        Para el llamador que todavía tiene algo que hacer después del fallo —
+        el CLI, que imprime el reporte y elige su código de salida— en vez de
+        reventar como hace un job al lanzar.
+        """
+        self.estado = EstadoJob.FALLIDO
+        self.metricas["motivo_fallo"] = motivo
+
 
 async def _abrir(job_id: str) -> int | None:
     try:

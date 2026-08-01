@@ -162,9 +162,10 @@ async def _run(args: argparse.Namespace) -> int:
                 print("Lectura de tasas:")
                 print(reporte.render())
                 # Que una fuente falle no es un fallo del comando: se reporta y
-                # la siguiente corrida lo reintenta. Sólo el techo de gasto,
-                # que corta la corrida a medias, merece salida distinta de 0.
-                return 1 if reporte.presupuesto_agotado else 0
+                # la siguiente corrida lo reintenta. Salida distinta de 0 sólo
+                # cuando no hubo corrida que valga: el techo de gasto la cortó
+                # a medias, o todas las fuentes fallaron.
+                return 1 if reporte.presupuesto_agotado or reporte.fracaso_total else 0
             resultado = await tasas_module.import_csv(args.csv, dry_run=args.dry_run)
             titulo = "Simulación de alta de tasas" if args.dry_run else "Alta de tasas"
             print(f"{titulo}:")

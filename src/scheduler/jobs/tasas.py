@@ -48,6 +48,16 @@ async def tasas_fetch_dirigido() -> None:
 
         corrida.metricas.update(reporte.como_metricas())
 
+        if reporte.fracaso_total:
+            # Sin esto, una llave de DeepSeek vacía producía un EXITOSO con
+            # dieciocho fallos idénticos y cero alarma — el peor estado es el
+            # que parece sano. Se lanza después del update: la bitácora
+            # persiste las métricas en su finally aunque el job reviente.
+            raise RuntimeError(
+                f"las {reporte.fuentes} fuentes fallaron; primera causa: "
+                f"{reporte.errores[0] if reporte.errores else 'desconocida'}"
+            )
+
         # Sólo si algo llegó a publicarse: la cola de revisión no cambia lo
         # que el comparador sirve, así que invalidar por ella sería tirar el
         # cache cada lunes sin motivo.

@@ -58,6 +58,16 @@ class ReporteCorrida:
     presupuesto_agotado: bool = False
     errores: list[str] = field(default_factory=list)
 
+    @property
+    def fracaso_total(self) -> bool:
+        """Todas las fuentes fallaron: eso no es una corrida, es un fallo con bucle.
+
+        Las vacías y las «sin cambios» cuentan como éxito — leer una página
+        que no trae tasas es un resultado. Y el presupuesto agotado deja
+        fuentes sin intentar, no fallidas, así que nunca dispara esto.
+        """
+        return self.fuentes > 0 and self.fallidas >= self.fuentes
+
     def como_metricas(self) -> dict[str, Any]:
         return {
             "fuentes": self.fuentes,

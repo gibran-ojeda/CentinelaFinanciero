@@ -272,7 +272,75 @@ async def test_the_budget_ceiling_stops_the_run_without_failing_it() -> None:
     assert reporte.fallidas == 0
 
 
+def test_a_total_failure_is_distinguished_from_a_partial_one() -> None:
+    """La tabla de verdad del fracaso total: todo falló, no hubo corrida."""
+    assert pipeline.ReporteCorrida(fuentes=3, fallidas=3).fracaso_total is True
+    assert pipeline.ReporteCorrida(fuentes=3, fallidas=2).fracaso_total is False
+    assert pipeline.ReporteCorrida(fuentes=0).fracaso_total is False
+    # El presupuesto corta sin marcar fallidas: nunca dispara esto.
+    assert pipeline.ReporteCorrida(fuentes=3, presupuesto_agotado=True).fracaso_total is False
+
+
 # ─── El job ───────────────────────────────────────────────────
+
+
+async def test_the_job_fails_when_every_source_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Una llave de LLM vacía producía EXITOSO con dieciocho fallos idénticos.
+
+    El peor estado es el que parece sano: si nada funcionó, la fila de
+    `job_runs` tiene que decir FALLIDO — y con las métricas dentro, que la
+    bitácora persiste en su finally aunque el job lance.
+    """
+    from scheduler.jobs import tasas as jobs_tasas
+
+    await run_seed()
+
+    async def _todo_fallo(**kwargs: object) -> pipeline.ReporteCorrida:
+        return pipeline.ReporteCorrida(
+            fuentes=3, fallidas=3, errores=["Finsus: ErrorProveedor: no hay API key"]
+        )
+
+    monkeypatch.setattr(jobs_tasas.pipeline, "correr", _todo_fallo)
+
+    with pytest.raises(RuntimeError, match="3 fuentes fallaron"):
+        await jobs_tasas.tasas_fetch_dirigido()
+
+    async with session_scope() as session:
+        corrida = await session.scalar(
+            select(JobRun).where(JobRun.job_id == jobs_tasas.JOB_ID).order_by(JobRun.id.desc())
+        )
+    assert corrida is not None
+    assert corrida.estado is EstadoJob.FALLIDO
+    assert corrida.metricas is not None and corrida.metricas["fallidas"] == 3
+
+
+async def test_a_total_failure_marks_the_cli_run_as_failed_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """La persona delante de la terminal recibe el render, no un traceback."""
+    from cli import tasas as cli_tasas
+
+    await run_seed()
+
+    async def _todo_fallo(**kwargs: object) -> pipeline.ReporteCorrida:
+        return pipeline.ReporteCorrida(fuentes=2, fallidas=2)
+
+    monkeypatch.setattr(cli_tasas.pipeline, "correr", _todo_fallo)
+
+    reporte = await cli_tasas.correr_fetch(sin_navegador=True)
+
+    assert reporte.fracaso_total
+    async with session_scope() as session:
+        corrida = await session.scalar(
+            select(JobRun)
+            .where(JobRun.job_id == cli_tasas.JOB_ID_FETCH)
+            .order_by(JobRun.id.desc())
+        )
+    assert corrida is not None
+    assert corrida.estado is EstadoJob.FALLIDO
+    assert corrida.metricas is not None and corrida.metricas["motivo_fallo"]
 
 
 async def test_the_hot_kill_switch_skips_the_job() -> None:
