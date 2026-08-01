@@ -141,9 +141,7 @@ async def test_catalogue_gaps_from_recent_runs_are_shown() -> None:
     """Un plazo que el catálogo no tiene no es una revisión, y se ve aparte."""
     await run_seed()
     async with session_scope() as session:
-        session.add(
-            _corrida_con_huecos("tasas_fetch_dirigido", [_hueco("Finsus", 360)])
-        )
+        session.add(_corrida_con_huecos("tasas_fetch_dirigido", [_hueco("Finsus", 360)]))
 
     salida = await cli_revisiones.listar()
 

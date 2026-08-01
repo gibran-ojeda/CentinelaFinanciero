@@ -111,9 +111,7 @@ async def test_the_rounds_ceiling_is_read_hot_from_config() -> None:
     cliente = ClienteFalso(_respuesta(_final("https://www.klar.mx/inversion")))
 
     previo = cs._snapshot
-    cs._snapshot = cs.ConfigSnapshot(
-        values={"research_max_rondas": 0}, loaded_at=time.monotonic()
-    )
+    cs._snapshot = cs.ConfigSnapshot(values={"research_max_rondas": 0}, loaded_at=time.monotonic())
     try:
         reporte = await _investigar(cliente, ejecutor)
     finally:

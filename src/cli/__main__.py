@@ -97,6 +97,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="vuelve a cargar el último periodo aunque ya esté (p. ej. tras corregir un mapeo)",
     )
 
+    research = sub.add_parser("research", help="calibración de la búsqueda abierta (nivel 3)")
+    research_sub = research.add_subparsers(dest="subcomando", required=True)
+    research_reporte = research_sub.add_parser(
+        "reporte",
+        help="costo semanal, huecos y tasa de aprobación por fuente",
+    )
+    research_reporte.add_argument(
+        "--semanas", type=int, default=4, help="ventana hacia atrás (default 4)"
+    )
+
     revs = sub.add_parser("revisiones", help="cola de revisión humana de tasas")
     revs_sub = revs.add_subparsers(dest="subcomando", required=True)
 
@@ -193,6 +203,12 @@ async def _run(args: argparse.Namespace) -> int:
             # Un cambio de formato es un fallo operativo: alguien tiene que
             # mirar el boletín y ajustar la declaración de `fuentes.py`.
             return 1 if reporte_cnbv.hubo_errores else 0
+        case "research":
+            from cli import research as research_module
+
+            print("Calibración del researcher:")
+            print((await research_module.reporte(args.semanas)).render())
+            return 0
         case "revisiones":
             from cli import revisiones as revisiones_module
 
