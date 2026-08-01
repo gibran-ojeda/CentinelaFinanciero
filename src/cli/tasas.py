@@ -408,14 +408,14 @@ async def retirar_sustituidas(path: Path, *, dry_run: bool = False) -> ReporteRe
             reporte.desconocidas.append(slug)
             continue
         ganadora = vigentes.get(producto_id)
-        # AGREGADOR jamás puede ser VIGENTE, así que la segunda condición está
-        # implícita en la primera; se deja explícita porque es el criterio.
-        sustituida = (
-            ganadora is not None
-            and ganadora.estado is EstadoTasa.VIGENTE
-            and ganadora.fuente is not FuenteTasa.AGREGADOR
-        )
-        if not sustituida:
+        # Sustituida ⇔ ya hay lectura oficial vigente. AGREGADOR jamás puede
+        # ser VIGENTE, así que la última condición es redundante; se deja
+        # explícita porque es el criterio.
+        if (
+            ganadora is None
+            or ganadora.estado is not EstadoTasa.VIGENTE
+            or ganadora.fuente is FuenteTasa.AGREGADOR
+        ):
             reporte.conservadas += 1
             continue
         lineas[indice] = (
