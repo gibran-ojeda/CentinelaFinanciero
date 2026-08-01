@@ -43,13 +43,32 @@ async def test_a_nonexistent_reference_is_a_404_not_a_422(api_lectura: AsyncClie
     assert (await api_lectura.get("/api/v1/instituciones/no-existe")).status_code == 404
 
 
+async def _indicadores(nombre: str, **campos: object) -> None:
+    async with session_scope() as session:
+        session.add(
+            IndicadorFinanciero(
+                institucion_id=await _id_de(nombre),
+                periodo=date(2026, 3, 31),
+                **campos,  # type: ignore[arg-type]
+            )
+        )
+
+
 async def test_indicators_come_with_their_status(api_lectura: AsyncClient) -> None:
     """Las cuatro tarjetas del detalle salen de la API, no del frontend.
 
-    Ahorra+ Capital tiene la salud en rango; su única bandera es la de GAT,
-    que no es un indicador. Alcancía Fuerte los tiene en alerta.
+    Los valores son sintéticos e insertados por el test —la base es de
+    prueba, no publica nada—: una SOFIPO con la salud en rango y otra con los
+    tres indicadores en alerta, para cubrir los dos extremos del semáforo.
     """
-    sana = (await api_lectura.get("/api/v1/instituciones/ahorra-mas-capital")).json()
+    await _indicadores(
+        "Finsus",
+        imor=Decimal("2.60"),
+        icor=Decimal("118.00"),
+        nicap_nivel=NivelCapitalizacion.N1,
+        captacion=Decimal("2100000000.00"),
+    )
+    sana = (await api_lectura.get("/api/v1/instituciones/finsus")).json()
     estados = {i["clave"]: i["estado"] for i in sana["indicadores_ultimo_periodo"]["evaluados"]}
 
     assert estados["IMOR"] == "EN_RANGO"
@@ -58,7 +77,13 @@ async def test_indicators_come_with_their_status(api_lectura: AsyncClient) -> No
     assert estados["ICAP"] == "SIN_DATO"  # las SOFIPOs reportan NICAP
     assert estados["CAPTACION"] == "INFORMATIVO"
 
-    enferma = (await api_lectura.get("/api/v1/instituciones/alcancia-fuerte")).json()
+    await _indicadores(
+        "CAME",
+        imor=Decimal("8.40"),
+        icor=Decimal("61.00"),
+        nicap_nivel=NivelCapitalizacion.N3,
+    )
+    enferma = (await api_lectura.get("/api/v1/instituciones/came")).json()
     estados = {i["clave"]: i["estado"] for i in enferma["indicadores_ultimo_periodo"]["evaluados"]}
 
     assert estados["IMOR"] == "ALERTA"

@@ -217,15 +217,6 @@ async def test_an_institution_without_any_rate_is_a_candidate(
     assert len(candidatas) > 5
 
 
-async def test_demonstration_institutions_are_never_investigated(
-    catalogo_cargado: None,
-) -> None:
-    """No existen: buscarlas gastaría tokens en encontrar nada."""
-    candidatas = await investigacion._candidatas(HOY)
-
-    assert "Alcancía Fuerte" not in {c.nombre for c in candidatas}
-
-
 # ─── Qué se hace con lo que sale ──────────────────────────────
 
 

@@ -42,5 +42,3 @@ revolut-vista,15.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVIS
 openbank-vista,13.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
 hey-vista,7.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial: hey.inc devolvio error 500.
 mercado-pago-vista,12.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial. Tasa con tope de saldo. Sin cobertura IPAB ni PROSOFIPO.
-ahorra-mas-plazo-364,15.75,18.40,,2026-07-24,MANUAL,,VIGENTE,INSTITUCION FICTICIA (es_demostracion). GAT publicada deliberadamente inconsistente con la nominal para ilustrar la bandera amarilla de §5.2.
-alcancia-plazo-182,16.50,,,2026-07-24,MANUAL,,VIGENTE,INSTITUCION FICTICIA (es_demostracion). Tasa muy por encima del mercado a 182 dias para ilustrar la bandera roja compuesta de §5.2.

@@ -38,16 +38,21 @@ async def test_seed_loads_the_whole_mvp_catalog() -> None:
     report = await run_seed()
 
     assert report.total_creados > 0
-    assert await _contar(Institucion) == 19
-    assert await _contar(Producto) == 42
+    assert await _contar(Institucion) == 17
+    assert await _contar(Producto) == 40
     assert await _contar(ParametroFiscal) == 2
     assert await _contar(SerieEconomica) == 2
     assert await _contar(ValorSerieEconomica) == 21
     assert await _contar(FuenteTasas) == 18
 
 
-async def test_only_the_illustrative_institutions_are_marked_as_demo() -> None:
-    """Las 17 reales no llevan marca; las 2 ficticias sí, y son sólo ésas."""
+async def test_no_institution_is_marked_as_demo() -> None:
+    """Las ficticias salieron del producto; el catálogo entero es real.
+
+    La columna `es_demostracion` sigue existiendo como invariante —una
+    institución marcada jamás se sirve— pero desde la purga nada la enciende.
+    Este test fija que el seed no la reintroduzca.
+    """
     await run_seed()
 
     async with session_scope() as session:
@@ -61,7 +66,7 @@ async def test_only_the_illustrative_institutions_are_marked_as_demo() -> None:
             .all()
         )
 
-    assert set(demo) == {"Ahorra+ Capital", "Alcancía Fuerte"}
+    assert demo == []
 
 
 async def test_seed_is_idempotent() -> None:
@@ -83,7 +88,7 @@ async def test_second_run_reports_no_changes() -> None:
     await run_seed()
     segundo = await run_seed()
     assert segundo.total_actualizados == 0
-    assert segundo.sin_cambios["instituciones"] == 19
+    assert segundo.sin_cambios["instituciones"] == 17
 
 
 async def test_seed_updates_changed_fields_without_duplicating(tmp_path: Path) -> None:
@@ -103,7 +108,7 @@ async def test_seed_updates_changed_fields_without_duplicating(tmp_path: Path) -
 
     assert report.creados.get("instituciones", 0) == 0
     assert report.actualizados["instituciones"] == 1
-    assert await _contar(Institucion) == 19
+    assert await _contar(Institucion) == 17
 
     async with session_scope() as session:
         finsus = await session.scalar(select(Institucion).where(Institucion.nombre == "Finsus"))
@@ -174,35 +179,23 @@ async def test_udi_and_inpc_series_are_seeded() -> None:
     assert udi is not None and Decimal("8") < udi < Decimal("10")
 
 
-async def test_no_real_institution_has_invented_indicators() -> None:
+async def test_the_seed_writes_no_financial_indicators() -> None:
     """La regla que protege al producto de fabricar información financiera.
 
-    Los indicadores sembrados existen sólo para las instituciones ficticias,
-    que están para eso. Ninguna institución real lleva IMOR, ICAP ni NICAP
-    hasta que la fase 8 los lea de los boletines de la CNBV: sin dato, la
-    respuesta correcta es ninguna bandera de salud, no una inventada.
+    Inventar IMOR, ICAP o NICAP para una institución real sería fabricar
+    información financiera sobre una empresa concreta. Desde la purga de las
+    ficticias no queda ningún caso legítimo: el único escritor de
+    `indicadores_financieros` es la ingesta de la CNBV, que los lee de los
+    boletines. Este test fija que el seed no vuelva a escribir ahí.
     """
     from domain.orm import IndicadorFinanciero
 
     await run_seed()
 
     async with session_scope() as session:
-        con_indicadores = (
-            (
-                await session.execute(
-                    select(Institucion.nombre, Institucion.es_demostracion).join(
-                        IndicadorFinanciero,
-                        IndicadorFinanciero.institucion_id == Institucion.id,
-                    )
-                )
-            )
-            .tuples()
-            .all()
-        )
+        total = await session.scalar(select(func.count()).select_from(IndicadorFinanciero))
 
-    assert con_indicadores, "el seed debe traer los indicadores de las ficticias"
-    reales = [nombre for nombre, es_demo in con_indicadores if not es_demo]
-    assert reales == [], f"instituciones reales con indicadores inventados: {reales}"
+    assert int(total or 0) == 0
 
 
 async def test_unknown_institution_reference_fails_loudly(tmp_path: Path) -> None:

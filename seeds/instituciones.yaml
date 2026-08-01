@@ -169,45 +169,6 @@ instituciones:
     url_sitio: https://www.hey.inc/
     estatus_regulatorio: Institución de Banca Múltiple autorizada por la CNBV
 
-  # ─── Instituciones ILUSTRATIVAS (ficticias) ─────────────────
-  #
-  # No existen. Se siembran para que el motor de banderas tenga de qué hablar:
-  # las reglas de §5 dependen de indicadores de la CNBV que no llegan hasta la
-  # fase 8, así que sin ellas el producto se vería sin una sola bandera y no
-  # habría forma de comprobar que el camino completo —indicador, regla,
-  # bandera, UI— funciona.
-  #
-  # Inventar estos números es legítimo precisamente porque las instituciones
-  # son inventadas. Hacerlo sobre Finsus o Nu sería fabricar información
-  # financiera sobre empresas reales, que es lo contrario de lo que este
-  # producto existe para hacer.
-  #
-  # `es_demostracion: true` hace que la API las marque y la UI las muestre con
-  # un ◆. `mostrar_datos_demo=false` las retira por completo (fase 6, paso 9).
-  - nombre: Ahorra+ Capital
-    slug: ahorra-mas-capital
-    categoria: SOFIPO
-    tipo_seguro: PROSOFIPO
-    es_demostracion: true
-    estatus_regulatorio: Institución ficticia de demostración
-    notas: >-
-      Ilustra la bandera 🟡 de GAT inconsistente: indicadores de salud en rango
-      pero una GAT publicada que no cuadra con su tasa nominal. Es el caso que
-      justifica la regla — el problema no está en la institución sino en lo que
-      anuncia.
-
-  - nombre: Alcancía Fuerte
-    slug: alcancia-fuerte
-    categoria: SOFIPO
-    tipo_seguro: PROSOFIPO
-    es_demostracion: true
-    estatus_regulatorio: Institución ficticia de demostración
-    notas: >-
-      Ilustra la bandera 🔴 compuesta: la tasa más alta del mercado junto a
-      morosidad en alerta y capitalización deteriorada. Es el patrón que §5.2
-      describe —captar caro para tapar un agujero— y el motivo por el que la
-      tasa nominal no puede ser el único criterio de comparación.
-
   # ─── IFPE (sin fondo de protección) ─────────────────────────
   - nombre: Mercado Pago
     slug: mercado-pago

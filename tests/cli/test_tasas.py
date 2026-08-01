@@ -43,9 +43,9 @@ async def test_imports_the_full_seed_dataset() -> None:
     await run_seed()
     report = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
-    assert report.creadas == 37
+    assert report.creadas == 35
     assert report.errores == []
-    assert await _contar_tasas() == 37
+    assert await _contar_tasas() == 35
 
 
 async def test_importing_invalidates_the_comparador_cache(
@@ -102,10 +102,9 @@ async def test_seed_dataset_publishes_only_verified_rates() -> None:
     await run_seed()
     report = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
-    # Siete VIGENTE: las cinco gubernamentales verificadas contra el SIE de
-    # Banxico y cetesdirecto, más las dos de instituciones ficticias — que no
-    # tienen fuente que verificar porque no existen, y van marcadas con ◆.
-    assert report.por_estado["VIGENTE"] == 7
+    # Cinco VIGENTE: las gubernamentales verificadas contra el SIE de Banxico
+    # y cetesdirecto. Todo lo demás es de agregador y queda pendiente.
+    assert report.por_estado["VIGENTE"] == 5
     assert report.por_estado["PENDIENTE_REVISION"] == 30
 
     async with session_scope() as session:
@@ -128,8 +127,6 @@ async def test_seed_dataset_publishes_only_verified_rates() -> None:
         "cetes-28",
         "cetes-364",
         "cetes-91",
-        "ahorra-mas-plazo-364",
-        "alcancia-plazo-182",
     }
 
 
@@ -141,8 +138,8 @@ async def test_reimporting_the_same_file_creates_nothing() -> None:
     segundo = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
     assert segundo.creadas == 0
-    assert segundo.duplicadas == 37
-    assert await _contar_tasas() == 37
+    assert segundo.duplicadas == 35
+    assert await _contar_tasas() == 35
 
 
 async def test_a_new_observation_supersedes_without_deleting(tmp_path: Path) -> None:
@@ -294,8 +291,8 @@ async def test_the_review_list_names_what_cannot_be_published() -> None:
     assert motivos == {"sin verificar", "sin tasa"}
     assert sum(p.motivo == "sin verificar" for p in lista.pendientes) == 30
 
-    # Ninguna de las siete VIGENTE aparece: CETES y BONDDIA salen de fuente
-    # primaria, y las dos ficticias no tienen fuente que verificar.
+    # Ninguna de las cinco VIGENTE aparece: CETES y BONDDIA salen de fuente
+    # primaria.
     slugs = {p.producto_slug for p in lista.pendientes}
     assert "cetes-28" not in slugs
     assert "bonddia" not in slugs

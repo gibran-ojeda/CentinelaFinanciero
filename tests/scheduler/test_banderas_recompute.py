@@ -66,10 +66,9 @@ async def test_two_runs_leave_the_same_state() -> None:
     primera = await recomputar()
     segunda = await recomputar()
 
-    # Las métricas son del catálogo entero: las dos de Finsus, la estructural
-    # de Mercado Pago y una por cada institución ficticia (la 🟡 de GAT de
-    # Ahorra+ y la 🔴 compuesta de Alcancía).
-    assert primera["creadas"] == 5
+    # Las métricas son del catálogo entero: las dos de Finsus y la
+    # estructural de Mercado Pago (IFPE sin fondo de protección).
+    assert primera["creadas"] == 3
     assert segunda["creadas"] == 0
     assert segunda["desactivadas"] == 0
     assert segunda["sin_cambios"] == primera["creadas"]
