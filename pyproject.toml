@@ -65,8 +65,11 @@ ingest = [
 llm = [
     "trafilatura>=1.6",
 ]
-# Búsqueda abierta (fase 9, nivel 3): descubrimiento de instituciones nuevas y
-# cambios de URL. Todavía no se usa.
+# Búsqueda abierta (fase 9, nivel 3): la usa el job semanal del researcher
+# (`tasas_research_abierta`), cuyo gate frío arranca apagado. El import es
+# perezoso y la cadena de motores traga el ImportError como un fallo más de
+# búsqueda, así que faltar aquí no rompe nada: degrada cada corrida en
+# silencio, que es peor.
 research = [
     "ddgs>=9.0",
 ]
@@ -80,9 +83,10 @@ mcp = [
 # Conjunto que instala la imagen Docker única: api + scheduler + cli.
 # `llm` va dentro porque el job semanal de tasas corre en el scheduler y
 # necesita extraer el texto de cada página; `ingest`, porque los jobs de la
-# CNBV corren en el mismo servicio y leen XLSX y PDF.
+# CNBV corren en el mismo servicio y leen XLSX y PDF; `research`, porque el
+# job del nivel 3 también corre ahí y sin `ddgs` degradaría cada corrida.
 app = [
-    "centinela-financiero[api,scheduler,llm,ingest]",
+    "centinela-financiero[api,scheduler,llm,ingest,research]",
 ]
 dev = [
     "pytest>=8.0",
