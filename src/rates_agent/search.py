@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
+from core.config_store import effective
 from core.logging import get_logger
 from core.settings import settings
 
@@ -135,8 +136,13 @@ class _EstadoMotor:
 
 
 def motores_por_defecto() -> list[Motor]:
-    """La cadena declarada en `RESEARCH_MOTORES`, en orden."""
-    nombres = [n.strip() for n in settings.research_motores.split(",") if n.strip()]
+    """La cadena declarada en `research_motores`, en orden.
+
+    Del ConfigStore: cambiar de proveedor de búsqueda es una llave caliente,
+    no un deploy. Como hay un ejecutor por institución, un cambio a media
+    corrida aplica desde la siguiente — la granularidad correcta.
+    """
+    nombres = [n.strip() for n in str(effective.research_motores).split(",") if n.strip()]
     return [MotorDdgs(nombre) for nombre in nombres]
 
 

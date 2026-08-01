@@ -97,6 +97,33 @@ async def _investigar(cliente: ClienteFalso, ejecutor: SearchExecutor, **extra: 
 # ─── La invariante ────────────────────────────────────────────
 
 
+async def test_the_rounds_ceiling_is_read_hot_from_config() -> None:
+    """`research_max_rondas` es llave del ConfigStore, leída por investigación.
+
+    Con cero rondas de herramientas, el loop va directo a la vuelta final sin
+    tools — una sola llamada. La calibración puede mover el tope sin deploy.
+    """
+    import time
+
+    import core.config_store as cs
+
+    ejecutor = SearchExecutor([MotorFalso(["https://www.klar.mx/inversion"])])  # type: ignore[list-item]
+    cliente = ClienteFalso(_respuesta(_final("https://www.klar.mx/inversion")))
+
+    previo = cs._snapshot
+    cs._snapshot = cs.ConfigSnapshot(
+        values={"research_max_rondas": 0}, loaded_at=time.monotonic()
+    )
+    try:
+        reporte = await _investigar(cliente, ejecutor)
+    finally:
+        cs._snapshot = previo
+
+    assert len(cliente.llamadas) == 1
+    assert cliente.llamadas[0]["herramientas"] is None
+    assert reporte.rondas == 1
+
+
 async def test_a_finding_backed_by_a_real_search_result_survives() -> None:
     ejecutor = SearchExecutor([MotorFalso(["https://www.klar.mx/inversion"])])  # type: ignore[list-item]
     cliente = ClienteFalso(

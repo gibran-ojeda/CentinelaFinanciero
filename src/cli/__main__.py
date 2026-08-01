@@ -122,7 +122,9 @@ def build_parser() -> argparse.ArgumentParser:
     config_sub = config.add_subparsers(dest="subcomando", required=True)
 
     listar = config_sub.add_parser("list", help="valor efectivo de cada parámetro")
-    listar.add_argument("--grupo", default=None, help="banderas | fiscal | revision | scheduler")
+    listar.add_argument(
+        "--grupo", default=None, help="banderas | fiscal | llm | revision | scheduler"
+    )
 
     fijar = config_sub.add_parser("set", help="sobrescribe un parámetro en caliente")
     fijar.add_argument("key")

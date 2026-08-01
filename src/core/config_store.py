@@ -217,6 +217,28 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         "Kill-switch caliente de la búsqueda abierta (nivel 3)",
     ),
     ConfigKeySpec("config_cache_ttl_seconds", "int", "scheduler", "TTL del snapshot de config"),
+    # El camino LLM (fase 9): lo que la calibración puede querer mover con lo
+    # observado, sin deploy. En producción lo que no está aquí queda clavado
+    # al default de Settings — el compose no pasa estas variables al
+    # contenedor, así que la llave caliente es la única palanca real.
+    ConfigKeySpec(
+        "llm_cost_daily_limit_usd",
+        "float",
+        "llm",
+        "Techo duro de gasto diario en USD (red contra bucles, no presupuesto)",
+    ),
+    ConfigKeySpec(
+        "research_max_rondas",
+        "int",
+        "llm",
+        "Vueltas de tool-use antes de retirar las herramientas y exigir el JSON final",
+    ),
+    ConfigKeySpec(
+        "research_motores",
+        "str",
+        "llm",
+        "Cadena de motores de búsqueda, en orden y separados por coma",
+    ),
 )
 
 REGISTRY_BY_KEY: dict[str, ConfigKeySpec] = {spec.key: spec for spec in CONFIG_REGISTRY}
