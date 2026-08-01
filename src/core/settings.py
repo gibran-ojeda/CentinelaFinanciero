@@ -136,6 +136,15 @@ class Settings(BaseSettings):
     #: 400 y se propaga en el primer intento.
     banxico_max_reintentos: int = 2
 
+    # ─── CNBV / Portafolio de Información (fase 8) ────────────
+    #: Los boletines pesan megabytes y el portal no va rápido. Más generoso
+    #: que el resto de timeouts a propósito.
+    cnbv_timeout_seconds: float = 180.0
+    #: Dónde se guardan los archivos crudos descargados. Sin el original, un
+    #: indicador de la CNBV no es auditable: es un número que alguien dice que
+    #: leyó. En el VPS va a un volumen, no al sistema de archivos del contenedor.
+    cnbv_directorio_descargas: str = "var/cnbv"
+
     # ─── LLM (extracción de tasas, fase 9) ────────────────────
     llm_base_url: str = "https://api.deepseek.com/v1"
     #: `deepseek-chat` y `deepseek-reasoner` los retiró DeepSeek el 2026-07-24.

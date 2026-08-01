@@ -29,6 +29,10 @@ dependencies = [
     "httpx>=0.27",
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
+    # Explícito aunque httpx ya lo arrastre: `ingest_cnbv` construye su propio
+    # contexto TLS sobre este almacén para añadirle el intermedio que la CNBV
+    # omite, así que es una dependencia directa y no un accidente feliz.
+    "certifi",
 ]
 
 [project.optional-dependencies]
@@ -39,10 +43,18 @@ api = [
 scheduler = [
     "apscheduler>=3.10,<4",
 ]
-# Ingesta determinista (fases 7 y 8): boletines CNBV en CSV/XLSX.
+# Ingesta determinista (fase 8): boletines de la CNBV en XLSX y PDF.
+#
+# **Sin pandas**, aunque el plan de la fase lo listara. El scheduler del VPS
+# tiene 256 MB y el boletín de banca múltiple trae treinta y tres hojas;
+# `openpyxl` en modo `read_only` recorre por filas sin materializar el libro,
+# que es justo lo que un DataFrame haría. La fase 7 (Banxico) no necesita nada
+# de aquí: es JSON sobre httpx, que ya está en el núcleo.
 ingest = [
-    "pandas>=2.1",
     "openpyxl>=3.1",
+    # El NICAP de las SOFIPOs —la categoría prudencial N1–N4 de §5.1— sólo se
+    # publica en PDF. Es la única fuente que hay.
+    "pdfplumber>=0.11",
 ]
 # Extracción con LLM (fase 9, nivel 2).
 #
@@ -67,9 +79,10 @@ mcp = [
 ]
 # Conjunto que instala la imagen Docker única: api + scheduler + cli.
 # `llm` va dentro porque el job semanal de tasas corre en el scheduler y
-# necesita extraer el texto de cada página.
+# necesita extraer el texto de cada página; `ingest`, porque los jobs de la
+# CNBV corren en el mismo servicio y leen XLSX y PDF.
 app = [
-    "centinela-financiero[api,scheduler,llm]",
+    "centinela-financiero[api,scheduler,llm,ingest]",
 ]
 dev = [
     "pytest>=8.0",
@@ -94,6 +107,12 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# El intermedio de GlobalSign que el portal de la CNBV no manda en su cadena
+# TLS. Sin esto no llega a la imagen y la descarga falla en Linux con un error
+# de certificado — ver `ingest_cnbv/downloader.py`.
+ingest_cnbv = ["*.pem"]
 
 [tool.ruff]
 target-version = "py312"
