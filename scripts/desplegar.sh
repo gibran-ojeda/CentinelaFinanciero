@@ -11,7 +11,8 @@
 # Variables que espera: REF, POSTGRES_PASSWORD, API_READ_KEY, API_ADMIN_KEY,
 # SITE_URL. Opcionales: BANXICO_TOKEN y DEEPSEEK_API_KEY — sin ellas el stack
 # sirve igual, sólo quedan sin llave los jobs de las fases 7 y 9 — y
-# SCHEDULER_RESEARCH_ENABLED, el gate frío del researcher L3 (vacía = false).
+# SCHEDULER_RESEARCH_ENABLED, el gate frío del researcher L3 (vacía = true;
+# ponerla en false como variable de repo es el apagado de emergencia).
 #
 # Ojo con los `< /dev/null`: bash lee este archivo de stdin a medida que lo
 # ejecuta. Un comando que consuma stdin se traga lo que queda del script y la
@@ -54,7 +55,7 @@ LOG_LEVEL=INFO
 LOG_FORMAT=json
 BANXICO_TOKEN=${BANXICO_TOKEN:-}
 DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-SCHEDULER_RESEARCH_ENABLED=${SCHEDULER_RESEARCH_ENABLED:-false}
+SCHEDULER_RESEARCH_ENABLED=${SCHEDULER_RESEARCH_ENABLED:-true}
 ENV
 
 $COMPOSE build < /dev/null

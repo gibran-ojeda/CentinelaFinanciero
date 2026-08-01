@@ -50,7 +50,9 @@ git clone https://github.com/gibran-ojeda/brujula-financiera.git ~/centinela-fin
 | `DEEPSEEK_API_KEY` | llave de DeepSeek. Opcional: sin ella, el fetch L2 de los lunes falla (FALLIDO en `job_runs`, no en silencio) |
 
 También existe la **variable** de repo `SCHEDULER_RESEARCH_ENABLED` (no
-secreto): el gate frío del researcher L3. Sin definirla queda apagado.
+secreto): el **apagado de emergencia** del researcher L3. Sin definirla queda
+encendido; fijarla en `false` lo apaga sin tocar código. Ojo: si existe con
+valor `false` de antes, anula el encendido por código — borrarla.
 
 > **Ojo**: el compose no declara `env_file`, así que una variable sólo llega al
 > contenedor si está en el mapa `environment:` del servicio. Añadir una nueva

@@ -391,14 +391,27 @@ async def test_the_run_reports_its_cost(catalogo_cargado: None) -> None:
 # ─── El job ───────────────────────────────────────────────────
 
 
-def test_the_job_is_registered_but_starts_off() -> None:
-    """El nivel 3 es el camino más caro: se enciende a mano, cuando toque."""
+def test_the_job_is_registered_and_starts_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """El nivel 3 se enciende por código; sus guardas son el techo y la llave.
+
+    Se afirma el default de la **clase** y no `settings.`: ese valor viene del
+    `.env` de quien corra la suite, y el test dejaría de medir el código. El
+    gate frío se prueba en ambas posiciones parcheando el objeto vivo.
+    """
+    from core.settings import Settings, settings
     from scheduler.jobs.research import JOB_ID
     from scheduler.registry import build_registry
 
+    assert Settings.model_fields["scheduler_research_enabled"].default is True
+
+    monkeypatch.setattr(settings, "scheduler_research_enabled", True)
+    spec = next(j for j in build_registry() if j.id == JOB_ID)
+    assert spec.enabled is True
+    assert spec.lock_ttl_seconds == 3600
+
+    monkeypatch.setattr(settings, "scheduler_research_enabled", False)
     spec = next(j for j in build_registry() if j.id == JOB_ID)
     assert spec.enabled is False
-    assert spec.lock_ttl_seconds == 3600
 
 
 async def test_the_job_skips_when_nothing_is_stale(

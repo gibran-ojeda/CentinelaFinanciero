@@ -76,10 +76,14 @@ class Settings(BaseSettings):
     scheduler_banxico_enabled: bool = True
     scheduler_cnbv_enabled: bool = True
     scheduler_frescura_enabled: bool = True
-    #: Nivel 3. Arranca **apagado**: la búsqueda abierta es el camino más caro
-    #: y menos preciso, y sólo debe encenderse cuando el nivel 2 lleva semanas
-    #: corriendo y se sabe qué instituciones deja fuera de verdad.
-    scheduler_research_enabled: bool = False
+    #: Nivel 3. Encendido: la guarda ya no es este default frío sino el techo
+    #: de gasto diario (`llm_cost_daily_limit_usd`), el kill-switch caliente
+    #: (`tasas_research_enabled`) y la calibración automática
+    #: (`cli research reporte`), que es la que dice si lo que trae vale lo que
+    #: cuesta. El apagado de emergencia en prod es la variable de repo
+    #: `SCHEDULER_RESEARCH_ENABLED=false` — el deploy siempre la escribe
+    #: explícita, así que este default sólo manda fuera del compose.
+    scheduler_research_enabled: bool = True
     scheduler_lock_ttl_seconds: int = 300
     scheduler_timezone: str = "America/Mexico_City"
 
