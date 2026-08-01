@@ -38,15 +38,39 @@ curl -fsS -H "X-API-Key: ${API_READ_KEY}" \
   http://127.0.0.1:8010/api/v1/meta/frescura > /tmp/frescura.json
 echo "  /meta/frescura      ok"
 
+# El campo renombrado tiene que estar: si falta, se desplegó una API vieja con
+# un gate nuevo (o al revés) y el piso de filas de abajo mediría otra cosa.
+if ! grep -q '"mostrar_tasas_sin_verificar"' /tmp/frescura.json; then
+  echo "  ✗ /meta/frescura no trae mostrar_tasas_sin_verificar"
+  exit 1
+fi
+
+# Resumen por fuente, **sólo informativo**: un deploy que repara una ingesta
+# no puede quedar bloqueado por los datos viejos que viene a arreglar. Para
+# eso están el job frescura_check y job_runs; aquí basta con que se vea.
+echo "  frescura por fuente (informativo):"
+grep -o '"fuente":"[^"]*"\|"dentro_de_sla":[a-z]*\|"observaciones":[0-9]*' /tmp/frescura.json |
+  paste -d' ' - - - | sed 's/"//g; s/^/    /' || true
+
 curl -fsS http://127.0.0.1:8011/ > /tmp/portada.html
 # Un 200 con la tabla vacía es justo el fallo que este gate existe para ver:
 # la API responde, el sitio compila, y no hay ni un dato que mostrar.
 # `grep -o | wc -l` y no `grep -c`: el segundo cuenta líneas y el HTML trae
 # varias filas por línea, así que informaría de menos.
+#
+# El piso depende de la política de transición: encendida, la portada trae lo
+# verificado más las lecturas de agregador etiquetadas (~35 filas hoy);
+# apagada, como mínimo la deuda gubernamental completa. Un piso incondicional
+# alto bloquearía deploys ajenos el día que alguien apague la bandera.
 filas=$(grep -o 'class="fila"' /tmp/portada.html | wc -l)
-echo "  portada             ok, $filas filas"
-if [ "${filas:-0}" -eq 0 ]; then
-  echo "  ✗ la portada no trae ni una fila"
+if grep -q '"mostrar_tasas_sin_verificar":true' /tmp/frescura.json; then
+  piso=20
+else
+  piso=5
+fi
+echo "  portada             ok, $filas filas (piso $piso)"
+if [ "${filas:-0}" -lt "$piso" ]; then
+  echo "  ✗ la portada trae $filas filas y el piso es $piso"
   exit 1
 fi
 
