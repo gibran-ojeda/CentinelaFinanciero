@@ -335,7 +335,7 @@ async def test_a_total_failure_marks_the_cli_run_as_failed_without_raising(
     async with session_scope() as session:
         corrida = await session.scalar(
             select(JobRun)
-            .where(JobRun.job_id == cli_tasas.JOB_ID_FETCH)
+            .where(JobRun.job_id == cli_tasas.JOB_ID_FETCH_MANUAL)
             .order_by(JobRun.id.desc())
         )
     assert corrida is not None

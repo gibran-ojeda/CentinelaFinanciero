@@ -21,7 +21,7 @@ from sqlalchemy import desc, select
 from api.services import cache, revisiones
 from core.db import session_scope
 from core.logging import get_logger
-from domain.enums import EstadoJob, EstadoRevision
+from domain.enums import EstadoRevision
 from domain.orm import JobRun
 
 log = get_logger(__name__)
@@ -49,10 +49,10 @@ def _flecha(anterior: Decimal | None, nuevo: Decimal) -> str:
 
 
 async def listar(estado: EstadoRevision = EstadoRevision.PENDIENTE) -> str:
-    """La cola, más los huecos de catálogo de la última corrida."""
+    """La cola, más los huecos de catálogo de las corridas recientes."""
     async with session_scope() as session:
         filas = await revisiones.listar(session, estado=estado)
-        huecos = await _huecos_de_la_ultima_corrida(session)
+        huecos = await _huecos_recientes(session)
 
     lineas: list[str] = []
     if not filas:
@@ -77,7 +77,7 @@ async def listar(estado: EstadoRevision = EstadoRevision.PENDIENTE) -> str:
         )
 
     if huecos:
-        lineas.append("\n  ── Huecos de catálogo de la última corrida ──")
+        lineas.append("\n  ── Huecos de catálogo (corridas recientes) ──")
         lineas.append("  Estas instituciones publican plazos que el catálogo no tiene. No son")
         lineas.append(
             "  revisiones: se cierran dando de alta el producto en seeds/productos.yaml."
@@ -112,23 +112,45 @@ async def resolver(
     return f"  Revisión {revision_id}: {estado} por {revisor}."
 
 
-async def _huecos_de_la_ultima_corrida(session: Any) -> list[dict[str, Any]]:
-    """Los huecos que reportó la última corrida del job de tasas.
+async def _huecos_recientes(session: Any) -> list[dict[str, Any]]:
+    """Los huecos de catálogo de las corridas recientes, deduplicados.
 
     Salen de `job_runs.metricas` y no de una tabla propia: son un hallazgo de
     una corrida concreta, no un estado del sistema, y guardarlos aparte
     obligaría a mantenerlos sincronizados con un catálogo que cambia.
+
+    Pero «la última corrida» a secas no bastaba: la pasada del VPS y la local
+    con navegador son corridas distintas —ids distintos— y cada una lee
+    fuentes que la otra no ve. Se agregan las últimas de ambos ids y **en
+    cualquier estado**, porque los huecos de una corrida fallida son igual de
+    reales que los de una exitosa. Gana la mención más reciente de cada hueco.
     """
-    corrida = await session.scalar(
-        select(JobRun)
-        .where(JobRun.job_id == "tasas_fetch_dirigido", JobRun.estado == EstadoJob.EXITOSO)
-        .order_by(desc(JobRun.id))
-        .limit(1)
+    corridas = (
+        (
+            await session.execute(
+                select(JobRun)
+                .where(JobRun.job_id.in_(("tasas_fetch_dirigido", "tasas_fetch_manual")))
+                .order_by(desc(JobRun.id))
+                .limit(10)
+            )
+        )
+        .scalars()
+        .all()
     )
-    if corrida is None or not corrida.metricas:
-        return []
-    huecos = corrida.metricas.get("huecos_catalogo")
-    return huecos if isinstance(huecos, list) else []
+
+    vistos: set[tuple[Any, Any, Any]] = set()
+    huecos: list[dict[str, Any]] = []
+    for corrida in corridas:  # de la más reciente a la más vieja
+        crudos = (corrida.metricas or {}).get("huecos_catalogo")
+        if not isinstance(crudos, list):
+            continue
+        for hueco in crudos:
+            clave = (hueco.get("institucion"), hueco.get("producto"), hueco.get("plazo_dias"))
+            if clave in vistos:
+                continue
+            vistos.add(clave)
+            huecos.append(hueco)
+    return huecos
 
 
 __all__ = ["listar", "resolver"]

@@ -32,7 +32,12 @@ from domain.orm import FuenteTasas, Institucion, Producto, Tasa
 from rates_agent import pipeline
 from rates_agent.pipeline import ReporteCorrida
 from scheduler.bitacora import registrar_corrida
-from scheduler.jobs.tasas import JOB_ID as JOB_ID_FETCH
+
+#: Id propio para las corridas disparadas desde la terminal. Con el mismo id
+#: que el job del lunes, la pasada local con navegador y la del VPS se pisaban
+#: en `job_runs`: `cli revisiones list` sólo miraba «la última corrida» y los
+#: huecos de una borraban los de la otra.
+JOB_ID_FETCH_MANUAL = "tasas_fetch_manual"
 
 log = get_logger(__name__)
 
@@ -254,7 +259,7 @@ class ListaRevision:
         lineas.append(
             f"\n  {total} productos en {instituciones} instituciones. "
             f"Actualiza seeds/tasas.csv con lo que publique cada página "
-            f"(estado VIGENTE, fuente OFICIAL, la URL de la institución) y corre "
+            f"(estado VIGENTE, fuente MANUAL, la URL de la institución) y corre "
             f"`python -m cli tasas import seeds/tasas.csv`."
         )
         return "\n".join(lineas)
@@ -365,11 +370,11 @@ async def correr_fetch(
 
     fetcher = Fetcher(transportes, esperas_backoff_s=esperas)
 
-    # La corrida deja su fila en `job_runs` aunque la dispare una persona. Sin
-    # esto los huecos de catálogo sólo existirían en la consola: `cli revisiones
-    # list` los lee de la última corrida, y una pasada local es una corrida
-    # igual de real que la del lunes.
-    async with registrar_corrida(JOB_ID_FETCH) as corrida:
+    # La corrida deja su fila en `job_runs` aunque la dispare una persona —
+    # una pasada local es una corrida igual de real que la del lunes— pero
+    # bajo su propio id: `cli revisiones list` agrega los huecos de las
+    # corridas recientes de ambos, y así ninguna borra lo que vio la otra.
+    async with registrar_corrida(JOB_ID_FETCH_MANUAL) as corrida:
         reporte = await pipeline.correr(fetcher=fetcher, solo_requieren_js=solo_js)
         corrida.metricas.update(reporte.como_metricas())
         corrida.metricas["disparada_por"] = "cli"
@@ -381,6 +386,7 @@ async def correr_fetch(
 
 
 __all__ = [
+    "JOB_ID_FETCH_MANUAL",
     "TASA_MAXIMA_PLAUSIBLE",
     "ImportReport",
     "ImportError_",

@@ -121,26 +121,28 @@ async def test_an_empty_queue_says_so() -> None:
     assert "No hay revisiones" in await cli_revisiones.listar()
 
 
-async def test_catalogue_gaps_from_the_last_run_are_shown() -> None:
+def _corrida_con_huecos(
+    job_id: str, huecos: list[dict[str, object]], *, estado: EstadoJob = EstadoJob.EXITOSO
+) -> JobRun:
+    return JobRun(job_id=job_id, estado=estado, metricas={"huecos_catalogo": huecos})
+
+
+def _hueco(institucion: str, plazo: int, tasa: str = "8.69") -> dict[str, object]:
+    return {
+        "institucion": institucion,
+        "producto": f"Plazo {plazo} días",
+        "plazo_dias": plazo,
+        "tasa_nominal": tasa,
+        "url": "https://ejemplo.test/inversion",
+    }
+
+
+async def test_catalogue_gaps_from_recent_runs_are_shown() -> None:
     """Un plazo que el catálogo no tiene no es una revisión, y se ve aparte."""
     await run_seed()
     async with session_scope() as session:
         session.add(
-            JobRun(
-                job_id="tasas_fetch_dirigido",
-                estado=EstadoJob.EXITOSO,
-                metricas={
-                    "huecos_catalogo": [
-                        {
-                            "institucion": "Finsus",
-                            "producto": "Plazo 360 días",
-                            "plazo_dias": 360,
-                            "tasa_nominal": "8.69",
-                            "url": "https://finsus.test/inversion",
-                        }
-                    ]
-                },
-            )
+            _corrida_con_huecos("tasas_fetch_dirigido", [_hueco("Finsus", 360)])
         )
 
     salida = await cli_revisiones.listar()
@@ -149,3 +151,45 @@ async def test_catalogue_gaps_from_the_last_run_are_shown() -> None:
     assert "seeds/productos.yaml" in salida
     assert "360d" in salida
     assert "8.69%" in salida
+
+
+async def test_gaps_from_the_vps_and_the_laptop_runs_merge_and_dedupe() -> None:
+    """Dos ids, fuentes distintas: ninguna corrida borra lo que vio la otra.
+
+    Con un solo id, la pasada local con navegador pisaba los huecos del job
+    del lunes — y al revés. El hueco repetido sale una sola vez.
+    """
+    await run_seed()
+    async with session_scope() as session:
+        session.add(_corrida_con_huecos("tasas_fetch_dirigido", [_hueco("Supertasas", 30)]))
+        session.add(
+            _corrida_con_huecos(
+                "tasas_fetch_manual", [_hueco("Finsus", 360), _hueco("Supertasas", 30)]
+            )
+        )
+
+    salida = await cli_revisiones.listar()
+
+    assert "Finsus" in salida
+    assert salida.count("Supertasas") == 1
+    assert "360d" in salida and "30d" in salida
+
+
+async def test_gaps_from_a_failed_run_still_count() -> None:
+    """Los huecos de una corrida fallida son igual de reales.
+
+    Con el filtro de sólo-EXITOSO, un fallo posterior de la corrida hacía
+    invisibles los plazos que sí alcanzó a descubrir.
+    """
+    await run_seed()
+    async with session_scope() as session:
+        session.add(
+            _corrida_con_huecos(
+                "tasas_fetch_manual", [_hueco("Klar", 45)], estado=EstadoJob.FALLIDO
+            )
+        )
+
+    salida = await cli_revisiones.listar()
+
+    assert "Klar" in salida
+    assert "45d" in salida
