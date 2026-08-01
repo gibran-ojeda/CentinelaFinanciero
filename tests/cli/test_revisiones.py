@@ -175,6 +175,18 @@ async def test_gaps_from_the_vps_and_the_laptop_runs_merge_and_dedupe() -> None:
     assert "360d" in salida and "30d" in salida
 
 
+async def test_gaps_from_research_runs_are_shown() -> None:
+    """El nivel 3 también descubre plazos que el catálogo no tiene."""
+    await run_seed()
+    async with session_scope() as session:
+        session.add(_corrida_con_huecos("tasas_research_abierta", [_hueco("Crediclub", 180)]))
+
+    salida = await cli_revisiones.listar()
+
+    assert "Crediclub" in salida
+    assert "180d" in salida
+
+
 async def test_gaps_from_a_failed_run_still_count() -> None:
     """Los huecos de una corrida fallida son igual de reales.
 

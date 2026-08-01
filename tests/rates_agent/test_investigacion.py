@@ -343,17 +343,27 @@ async def test_an_invented_url_never_reaches_the_database(catalogo_cargado: None
     assert tasa is None
 
 
-async def test_a_tenor_the_catalogue_does_not_have_is_reported_not_forced(
+async def test_a_tenor_the_catalogue_does_not_have_is_a_structured_gap(
     catalogo_cargado: None,
 ) -> None:
-    """Encajar 360 días en el producto de 364 es el error que trajo el agregador."""
+    """Encajar 360 días en el producto de 364 es el error que trajo el agregador.
+
+    Y un hueco en texto libre dentro de `errores` era invisible para
+    `cli revisiones list`: viaja con el mismo shape que los del nivel 2.
+    """
     await _solo_finsus_stale()
 
     reporte = await _correr("https://finsus.test/tasas", plazo=360)
 
     assert reporte.hallazgos == 1
     assert reporte.publicadas == 0 and reporte.en_revision == 0
-    assert any("360" in e for e in reporte.errores)
+    assert reporte.errores == []
+    assert len(reporte.huecos_catalogo) == 1
+    hueco = reporte.huecos_catalogo[0]
+    assert hueco["institucion"] == "Finsus"
+    assert hueco["plazo_dias"] == 360
+    assert hueco["url"] == "https://finsus.test/tasas"
+    assert reporte.como_metricas()["huecos_catalogo"] == reporte.huecos_catalogo
 
 
 async def test_all_engines_down_marks_the_run_degraded(catalogo_cargado: None) -> None:

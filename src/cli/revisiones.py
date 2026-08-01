@@ -119,19 +119,24 @@ async def _huecos_recientes(session: Any) -> list[dict[str, Any]]:
     una corrida concreta, no un estado del sistema, y guardarlos aparte
     obligaría a mantenerlos sincronizados con un catálogo que cambia.
 
-    Pero «la última corrida» a secas no bastaba: la pasada del VPS y la local
-    con navegador son corridas distintas —ids distintos— y cada una lee
-    fuentes que la otra no ve. Se agregan las últimas de ambos ids y **en
-    cualquier estado**, porque los huecos de una corrida fallida son igual de
-    reales que los de una exitosa. Gana la mención más reciente de cada hueco.
+    Pero «la última corrida» a secas no bastaba: la pasada del VPS, la local
+    con navegador y la del researcher son corridas distintas —ids distintos—
+    y cada una ve fuentes que las otras no. Se agregan las últimas de los
+    tres ids y **en cualquier estado**, porque los huecos de una corrida
+    fallida son igual de reales que los de una exitosa. Gana la mención más
+    reciente de cada hueco.
     """
     corridas = (
         (
             await session.execute(
                 select(JobRun)
-                .where(JobRun.job_id.in_(("tasas_fetch_dirigido", "tasas_fetch_manual")))
+                .where(
+                    JobRun.job_id.in_(
+                        ("tasas_fetch_dirigido", "tasas_fetch_manual", "tasas_research_abierta")
+                    )
+                )
                 .order_by(desc(JobRun.id))
-                .limit(10)
+                .limit(15)
             )
         )
         .scalars()
