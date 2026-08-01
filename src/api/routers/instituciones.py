@@ -98,9 +98,7 @@ async def detalle(
         gat = (
             resolver_gat(
                 tasa.tasa_nominal,
-                producto.instrumento,
                 contexto.inflacion_anual,
-                contexto.params_fiscales,
                 gat_publicada_nominal=tasa.gat_nominal,
                 gat_publicada_real=tasa.gat_real,
             )
