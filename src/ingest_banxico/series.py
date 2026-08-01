@@ -51,8 +51,13 @@ UDI = Serie(
 INPC = Serie(
     clave="SP1",
     nombre="Índice Nacional de Precios al Consumidor",
-    unidad="Índice base segunda quincena de julio 2018 = 100",
-    descripcion="INPC general mensual; de aquí sale la inflación anual",
+    # `series_economicas.unidad` es VARCHAR(40): la base de referencia va
+    # abreviada aquí y completa en la descripción.
+    unidad="Índice base 2018=100",
+    descripcion=(
+        "INPC general mensual, base segunda quincena de julio de 2018 = 100. "
+        "De aquí sale la inflación anual con la que se calcula la ganancia real"
+    ),
 )
 
 #: Series de subasta semanal de CETES, una por plazo.
