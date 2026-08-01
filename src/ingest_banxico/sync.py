@@ -29,7 +29,7 @@ from core.db import session_scope
 from core.logging import get_logger
 from domain.orm import SerieEconomica, ValorSerieEconomica
 from ingest_banxico import series as catalogo
-from ingest_banxico.client import ClienteSIE, ErrorSIE, Observacion
+from ingest_banxico.client import ClienteSIE, ErrorSIE, ErrorTokenSIE, Observacion
 
 log = get_logger(__name__)
 
@@ -105,6 +105,13 @@ async def sincronizar(
                 continue
             try:
                 traidas = await cliente.rango(list(claves), desde=inicio, hasta=hasta)
+            except ErrorTokenSIE:
+                # Un token rechazado no es un lote que falló: es una credencial
+                # caducada, va a fallar con todos los lotes igual, y no se
+                # arregla sola. Se propaga para que la corrida quede FALLIDA y
+                # alguien la mire, en vez de acumular nueve errores idénticos y
+                # terminar «exitosa» sin haber traído nada.
+                raise
             except ErrorSIE as exc:
                 reporte.errores.append(f"{','.join(sorted(claves))}: {exc}")
                 log.warning("sie_lote_fallido", claves=sorted(claves), error=str(exc)[:200])

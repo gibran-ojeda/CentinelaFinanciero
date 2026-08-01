@@ -23,7 +23,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from core.settings import settings
-from scheduler.jobs import banderas, heartbeat, tasas
+from scheduler.jobs import banderas, banxico, heartbeat, tasas
 
 JobFunc = Callable[[], Awaitable[None]]
 
@@ -78,6 +78,21 @@ def build_registry() -> tuple[JobSpec, ...]:
             # Recorre todo el catálogo: puede tardar más que el default.
             lock_ttl_seconds=900,
             tags=("dominio",),
+        ),
+        JobSpec(
+            id=banxico.JOB_ID,
+            func=banxico.banxico_sync_series,
+            # Las siete de la mañana: Banxico publica la UDI de madrugada y la
+            # subasta de CETES la tarde del jueves, así que a esta hora ya está
+            # todo lo del día. Y va antes de que nadie mire el sitio.
+            trigger=CronTrigger(hour=7, minute=0),
+            name="Sincronización de series de Banxico",
+            enabled=settings.scheduler_banxico_enabled,
+            # Nueve series y cuatro productos: la corrida normal dura segundos.
+            # El TTL cubre el caso raro de una carga inicial de tres años con
+            # el SIE limitando por token.
+            lock_ttl_seconds=900,
+            tags=("ingesta",),
         ),
         JobSpec(
             id=tasas.JOB_ID,

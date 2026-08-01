@@ -132,13 +132,17 @@ class ContextoMercado:
 async def _ultimo_valor_serie(session: AsyncSession, clave: str) -> Decimal | None:
     """El último valor **vigente hoy** de una serie.
 
-    El filtro por fecha no es una precaución teórica: **Banxico publica la UDI
-    con diez días de anticipación.** Sin él, el «último valor» de esa serie es
-    el de dentro de una semana y media, y los límites de cobertura IPAB y
-    PROSOFIPO en pesos se calcularían con una UDI que todavía no rige. Mientras
-    la tabla se llenaba desde el seed el problema no existía, porque el CSV no
-    traía fechas futuras; en cuanto la sincronización de la fase 7 la alimenta,
-    sí.
+    El filtro por fecha no es una precaución teórica: **Banxico publica varias
+    series por adelantado.** Medido el 2026-07-31 contra el SIE, con la
+    sincronización de la fase 7 recién corrida: la UDI llegaba hasta el 10 de
+    agosto, el tipo de cambio FIX hasta el 4, la TIIE hasta el 3 y la tasa
+    objetivo hasta el 1.
+
+    Sin el filtro, el «último valor» de la UDI es el de dentro de diez días y
+    los límites de cobertura IPAB y PROSOFIPO en pesos se calculan con uno que
+    todavía no rige — en esa medición, 8.797743 en vez de 8.793839. Mientras la
+    tabla se llenaba desde el seed no pasaba, porque el CSV no trae fechas
+    futuras: el fallo entra con la ingesta, no con el código que la consume.
     """
     valor: Decimal | None = await session.scalar(
         select(ValorSerieEconomica.valor)

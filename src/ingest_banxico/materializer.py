@@ -55,7 +55,7 @@ class ReporteMaterializacion:
             "tasas_publicadas": self.publicadas,
             "tasas_ya_registradas": self.ya_estaban,
             "series_sin_producto": self.sin_producto,
-            "series_sin_dato": self.sin_dato,
+            "series_sin_subasta_nueva": self.sin_dato,
         }
 
     def render(self) -> str:
@@ -67,7 +67,10 @@ class ReporteMaterializacion:
         if self.sin_producto:
             lineas.append(f"  series sin producto     {', '.join(self.sin_producto)}")
         if self.sin_dato:
-            lineas.append(f"  series sin subasta      {', '.join(self.sin_dato)}")
+            # «Nueva» importa: en régimen normal las cuatro salen aquí todos los
+            # días de la semana en que no hubo subasta, y sin esa palabra parece
+            # que la serie está rota cuando lo que pasa es que no toca.
+            lineas.append(f"  sin subasta nueva       {', '.join(self.sin_dato)}")
         return "\n".join(lineas)
 
 
