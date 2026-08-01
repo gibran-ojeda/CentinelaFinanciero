@@ -5,6 +5,10 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
+# Los navegadores de Playwright, fuera de /root/.cache: el runtime corre como
+# uid 10001 y a /root no puede ni entrar. La leen el `playwright install` de
+# abajo (escritor) y el transporte en runtime (lector) — por eso es ENV.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app
 
@@ -14,9 +18,20 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libpq-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Chromium ANTES de copiar nada del repo: esta capa pesa ~450 MB y sólo debe
+# reconstruirse cuando cambie esta línea — no en cada deploy de código, que
+# es cuando el VPS hace build. `--with-deps` instala las librerías de sistema
+# que python:3.12-slim no trae (root, aquí lo hay). El pin coincide con el
+# extra [browser] de pyproject; `chmod a+rX` y no chown porque al runtime le
+# basta leer y ejecutar.
+RUN pip install --upgrade pip && pip install "playwright>=1.40" \
+    && playwright install --with-deps chromium \
+    && chmod -R a+rX /ms-playwright \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
-RUN pip install --upgrade pip && pip install ".[app]"
+RUN pip install ".[app]"
 
 # Las migraciones viajan en la imagen: el deploy corre `alembic upgrade head`
 # dentro del contenedor, contra el mismo código que va a servir.

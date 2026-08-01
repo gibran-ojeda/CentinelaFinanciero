@@ -84,9 +84,12 @@ mcp = [
 # `llm` va dentro porque el job semanal de tasas corre en el scheduler y
 # necesita extraer el texto de cada página; `ingest`, porque los jobs de la
 # CNBV corren en el mismo servicio y leen XLSX y PDF; `research`, porque el
-# job del nivel 3 también corre ahí y sin `ddgs` degradaría cada corrida.
+# job del nivel 3 también corre ahí y sin `ddgs` degradaría cada corrida;
+# `browser`, porque el lunes ese mismo job maneja el transporte de navegador
+# para las once fuentes que se pintan con JavaScript (Chromium viaja en una
+# capa propia del Dockerfile, con el mismo pin).
 app = [
-    "centinela-financiero[api,scheduler,llm,ingest,research]",
+    "centinela-financiero[api,scheduler,llm,ingest,research,browser]",
 ]
 dev = [
     "pytest>=8.0",
