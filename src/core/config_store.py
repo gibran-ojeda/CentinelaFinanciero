@@ -204,6 +204,12 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         "scheduler",
         "Kill-switch caliente de la sincronización diaria con el SIE de Banxico",
     ),
+    ConfigKeySpec(
+        "cnbv_ingesta_enabled",
+        "bool",
+        "scheduler",
+        "Kill-switch caliente de la ingesta de boletines de la CNBV",
+    ),
     ConfigKeySpec("config_cache_ttl_seconds", "int", "scheduler", "TTL del snapshot de config"),
 )
 

@@ -85,6 +85,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="fuerza el inicio del rango para todas las series",
     )
 
+    cnbv = sub.add_parser("cnbv", help="ingesta de boletines de la CNBV")
+    cnbv_sub = cnbv.add_subparsers(dest="subcomando", required=True)
+    cnbv_cargar = cnbv_sub.add_parser(
+        "cargar",
+        help="descarga el último boletín publicado y recomputa las banderas",
+    )
+    cnbv_cargar.add_argument(
+        "--forzar",
+        action="store_true",
+        help="vuelve a cargar el último periodo aunque ya esté (p. ej. tras corregir un mapeo)",
+    )
+
     revs = sub.add_parser("revisiones", help="cola de revisión humana de tasas")
     revs_sub = revs.add_subparsers(dest="subcomando", required=True)
 
@@ -169,6 +181,15 @@ async def _run(args: argparse.Namespace) -> int:
             # Un lote que el SIE no atendió es un fallo operativo: la serie se
             # queda vieja y alguien tiene que enterarse hoy, no en la portada.
             return 1 if reporte_banxico.hubo_errores else 0
+        case "cnbv":
+            from ingest_cnbv import loader
+
+            reporte_cnbv = await loader.cargar(forzar=args.forzar)
+            print("Ingesta de la CNBV:")
+            print(reporte_cnbv.render())
+            # Un cambio de formato es un fallo operativo: alguien tiene que
+            # mirar el boletín y ajustar la declaración de `fuentes.py`.
+            return 1 if reporte_cnbv.hubo_errores else 0
         case "revisiones":
             from cli import revisiones as revisiones_module
 

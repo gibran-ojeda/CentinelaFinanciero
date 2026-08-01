@@ -23,6 +23,13 @@ _TEST_ENV: dict[str, str] = {
     "LOG_LEVEL": "WARNING",
     "API_READ_KEY": "test-read-key",
     "API_ADMIN_KEY": "test-admin-key",
+    # Credenciales de servicios externos **en blanco a propósito**. Sin esto,
+    # pydantic-settings las lee del `.env` del desarrollador y un test que
+    # olvide un doble llama a la API de verdad: gasta dinero, tarda, y depende
+    # de que haya red. Pasó — un test del job de research se comió una decena
+    # de llamadas a DeepSeek antes de que nadie lo notara.
+    "DEEPSEEK_API_KEY": "",
+    "BANXICO_TOKEN": "",
 }
 
 for _key, _value in _TEST_ENV.items():

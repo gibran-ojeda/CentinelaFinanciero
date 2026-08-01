@@ -23,7 +23,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from core.settings import settings
-from scheduler.jobs import banderas, banxico, heartbeat, tasas
+from scheduler.jobs import banderas, banxico, cnbv, heartbeat, tasas
 
 JobFunc = Callable[[], Awaitable[None]]
 
@@ -93,6 +93,30 @@ def build_registry() -> tuple[JobSpec, ...]:
             # el SIE limitando por token.
             lock_ttl_seconds=900,
             tags=("ingesta",),
+        ),
+        JobSpec(
+            id=cnbv.JOB_ID,
+            func=cnbv.cnbv_boletines,
+            # Diario y no el día 5 del mes: la CNBV publica con uno a tres
+            # meses de rezago y sin fecha fija, y preguntar es barato. Ver el
+            # docstring de `jobs/cnbv.py` — la ventana de reintento es esto.
+            trigger=CronTrigger(hour=5, minute=30),
+            name="Ingesta de boletines de la CNBV",
+            enabled=settings.scheduler_cnbv_enabled,
+            # Descargar dos megas de un portal lento, parsear treinta y tres
+            # hojas y recomputar las banderas de todo el catálogo.
+            lock_ttl_seconds=1800,
+            tags=("ingesta",),
+        ),
+        JobSpec(
+            id=cnbv.JOB_ID_FRESCURA,
+            func=cnbv.frescura_check,
+            # Después de que hayan corrido las ingestas del día, para que mida
+            # el estado de hoy y no el de ayer.
+            trigger=CronTrigger(hour=8, minute=0),
+            name="Vigilancia de frescura por fuente",
+            enabled=settings.scheduler_frescura_enabled,
+            tags=("infra",),
         ),
         JobSpec(
             id=tasas.JOB_ID,

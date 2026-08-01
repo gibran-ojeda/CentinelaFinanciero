@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     scheduler_banderas_enabled: bool = True
     scheduler_tasas_enabled: bool = True
     scheduler_banxico_enabled: bool = True
+    scheduler_cnbv_enabled: bool = True
+    scheduler_frescura_enabled: bool = True
     scheduler_lock_ttl_seconds: int = 300
     scheduler_timezone: str = "America/Mexico_City"
 
@@ -123,6 +125,8 @@ class Settings(BaseSettings):
     #: Kill-switch caliente de la ingesta de Banxico. Sin `BANXICO_TOKEN` el
     #: job se omite igualmente, así que esto es para apagarla teniéndolo.
     banxico_sync_enabled: bool = True
+    #: Kill-switch caliente de la ingesta de la CNBV.
+    cnbv_ingesta_enabled: bool = True
     config_cache_ttl_seconds: int = 60
 
     # ─── Fuentes de datos (fases 7 y 9) ───────────────────────
@@ -178,6 +182,7 @@ class Settings(BaseSettings):
     #: Menos texto que esto es una página que no se pudo leer, no una sin tasas.
     fetch_min_caracteres: int = 200
     fetch_respetar_robots: bool = True
+
 
     @field_validator("log_format", mode="before")
     @classmethod
