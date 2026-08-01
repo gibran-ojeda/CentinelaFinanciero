@@ -324,6 +324,116 @@ async def listar_pendientes() -> ListaRevision:
     return lista
 
 
+# ─── Retiro de filas de agregador sustituidas ─────────────────
+
+
+@dataclass(slots=True)
+class ReporteRetiro:
+    """Qué filas del CSV ya cumplieron su función de contraste."""
+
+    #: `(slug, fuente que la sustituyó, fecha de esa lectura)`.
+    retiradas: list[tuple[str, str, str]] = field(default_factory=list)
+    conservadas: int = 0
+    desconocidas: list[str] = field(default_factory=list)
+    dry_run: bool = False
+
+    def render(self) -> str:
+        if not (self.retiradas or self.conservadas or self.desconocidas):
+            return "  (ninguna fila de agregador en el CSV)"
+        lineas = []
+        for slug, fuente, fecha in self.retiradas:
+            lineas.append(f"  retirada    {slug:<26} sustituida por {fuente} del {fecha}")
+        lineas.append(f"  conservadas {self.conservadas:>4}  (aún sin lectura oficial)")
+        if self.desconocidas:
+            lineas.append(
+                f"  ⚠ slugs del CSV que el catálogo no conoce: {', '.join(self.desconocidas)}"
+            )
+        if self.dry_run:
+            lineas.append("  (simulación: el archivo no se tocó)")
+        return "\n".join(lineas)
+
+
+async def retirar_sustituidas(path: Path, *, dry_run: bool = False) -> ReporteRetiro:
+    """Comenta las filas AGREGADOR cuyo producto ya tiene lectura oficial.
+
+    Es la promesa del encabezado del propio CSV — «cada una se retira en
+    cuanto su lectura oficial la sustituye» — hecha comando. Retirar es
+    **comentar**, no borrar: los dos lectores (`import_csv` y el seed) ya
+    ignoran las líneas con `#`, y la línea original queda a la vista con la
+    razón del retiro. La base no se toca: las observaciones importadas son
+    historia append-only y la ventana de vigencia ya prefiere la oficial.
+    """
+    reporte = ReporteRetiro(dry_run=dry_run)
+    crudo = path.read_text(encoding="utf-8")
+    termina_en_salto = crudo.endswith("\n")
+    lineas = crudo.splitlines()
+
+    encabezado: list[str] | None = None
+    candidatas: dict[int, str] = {}  # índice de línea → producto_slug
+    for indice, linea in enumerate(lineas):
+        celdas = next(csv.reader([linea]), [])
+        if not celdas or not celdas[0].strip() or celdas[0].strip().startswith("#"):
+            continue
+        if encabezado is None:
+            encabezado = [c.strip() for c in celdas]
+            continue
+        fila = dict(zip(encabezado, (c.strip() for c in celdas), strict=False))
+        if fila.get("fuente") == FuenteTasa.AGREGADOR.value:
+            candidatas[indice] = fila.get("producto_slug", "")
+
+    if not candidatas:
+        return reporte
+
+    async with session_scope() as session:
+        productos = {
+            slug: pid
+            for slug, pid in (
+                await session.execute(
+                    select(Producto.slug, Producto.id).where(
+                        Producto.slug.in_(set(candidatas.values()))
+                    )
+                )
+            )
+            .tuples()
+            .all()
+        }
+        vigentes = await tasas_vigentes_por_producto(
+            session, list(productos.values()), incluir_pendientes=True
+        )
+
+    hoy = date.today().isoformat()
+    for indice, slug in candidatas.items():
+        producto_id = productos.get(slug)
+        if producto_id is None:
+            reporte.desconocidas.append(slug)
+            continue
+        ganadora = vigentes.get(producto_id)
+        # AGREGADOR jamás puede ser VIGENTE, así que la segunda condición está
+        # implícita en la primera; se deja explícita porque es el criterio.
+        sustituida = (
+            ganadora is not None
+            and ganadora.estado is EstadoTasa.VIGENTE
+            and ganadora.fuente is not FuenteTasa.AGREGADOR
+        )
+        if not sustituida:
+            reporte.conservadas += 1
+            continue
+        lineas[indice] = (
+            f"# retirada {hoy} (sustituida por {ganadora.fuente.value} "
+            f"{ganadora.fecha_dato.isoformat()}): {lineas[indice]}"
+        )
+        reporte.retiradas.append((slug, ganadora.fuente.value, ganadora.fecha_dato.isoformat()))
+
+    if reporte.retiradas and not dry_run:
+        path.write_text(
+            "\n".join(lineas) + ("\n" if termina_en_salto else ""),
+            encoding="utf-8",
+            newline="\n",
+        )
+
+    return reporte
+
+
 # ─── Lectura automática ───────────────────────────────────────
 
 
@@ -392,7 +502,9 @@ __all__ = [
     "ImportError_",
     "ListaRevision",
     "ProductoPendiente",
+    "ReporteRetiro",
     "correr_fetch",
     "import_csv",
     "listar_pendientes",
+    "retirar_sustituidas",
 ]

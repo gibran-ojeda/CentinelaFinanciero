@@ -50,6 +50,17 @@ def build_parser() -> argparse.ArgumentParser:
         "pendientes",
         help="lista de revisión: qué falta verificar para que salga al sitio público",
     )
+    retirar = tasas_sub.add_parser(
+        "retirar",
+        help="comenta en el CSV semilla las filas de agregador ya sustituidas por lectura oficial",
+    )
+    retirar.add_argument(
+        "--csv",
+        type=Path,
+        default=Path("seeds/tasas.csv"),
+        help="archivo a podar (default: seeds/tasas.csv)",
+    )
+    retirar.add_argument("--dry-run", action="store_true", help="reporta sin escribir")
     fetch = tasas_sub.add_parser(
         "fetch",
         help="lee las páginas de las instituciones y encola lo que cambió",
@@ -166,6 +177,18 @@ async def _run(args: argparse.Namespace) -> int:
                 lista = await tasas_module.listar_pendientes()
                 print("Pendientes de verificar contra la fuente oficial:")
                 print(lista.render())
+                return 0
+            if args.subcomando == "retirar":
+                reporte_retiro = await tasas_module.retirar_sustituidas(
+                    args.csv, dry_run=args.dry_run
+                )
+                titulo = (
+                    "Simulación de retiro de agregador"
+                    if args.dry_run
+                    else "Retiro de filas de agregador sustituidas"
+                )
+                print(f"{titulo}:")
+                print(reporte_retiro.render())
                 return 0
             if args.subcomando == "fetch":
                 reporte = await tasas_module.correr_fetch(

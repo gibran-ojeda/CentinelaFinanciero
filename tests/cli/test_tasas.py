@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import func, select
 
 from cli.seed import DEFAULT_SEEDS_DIR, run_seed
-from cli.tasas import ImportError_, import_csv, listar_pendientes
+from cli.tasas import ImportError_, import_csv, listar_pendientes, retirar_sustituidas
 from core.db import session_scope
 from domain.enums import EstadoTasa, FuenteTasa
 from domain.orm import Producto, Tasa
@@ -380,3 +380,97 @@ async def test_the_seed_holds_no_aggregator_rate_as_current() -> None:
 
     assert len(agregadas) == 30
     assert all(t.estado is EstadoTasa.PENDIENTE_REVISION for t in agregadas)
+
+
+# ─── Retiro de filas de agregador sustituidas ─────────────────
+
+
+async def _con_hey_sustituida(tmp_path: Path) -> Path:
+    """Seed + import + lectura oficial VIGENTE de hey-vista; copia del CSV."""
+    await run_seed()
+    await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
+    async with session_scope() as session:
+        producto = await session.scalar(select(Producto).where(Producto.slug == "hey-vista"))
+        assert producto is not None
+        session.add(
+            Tasa(
+                producto_id=producto.id,
+                tasa_nominal=Decimal("7.10"),
+                fecha_dato=date.today(),
+                fuente=FuenteTasa.FETCH_DIRIGIDO,
+                estado=EstadoTasa.VIGENTE,
+            )
+        )
+
+    copia = tmp_path / "tasas.csv"
+    copia.write_text(
+        (DEFAULT_SEEDS_DIR / "tasas.csv").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    return copia
+
+
+async def test_a_superseded_aggregator_row_gets_commented_out(tmp_path: Path) -> None:
+    """La promesa del encabezado del CSV, hecha comando.
+
+    Retirar es comentar: la línea original queda a la vista con la razón, y
+    todo lo demás se conserva byte a byte.
+    """
+    copia = await _con_hey_sustituida(tmp_path)
+
+    reporte = await retirar_sustituidas(copia)
+
+    assert [r[0] for r in reporte.retiradas] == ["hey-vista"]
+    assert reporte.conservadas == 29
+
+    original = (DEFAULT_SEEDS_DIR / "tasas.csv").read_text(encoding="utf-8").splitlines()
+    nuevo = copia.read_text(encoding="utf-8").splitlines()
+    distintas = [i for i, (a, b) in enumerate(zip(original, nuevo, strict=True)) if a != b]
+    assert len(distintas) == 1
+    assert nuevo[distintas[0]].startswith("# retirada ")
+    assert "sustituida por FETCH_DIRIGIDO" in nuevo[distintas[0]]
+    assert nuevo[distintas[0]].endswith(original[distintas[0]])
+
+    # Ambos lectores la ignoran: reimportar ve una fila menos.
+    segundo = await import_csv(copia)
+    assert segundo.creadas == 0
+    assert segundo.duplicadas == 34
+
+
+async def test_retiring_is_idempotent(tmp_path: Path) -> None:
+    """Una fila ya comentada deja de ser candidata: la segunda pasada no toca."""
+    copia = await _con_hey_sustituida(tmp_path)
+    await retirar_sustituidas(copia)
+    tras_primera = copia.read_text(encoding="utf-8")
+
+    reporte = await retirar_sustituidas(copia)
+
+    assert reporte.retiradas == []
+    assert copia.read_text(encoding="utf-8") == tras_primera
+
+
+async def test_dry_run_reports_without_writing(tmp_path: Path) -> None:
+    copia = await _con_hey_sustituida(tmp_path)
+    antes = copia.read_text(encoding="utf-8")
+
+    reporte = await retirar_sustituidas(copia, dry_run=True)
+
+    assert [r[0] for r in reporte.retiradas] == ["hey-vista"]
+    assert copia.read_text(encoding="utf-8") == antes
+    assert "simulación" in reporte.render()
+
+
+async def test_nothing_is_retired_without_an_official_reading(tmp_path: Path) -> None:
+    """El contraste se queda mientras siga siendo lo único que hay."""
+    await run_seed()
+    await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
+    copia = tmp_path / "tasas.csv"
+    copia.write_text(
+        (DEFAULT_SEEDS_DIR / "tasas.csv").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    antes = copia.read_text(encoding="utf-8")
+
+    reporte = await retirar_sustituidas(copia)
+
+    assert reporte.retiradas == []
+    assert reporte.conservadas == 30
+    assert copia.read_text(encoding="utf-8") == antes
