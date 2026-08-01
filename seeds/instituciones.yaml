@@ -5,9 +5,26 @@
 # mercado (§3 del foundation). De ella se deriva la cobertura de seguro, así
 # que equivocarla equivale a mentirle al usuario sobre cuánto tiene protegido.
 #
-# `nombre_cnbv` queda vacío a propósito: es la clave de mapeo contra los
-# boletines de la CNBV y se rellena en la fase 8 leyendo el fichero real. No se
-# inventa.
+# `nombre_cnbv` es la clave de mapeo contra los boletines de la CNBV. Se
+# rellenó en la fase 8 **leyendo los ficheros reales** —`BE BM 202605.xlsx` y
+# `BE_SOFIPOS_202603.xlsx`, descargados en julio de 2026— y no se inventa.
+#
+# Cuatro se quedan sin mapear porque no aparecen con ningún nombre reconocible
+# y adivinar cuál es cuál sería peor que no cargarlas: DiDi, Supertasas y Te
+# Creemos operan a través de una SOFIPO cuyo nombre regulatorio hay que
+# confirmar, y Mercado Pago es un IFPE, figura que la CNBV no publica en el
+# boletín de banca múltiple. El normalizador las reporta en cada corrida.
+#
+# Ojo con dos casos que el fichero real desmintió:
+#
+# - **Nu México aparece en el boletín de SOFIPOs**, no en el de banca múltiple,
+#   aunque aquí esté como BANCO_DIGITAL. La ingesta lo lee de donde la CNBV lo
+#   publica; la categoría de este catálogo decide la cobertura de seguro y ésa
+#   se revisa aparte.
+# - **La CNBV escribe el mismo banco de dos formas** en un mismo libro: la hoja
+#   de cartera dice «Ualá» y «Openbank», la de capitalización «Banco Ualá» y
+#   «Openbank México». Basta un `nombre_cnbv`: el normalizador compara por una
+#   clave que quita «banco» y el sufijo de país.
 #
 # Clave natural para el upsert idempotente: `nombre`.
 
@@ -34,6 +51,7 @@ instituciones:
 
   - nombre: Finsus
     slug: finsus
+    nombre_cnbv: Financiera Sustentable
     categoria: SOFIPO
     tipo_seguro: PROSOFIPO
     url_sitio: https://www.finsus.mx/
@@ -41,6 +59,7 @@ instituciones:
 
   - nombre: Klar
     slug: klar
+    nombre_cnbv: Klar
     categoria: SOFIPO
     tipo_seguro: PROSOFIPO
     url_sitio: https://www.klar.mx/
@@ -51,6 +70,7 @@ instituciones:
 
   - nombre: kubo.financiero
     slug: kubo-financiero
+    nombre_cnbv: KU-BO
     categoria: SOFIPO
     tipo_seguro: PROSOFIPO
     url_sitio: https://www.kubofinanciero.com/
@@ -58,6 +78,7 @@ instituciones:
 
   - nombre: Stori
     slug: stori
+    nombre_cnbv: Stori
     categoria: SOFIPO
     tipo_seguro: PROSOFIPO
     url_sitio: https://www.storicard.com/
@@ -72,6 +93,7 @@ instituciones:
 
   - nombre: Libertad Servicios Financieros
     slug: libertad-servicios-financieros
+    nombre_cnbv: Libertad
     categoria: SOFIPO
     tipo_seguro: PROSOFIPO
     url_sitio: https://www.libertad.mx/
@@ -86,6 +108,7 @@ instituciones:
 
   - nombre: CAME
     slug: came
+    nombre_cnbv: CAME
     categoria: SOFIPO
     tipo_seguro: PROSOFIPO
     url_sitio: https://www.came.org.mx/
@@ -93,6 +116,7 @@ instituciones:
 
   - nombre: Crediclub
     slug: crediclub
+    nombre_cnbv: Crediclub
     categoria: SOFIPO
     tipo_seguro: PROSOFIPO
     url_sitio: https://www.crediclub.com/
@@ -101,6 +125,7 @@ instituciones:
   # ─── Neobancos con licencia bancaria (IPAB, 400,000 UDIs) ───
   - nombre: Nu México
     slug: nu-mexico
+    nombre_cnbv: Nu México
     categoria: BANCO_DIGITAL
     tipo_seguro: IPAB
     url_sitio: https://nu.com.mx/
@@ -114,6 +139,7 @@ instituciones:
 
   - nombre: Revolut
     slug: revolut
+    nombre_cnbv: Revolut Bank
     categoria: BANCO_DIGITAL
     tipo_seguro: IPAB
     url_sitio: https://www.revolut.com/es-MX/
@@ -121,6 +147,7 @@ instituciones:
 
   - nombre: Ualá
     slug: uala
+    nombre_cnbv: Ualá
     categoria: BANCO_DIGITAL
     tipo_seguro: IPAB
     url_sitio: https://www.uala.mx/
@@ -128,6 +155,7 @@ instituciones:
 
   - nombre: Openbank
     slug: openbank
+    nombre_cnbv: Openbank
     categoria: BANCO_DIGITAL
     tipo_seguro: IPAB
     url_sitio: https://www.openbank.mx/
@@ -135,6 +163,7 @@ instituciones:
 
   - nombre: Hey Banco
     slug: hey-banco
+    nombre_cnbv: Hey Banco
     categoria: BANCO_DIGITAL
     tipo_seguro: IPAB
     url_sitio: https://www.hey.inc/

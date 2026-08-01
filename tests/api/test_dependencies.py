@@ -146,6 +146,41 @@ class TestContexto:
         assert contexto.valor_udi == settings.udi_valor_fallback
         assert contexto.inflacion_anual == settings.inflacion_anual_fallback
 
+    async def test_a_udi_published_ahead_of_time_is_not_used_yet(self) -> None:
+        """Banxico publica la UDI con diez días de adelanto.
+
+        Tomar el máximo de la serie haría que los límites de cobertura en pesos
+        se calcularan con un valor que aún no rige. Con el seed no se notaba —el
+        CSV no trae fechas futuras—; con la ingesta de la fase 7 sí.
+        """
+        from datetime import date, timedelta
+
+        from sqlalchemy import select
+
+        from api.dependencies import CLAVE_SERIE_UDI, get_contexto
+        from cli.seed import run_seed
+        from core.db import get_sessionmaker
+        from domain.orm import SerieEconomica, ValorSerieEconomica
+
+        await run_seed()
+        async with get_sessionmaker()() as session:
+            serie_id = await session.scalar(
+                select(SerieEconomica.id).where(SerieEconomica.clave_banxico == CLAVE_SERIE_UDI)
+            )
+            session.add(
+                ValorSerieEconomica(
+                    serie_id=serie_id,
+                    fecha=date.today() + timedelta(days=10),
+                    valor=Decimal("99.999999"),
+                )
+            )
+            await session.commit()
+
+        async with get_sessionmaker()() as session:
+            contexto = await get_contexto(session)
+
+        assert contexto.valor_udi != Decimal("99.999999")
+
     async def test_missing_fiscal_parameters_fail_loudly(self) -> None:
         """Calcular sin ISR daría números optimistas: mejor 503 visible."""
         from fastapi import HTTPException

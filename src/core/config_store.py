@@ -198,6 +198,24 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
             "corren desde local con `cli tasas fetch --solo-navegador`"
         ),
     ),
+    ConfigKeySpec(
+        "banxico_sync_enabled",
+        "bool",
+        "scheduler",
+        "Kill-switch caliente de la sincronización diaria con el SIE de Banxico",
+    ),
+    ConfigKeySpec(
+        "cnbv_ingesta_enabled",
+        "bool",
+        "scheduler",
+        "Kill-switch caliente de la ingesta de boletines de la CNBV",
+    ),
+    ConfigKeySpec(
+        "tasas_research_enabled",
+        "bool",
+        "scheduler",
+        "Kill-switch caliente de la búsqueda abierta (nivel 3)",
+    ),
     ConfigKeySpec("config_cache_ttl_seconds", "int", "scheduler", "TTL del snapshot de config"),
 )
 

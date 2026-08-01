@@ -7,7 +7,7 @@ transporte ya está probado en `test_provider.py` contra la API real.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 import pytest
 
@@ -53,8 +53,12 @@ class ProveedorDoble(ProveedorLLM):
         temperatura: float = 0.0,
         max_tokens: int = 4000,
         formato: Literal["texto", "json"] = "json",
+        # El tool-loop del researcher los usa; aquí sólo hay que aceptarlos.
+        mensajes: list[dict[str, Any]] | None = None,
+        herramientas: list[dict[str, Any]] | None = None,
     ) -> RespuestaLLM:
         self.llamadas += 1
+        self.ultimas_herramientas = herramientas
         siguiente = self._guion.pop(0) if self._guion else _respuesta()
         if isinstance(siguiente, Exception):
             raise siguiente

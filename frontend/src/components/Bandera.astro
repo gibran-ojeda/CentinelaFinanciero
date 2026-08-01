@@ -5,7 +5,13 @@
  * Lleva el tipo escrito, no sólo el color: quien no distingue el amarillo del
  * rojo tiene que poder leer qué pasa. El motivo completo va en `title` y, en
  * el detalle de la institución, en la tarjeta misma.
+ *
+ * **El periodo del dato va siempre.** §15 obliga a decir de cuándo es la cifra
+ * que levantó la bandera, y la CNBV publica con uno a tres meses de rezago: una
+ * morosidad de marzo enseñada en agosto sin fecha invita a leerla como de hoy.
+ * En la tabla cabe en el `title`; en la ficha se pinta aparte, debajo.
  */
+import { periodo } from '~/lib/formato';
 import type { Bandera } from '~/lib/tipos';
 
 interface Props {
@@ -13,6 +19,10 @@ interface Props {
   compacta?: boolean;
 }
 const { bandera, compacta = false } = Astro.props;
+
+const detalle = bandera.periodo_dato
+  ? `${bandera.motivo} (cifras a ${periodo(bandera.periodo_dato)})`
+  : bandera.motivo;
 
 const ETIQUETAS: Record<string, string> = {
   IMOR: 'Morosidad',
@@ -32,11 +42,19 @@ const roja = bandera.severidad === 'ROJA';
 
 <span
   class:list={['pastilla', roja ? 'roja' : 'amarilla', compacta && 'compacta']}
-  title={bandera.motivo}
+  title={detalle}
 >
   <i aria-hidden="true"></i>
   <span class="solo-lectores">Bandera {roja ? 'roja' : 'amarilla'}:</span>
   {etiqueta}
+  {
+    /* El `title` no llega a un lector de pantalla en una pastilla sin foco,
+       así que el periodo se repite en texto oculto: la obligación de §15 no
+       puede depender de poder pasar el ratón. */
+    bandera.periodo_dato && (
+      <span class="solo-lectores">, cifras a {periodo(bandera.periodo_dato)}</span>
+    )
+  }
 </span>
 
 <style>

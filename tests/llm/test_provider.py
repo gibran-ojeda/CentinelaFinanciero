@@ -134,6 +134,120 @@ async def test_a_missing_api_key_fails_before_the_request() -> None:
         await p.completar(sistema="s", usuario="u")
 
 
+# ─── Tool use ─────────────────────────────────────────────────
+
+
+def _con_tools(*llamadas: dict[str, object]) -> dict:
+    return _respuesta(contenido="", tool_calls=list(llamadas))
+
+
+def _tool(id_: str, nombre: str, argumentos: str) -> dict[str, object]:
+    return {"id": id_, "type": "function", "function": {"name": nombre, "arguments": argumentos}}
+
+
+@respx.mock
+async def test_tool_calls_are_normalized() -> None:
+    respx.post(RUTA).mock(
+        return_value=httpx.Response(
+            200,
+            json=_con_tools(_tool("call_1", "web_search", '{"query": "tasas Finsus"}')),
+        )
+    )
+
+    async with _proveedor() as p:
+        r = await p.completar(
+            sistema="s",
+            usuario="u",
+            herramientas=[{"type": "function", "function": {"name": "web_search"}}],
+        )
+
+    assert len(r.herramientas) == 1
+    llamada = r.herramientas[0]
+    assert (llamada.id, llamada.nombre) == ("call_1", "web_search")
+    assert llamada.argumentos == {"query": "tasas Finsus"}
+
+
+@respx.mock
+async def test_tools_are_sent_and_json_format_is_not() -> None:
+    """`response_format` y `tools` juntos no se llevan.
+
+    Con el formato JSON exigido, el modelo no puede contestar con una llamada a
+    herramienta — que no es un objeto del esquema pedido.
+    """
+    ruta = respx.post(RUTA).mock(return_value=httpx.Response(200, json=_con_tools()))
+
+    async with _proveedor() as p:
+        await p.completar(
+            sistema="s",
+            usuario="u",
+            formato="json",
+            herramientas=[{"type": "function", "function": {"name": "web_search"}}],
+        )
+
+    enviado = ruta.calls.last.request.read().decode()
+    assert '"tools"' in enviado
+    assert "json_object" not in enviado
+
+
+@respx.mock
+async def test_without_tools_the_json_format_comes_back() -> None:
+    """Es la última ronda: se retiran las tools y se exige el JSON final."""
+    ruta = respx.post(RUTA).mock(return_value=httpx.Response(200, json=_respuesta()))
+
+    async with _proveedor() as p:
+        await p.completar(sistema="s", usuario="u", formato="json")
+
+    assert "json_object" in ruta.calls.last.request.read().decode()
+
+
+@respx.mock
+async def test_a_full_conversation_replaces_the_two_messages() -> None:
+    ruta = respx.post(RUTA).mock(return_value=httpx.Response(200, json=_respuesta()))
+    conversacion = [
+        {"role": "system", "content": "reglas"},
+        {"role": "user", "content": "busca"},
+        {"role": "assistant", "content": None, "tool_calls": []},
+        {"role": "tool", "tool_call_id": "call_1", "content": "resultados"},
+    ]
+
+    async with _proveedor() as p:
+        await p.completar(sistema="ignorado", usuario="ignorado", mensajes=conversacion)
+
+    enviado = ruta.calls.last.request.read().decode()
+    assert "ignorado" not in enviado
+    assert "tool_call_id" in enviado
+
+
+@respx.mock
+async def test_broken_tool_arguments_do_not_raise() -> None:
+    """Un modelo económico manda JSON roto de vez en cuando.
+
+    Abortar la corrida sale más caro que devolverle el error como resultado de
+    la herramienta y dejar que lo intente otra vez.
+    """
+    respx.post(RUTA).mock(
+        return_value=httpx.Response(
+            200, json=_con_tools(_tool("call_1", "web_search", '{"query": rota'))
+        )
+    )
+
+    async with _proveedor() as p:
+        r = await p.completar(sistema="s", usuario="u")
+
+    assert r.herramientas[0].argumentos == {}
+    assert "rota" in r.herramientas[0].argumentos_crudos
+
+
+@respx.mock
+async def test_a_response_without_tools_has_an_empty_tuple() -> None:
+    respx.post(RUTA).mock(return_value=httpx.Response(200, json=_respuesta()))
+
+    async with _proveedor() as p:
+        r = await p.completar(sistema="s", usuario="u")
+
+    assert r.herramientas == ()
+
+
 def test_an_unknown_model_is_not_free() -> None:
     """Precio cero haría invisible el gasto justo donde el techo es la red."""
     assert "modelo-inventado" not in PRECIOS

@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     scheduler_heartbeat_interval_seconds: int = 60
     scheduler_banderas_enabled: bool = True
     scheduler_tasas_enabled: bool = True
+    scheduler_banxico_enabled: bool = True
+    scheduler_cnbv_enabled: bool = True
+    scheduler_frescura_enabled: bool = True
+    #: Nivel 3. Arranca **apagado**: la búsqueda abierta es el camino más caro
+    #: y menos preciso, y sólo debe encenderse cuando el nivel 2 lleva semanas
+    #: corriendo y se sabe qué instituciones deja fuera de verdad.
+    scheduler_research_enabled: bool = False
     scheduler_lock_ttl_seconds: int = 300
     scheduler_timezone: str = "America/Mexico_City"
 
@@ -119,11 +126,34 @@ class Settings(BaseSettings):
     #: JavaScript se corren desde local con `cli tasas fetch --solo-navegador`.
     #: Ver la sección «Navegador en el VPS» de docs/despliegue.md.
     tasas_fetch_solo_sin_js: bool = True
+    #: Kill-switch caliente de la ingesta de Banxico. Sin `BANXICO_TOKEN` el
+    #: job se omite igualmente, así que esto es para apagarla teniéndolo.
+    banxico_sync_enabled: bool = True
+    #: Kill-switch caliente de la ingesta de la CNBV.
+    cnbv_ingesta_enabled: bool = True
+    #: Kill-switch caliente de la búsqueda abierta (nivel 3).
+    tasas_research_enabled: bool = True
     config_cache_ttl_seconds: int = 60
 
     # ─── Fuentes de datos (fases 7 y 9) ───────────────────────
     banxico_token: SecretStr = SecretStr("")
     deepseek_api_key: SecretStr = SecretStr("")
+
+    # ─── Banxico / SIE (fase 7) ───────────────────────────────
+    banxico_timeout_seconds: float = 30.0
+    #: Cuántas veces se reintenta un lote **además** del intento inicial, y sólo
+    #: ante lo que el tiempo cura. Un token inválido no entra aquí: llega como
+    #: 400 y se propaga en el primer intento.
+    banxico_max_reintentos: int = 2
+
+    # ─── CNBV / Portafolio de Información (fase 8) ────────────
+    #: Los boletines pesan megabytes y el portal no va rápido. Más generoso
+    #: que el resto de timeouts a propósito.
+    cnbv_timeout_seconds: float = 180.0
+    #: Dónde se guardan los archivos crudos descargados. Sin el original, un
+    #: indicador de la CNBV no es auditable: es un número que alguien dice que
+    #: leyó. En el VPS va a un volumen, no al sistema de archivos del contenedor.
+    cnbv_directorio_descargas: str = "var/cnbv"
 
     # ─── LLM (extracción de tasas, fase 9) ────────────────────
     llm_base_url: str = "https://api.deepseek.com/v1"
@@ -158,6 +188,20 @@ class Settings(BaseSettings):
     #: Menos texto que esto es una página que no se pudo leer, no una sin tasas.
     fetch_min_caracteres: int = 200
     fetch_respetar_robots: bool = True
+
+    # ─── Búsqueda abierta (fase 9, nivel 3) ───────────────────
+    #: Cadena de motores, en orden. Se recorren hasta que uno devuelva algo.
+    #: `ddgs` es un metabuscador: estos son sus backends, no servicios propios.
+    #: **Aquí es donde se cambia de proveedor sin tocar código** — si la
+    #: calibración pide el SearXNG del VPS, se declara en esta variable.
+    research_motores: str = "duckduckgo,google,brave"
+    research_max_reintentos: int = 1
+    #: Cuántas vueltas de tool-use antes de retirar las herramientas y exigir
+    #: el JSON final. Sin tope, un modelo que no converge gasta el presupuesto
+    #: del día buscando.
+    research_max_rondas: int = 4
+    #: Resultados por búsqueda. Más contexto es más tokens por vuelta.
+    research_resultados_por_busqueda: int = 6
 
     @field_validator("log_format", mode="before")
     @classmethod

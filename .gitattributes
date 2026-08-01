@@ -9,3 +9,8 @@
 *.woff binary
 *.woff2 binary
 *.xlsx binary
+*.pdf binary
+# El intermedio de GlobalSign que la CNBV no manda en su cadena TLS. Es un
+# certificado: se guarda tal cual llegó, sin que nadie le toque los saltos de
+# línea. Ver src/ingest_cnbv/downloader.py.
+*.pem binary

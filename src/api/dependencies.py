@@ -130,10 +130,27 @@ class ContextoMercado:
 
 
 async def _ultimo_valor_serie(session: AsyncSession, clave: str) -> Decimal | None:
+    """El último valor **vigente hoy** de una serie.
+
+    El filtro por fecha no es una precaución teórica: **Banxico publica varias
+    series por adelantado.** Medido el 2026-07-31 contra el SIE, con la
+    sincronización de la fase 7 recién corrida: la UDI llegaba hasta el 10 de
+    agosto, el tipo de cambio FIX hasta el 4, la TIIE hasta el 3 y la tasa
+    objetivo hasta el 1.
+
+    Sin el filtro, el «último valor» de la UDI es el de dentro de diez días y
+    los límites de cobertura IPAB y PROSOFIPO en pesos se calculan con uno que
+    todavía no rige — en esa medición, 8.797743 en vez de 8.793839. Mientras la
+    tabla se llenaba desde el seed no pasaba, porque el CSV no trae fechas
+    futuras: el fallo entra con la ingesta, no con el código que la consume.
+    """
     valor: Decimal | None = await session.scalar(
         select(ValorSerieEconomica.valor)
         .join(SerieEconomica)
-        .where(SerieEconomica.clave_banxico == clave)
+        .where(
+            SerieEconomica.clave_banxico == clave,
+            ValorSerieEconomica.fecha <= date.today(),
+        )
         .order_by(desc(ValorSerieEconomica.fecha))
         .limit(1)
     )
@@ -151,7 +168,14 @@ async def _inflacion_anual(session: AsyncSession) -> Decimal | None:
             await session.execute(
                 select(ValorSerieEconomica.fecha, ValorSerieEconomica.valor)
                 .join(SerieEconomica)
-                .where(SerieEconomica.clave_banxico == CLAVE_SERIE_INPC)
+                .where(
+                    SerieEconomica.clave_banxico == CLAVE_SERIE_INPC,
+                    # El INPC se publica con rezago y nunca por adelantado, así
+                    # que este filtro hoy no descarta nada. Va igualmente para
+                    # que las dos series se resuelvan con la misma regla: «lo
+                    # último que ya rige», no «lo último que hay».
+                    ValorSerieEconomica.fecha <= date.today(),
+                )
                 .order_by(desc(ValorSerieEconomica.fecha))
                 .limit(13)
             )

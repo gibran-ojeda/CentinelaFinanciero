@@ -327,6 +327,72 @@ async def test_the_hot_kill_switch_skips_the_run() -> None:
     assert corrida.estado is EstadoJob.OMITIDO
 
 
+# ─── Indicadores repartidos entre periodos ────────────────────
+
+
+async def test_indicators_published_on_different_dates_are_all_seen() -> None:
+    """La CNBV publica cada indicador con su propia cadencia.
+
+    El IMOR de una SOFIPO viene del boletín trimestral y su NICAP del reporte
+    mensual de capitalización, así que conviven una fila de marzo con la
+    morosidad y otra de mayo con el nivel. Mirar sólo la última dejaría a todas
+    las SOFIPOs sin bandera de IMOR y sin que nada avisara.
+    """
+    await _indicadores("Finsus", imor=Decimal("9.0"))  # marzo, por defecto
+    async with session_scope() as session:
+        session.add(
+            IndicadorFinanciero(
+                institucion_id=await _id_de("Finsus"),
+                periodo=date(2026, 5, 31),
+                nicap_nivel=NivelCapitalizacion.N1,
+            )
+        )
+
+    await recomputar()
+
+    tipos = {b.tipo for b in await _banderas_de("Finsus")}
+    assert TipoBandera.IMOR in tipos
+
+
+async def test_the_flag_period_is_the_oldest_figure_it_rests_on() -> None:
+    """§11 obliga a decir de cuándo es el dato. Se dice el más viejo.
+
+    Etiquetar como mayo una bandera que sale de una morosidad de marzo sería
+    justo lo que esa regla prohíbe.
+    """
+    await _indicadores("Finsus", imor=Decimal("9.0"))
+    async with session_scope() as session:
+        session.add(
+            IndicadorFinanciero(
+                institucion_id=await _id_de("Finsus"),
+                periodo=date(2026, 5, 31),
+                nicap_nivel=NivelCapitalizacion.N1,
+            )
+        )
+
+    await recomputar()
+
+    imor = next(b for b in await _banderas_de("Finsus") if b.tipo is TipoBandera.IMOR)
+    assert imor.periodo_dato == date(2026, 3, 31)
+
+
+async def test_a_newer_value_wins_over_an_older_one() -> None:
+    """Combinar no es acumular: si el indicador se repite, manda el reciente."""
+    await _indicadores("Finsus", imor=Decimal("9.0"))
+    async with session_scope() as session:
+        session.add(
+            IndicadorFinanciero(
+                institucion_id=await _id_de("Finsus"),
+                periodo=date(2026, 6, 30),
+                imor=Decimal("1.0"),
+            )
+        )
+
+    await recomputar()
+
+    assert not [b for b in await _banderas_de("Finsus") if b.tipo is TipoBandera.IMOR]
+
+
 def test_the_job_is_registered_with_its_cold_gate() -> None:
     from scheduler.registry import build_registry
 

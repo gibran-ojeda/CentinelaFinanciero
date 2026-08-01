@@ -53,6 +53,21 @@ class ErrorPresupuestoAgotado(ErrorProveedor):
 
 
 @dataclass(frozen=True, slots=True)
+class LlamadaHerramienta:
+    """El modelo pidió ejecutar una herramienta.
+
+    `argumentos` llega ya parseado. Si el modelo mandó un JSON roto —pasa—, el
+    proveedor lo deja vacío y anota el crudo en `argumentos_crudos`: el loop
+    puede entonces devolverle el error como resultado en vez de reventar.
+    """
+
+    id: str
+    nombre: str
+    argumentos: dict[str, Any] = field(default_factory=dict)
+    argumentos_crudos: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class RespuestaLLM:
     """Respuesta normalizada, independiente del proveedor."""
 
@@ -63,6 +78,9 @@ class RespuestaLLM:
     costo_usd: float
     latencia_ms: int
     finish_reason: str | None = None
+    #: Herramientas que el modelo pidió ejecutar. Vacío en todo lo que no sea
+    #: el tool-loop del researcher, que es el único que las manda.
+    herramientas: tuple[LlamadaHerramienta, ...] = ()
     #: Cadena de razonamiento de los modelos que razonan, **separada** del
     #: contenido. Cuando un razonador deja `contenido` vacío, el JSON final
     #: puede haber quedado aquí — de ahí que se conserve en vez de descartarse.
@@ -92,8 +110,19 @@ class ProveedorLLM(ABC):
         temperatura: float = 0.0,
         max_tokens: int = 4000,
         formato: Literal["texto", "json"] = "json",
+        mensajes: list[dict[str, Any]] | None = None,
+        herramientas: list[dict[str, Any]] | None = None,
     ) -> RespuestaLLM:
         """Manda los prompts y devuelve la respuesta normalizada.
+
+        Args:
+            mensajes: conversación completa, cuando la hay. La usa el tool-loop
+                del researcher, que necesita reenviar lo que el modelo dijo y
+                lo que devolvió cada herramienta. Si viene, `sistema` y
+                `usuario` se ignoran — es la misma llamada con más historia.
+            herramientas: esquemas en el formato de OpenAI. Retirarlas en la
+                última ronda es lo que fuerza al modelo a contestar en vez de
+                seguir buscando.
 
         Raises:
             ErrorProveedor: fallo no reintentable (401, 403, petición inválida).
@@ -127,6 +156,7 @@ __all__ = [
     "ErrorPresupuestoAgotado",
     "ErrorProveedor",
     "ErrorTiempoAgotado",
+    "LlamadaHerramienta",
     "ProveedorLLM",
     "RespuestaLLM",
 ]

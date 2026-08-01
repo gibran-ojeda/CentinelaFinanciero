@@ -23,11 +23,13 @@ registra, y `banderas_recompute_enabled` del ConfigStore lo apaga en caliente.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from statistics import median
+from typing import Any
 
 from sqlalchemy import desc, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import umbrales_desde_config
 from api.services import cache
@@ -36,7 +38,7 @@ from core.config_store import effective
 from core.db import session_scope
 from core.logging import get_logger
 from domain.enums import TipoBandera
-from domain.models import IndicadoresInstitucion, from_orm_indicadores
+from domain.models import IndicadoresInstitucion
 from domain.orm import Bandera, IndicadorFinanciero, Institucion, Producto
 from metrics.flags import evaluar_banderas
 from scheduler.bitacora import registrar_corrida
@@ -53,6 +55,77 @@ class _Oferta:
     plazo_dias: int
     tasa_nominal: Decimal
     gat_nominal: Decimal | None
+
+
+#: Campos de `IndicadorFinanciero` que se combinan entre periodos.
+_INDICADORES = (
+    "imor",
+    "icap",
+    "icor",
+    "nicap_nivel",
+    "captacion",
+    "cartera_total",
+    "capital_contable",
+    "pasivo_total",
+)
+
+
+async def _indicadores_vigentes(
+    session: AsyncSession, institucion_id: int
+) -> IndicadoresInstitucion:
+    """Lo más reciente que se sabe de cada indicador, no la última fila.
+
+    Parece un rodeo y no lo es. **La CNBV publica cada indicador en su propia
+    cadencia**: el IMOR de una SOFIPO viene del boletín trimestral y su NICAP
+    del reporte mensual de capitalización, así que en julio de 2026 conviven
+    una fila de marzo con el IMOR y otra de mayo con el nivel. Tomar «la
+    última» dejaría a todas las SOFIPOs con NICAP y sin morosidad — con las
+    banderas de IMOR apagadas y sin que nada avisara.
+
+    `periodo` se queda con el **más viejo** de los que aportaron algo, que es
+    el único dato honesto: es hasta dónde alcanza lo que se está afirmando.
+    §11 obliga a enseñarlo y decir mayo cuando la morosidad es de marzo sería
+    justo lo que esa regla prohíbe.
+    """
+    filas = (
+        (
+            await session.execute(
+                select(IndicadorFinanciero)
+                .where(IndicadorFinanciero.institucion_id == institucion_id)
+                .order_by(desc(IndicadorFinanciero.periodo))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not filas:
+        # Sin datos de la CNBV sólo pueden emitirse las banderas que no
+        # dependen de indicadores, como la de cobertura. Se arma un objeto
+        # vacío con la fecha de hoy para que la estructural sí pueda salir.
+        return IndicadoresInstitucion(
+            institucion_id=institucion_id, periodo=datetime.now(UTC).date()
+        )
+
+    # `IndicadoresInstitucion` es inmutable, así que se junta primero y se
+    # construye una vez. Las filas llegan de la más reciente a la más vieja:
+    # la primera que traiga un campo es la que manda para ese campo.
+    valores: dict[str, Any] = {}
+    aportaron: list[date] = []
+    for fila in filas:
+        usada = False
+        for campo in _INDICADORES:
+            valor = getattr(fila, campo)
+            if valores.get(campo) is None and valor is not None:
+                valores[campo] = valor
+                usada = True
+        if usada:
+            aportaron.append(fila.periodo)
+
+    return IndicadoresInstitucion(
+        institucion_id=institucion_id,
+        periodo=min(aportaron) if aportaron else filas[0].periodo,
+        **valores,
+    )
 
 
 async def recomputar() -> dict[str, int]:
@@ -120,23 +193,7 @@ async def recomputar() -> dict[str, int]:
         for institucion in instituciones:
             metricas["instituciones"] += 1
 
-            fila = await session.scalar(
-                select(IndicadorFinanciero)
-                .where(IndicadorFinanciero.institucion_id == institucion.id)
-                .order_by(desc(IndicadorFinanciero.periodo))
-                .limit(1)
-            )
-            indicadores = (
-                from_orm_indicadores(fila)
-                if fila is not None
-                # Sin datos de la CNBV sólo pueden emitirse las banderas que no
-                # dependen de indicadores, como la de cobertura. Se arma un
-                # objeto vacío con la fecha de hoy para que la bandera
-                # estructural sí pueda salir.
-                else IndicadoresInstitucion(
-                    institucion_id=institucion.id, periodo=datetime.now(UTC).date()
-                )
-            )
+            indicadores = await _indicadores_vigentes(session, institucion.id)
 
             oferta = mejor_oferta.get(institucion.id)
             esperadas = evaluar_banderas(

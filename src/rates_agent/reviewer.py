@@ -110,6 +110,7 @@ async def revisar(
     referencia: Tasa | None,
     url: str,
     fecha_dato: date | None = None,
+    fuente: FuenteTasa = FuenteTasa.FETCH_DIRIGIDO,
 ) -> Resultado:
     """Decide qué hacer con una tasa extraída y la escribe.
 
@@ -119,6 +120,9 @@ async def revisar(
         referencia: contra qué comparar cuando no hay vigente — típicamente la
             fila `AGREGADOR`. **No autoriza a publicar**; sirve para que quien
             revise vea la diferencia enfrente.
+        fuente: `FETCH_DIRIGIDO` para el nivel 2 y `LLM_RESEARCH` para el 3.
+            Cambia de dónde vino el dato, **no las reglas**: las dos pasan por
+            aquí y las dos exigen que la primera lectura la apruebe una persona.
     """
     fecha = fecha_dato or date.today()
     tolerancia = Decimal(str(effective.tolerancia_revision_pp))
@@ -132,7 +136,7 @@ async def revisar(
         select(Tasa).where(
             Tasa.producto_id == producto.id,
             Tasa.fecha_dato == fecha,
-            Tasa.fuente == FuenteTasa.FETCH_DIRIGIDO,
+            Tasa.fuente == fuente,
         )
     )
     if ya_registrada is not None:
@@ -171,7 +175,7 @@ async def revisar(
         gat_nominal=extraida.gat_nominal,
         gat_real=extraida.gat_real,
         fecha_dato=fecha,
-        fuente=FuenteTasa.FETCH_DIRIGIDO,
+        fuente=fuente,
         fuente_url=url,
         estado=EstadoTasa.VIGENTE if motivo is None else EstadoTasa.PENDIENTE_REVISION,
         notas=extraida.condiciones,

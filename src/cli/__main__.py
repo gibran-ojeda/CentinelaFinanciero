@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 from core.db import dispose_engine
@@ -66,6 +67,34 @@ def build_parser() -> argparse.ArgumentParser:
         "--sin-navegador",
         action="store_true",
         help="sólo las fuentes que rinden a un cliente HTTP plano",
+    )
+
+    banxico = sub.add_parser("banxico", help="ingesta del SIE de Banxico")
+    banxico_sub = banxico.add_subparsers(dest="subcomando", required=True)
+    banxico_sync = banxico_sub.add_parser(
+        "sync",
+        help="trae las series del SIE y publica las subastas de CETES",
+    )
+    # La sincronización arranca desde lo último guardado, así que nunca
+    # alcanzaría un hueco anterior. Esto es para rellenarlo a mano.
+    banxico_sync.add_argument(
+        "--desde",
+        type=date.fromisoformat,
+        default=None,
+        metavar="AAAA-MM-DD",
+        help="fuerza el inicio del rango para todas las series",
+    )
+
+    cnbv = sub.add_parser("cnbv", help="ingesta de boletines de la CNBV")
+    cnbv_sub = cnbv.add_subparsers(dest="subcomando", required=True)
+    cnbv_cargar = cnbv_sub.add_parser(
+        "cargar",
+        help="descarga el último boletín publicado y recomputa las banderas",
+    )
+    cnbv_cargar.add_argument(
+        "--forzar",
+        action="store_true",
+        help="vuelve a cargar el último periodo aunque ya esté (p. ej. tras corregir un mapeo)",
     )
 
     revs = sub.add_parser("revisiones", help="cola de revisión humana de tasas")
@@ -143,6 +172,24 @@ async def _run(args: argparse.Namespace) -> int:
             # Una fila rechazada es un fallo operativo: el CSV traía un dato
             # que no se pudo cargar y alguien tiene que enterarse.
             return 1 if resultado.errores else 0
+        case "banxico":
+            from cli import banxico as banxico_module
+
+            reporte_banxico = await banxico_module.correr_sync(desde=args.desde)
+            print("Ingesta de Banxico:")
+            print(reporte_banxico.render())
+            # Un lote que el SIE no atendió es un fallo operativo: la serie se
+            # queda vieja y alguien tiene que enterarse hoy, no en la portada.
+            return 1 if reporte_banxico.hubo_errores else 0
+        case "cnbv":
+            from ingest_cnbv import loader
+
+            reporte_cnbv = await loader.cargar(forzar=args.forzar)
+            print("Ingesta de la CNBV:")
+            print(reporte_cnbv.render())
+            # Un cambio de formato es un fallo operativo: alguien tiene que
+            # mirar el boletín y ajustar la declaración de `fuentes.py`.
+            return 1 if reporte_cnbv.hubo_errores else 0
         case "revisiones":
             from cli import revisiones as revisiones_module
 
