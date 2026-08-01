@@ -89,6 +89,9 @@ jobs:
             # ingesta de las fases 7 y 9, no el sitio.
             echo "BANXICO_TOKEN='${{ secrets.BANXICO_TOKEN }}'"
             echo "DEEPSEEK_API_KEY='${{ secrets.DEEPSEEK_API_KEY }}'"
+            # Variable de repo, no secreto: es el gate frío del researcher L3.
+            # Sin definirla llega vacía y desplegar.sh la deja en false.
+            echo "SCHEDULER_RESEARCH_ENABLED='${{ vars.SCHEDULER_RESEARCH_ENABLED }}'"
             cat scripts/desplegar.sh
           } | ssh -i ~/.ssh/id_deploy \
                 -o IdentitiesOnly=yes -o BatchMode=yes \

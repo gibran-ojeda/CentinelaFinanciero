@@ -35,6 +35,11 @@ COPY seeds/ ./seeds/
 # FileNotFoundError en la primera llamada de cada corrida.
 COPY prompts/ ./prompts/
 
+# El punto de montaje del volumen de boletines CNBV se crea antes del chown:
+# un volumen nombrado hereda el dueño que el directorio tenga en la imagen, y
+# si Docker lo crea al vuelo nace de root y el uid 10001 no puede escribir.
+RUN mkdir -p /app/var/cnbv
+
 # Usuario sin privilegios: nada aquí necesita root en runtime.
 RUN useradd --create-home --uid 10001 centinela && chown -R centinela:centinela /app
 USER centinela
