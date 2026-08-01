@@ -47,9 +47,21 @@ La API queda en `http://127.0.0.1:8010` — `/docs` para el contrato completo.
 
 ```bash
 pip install -e ".[app,dev]"
+pre-commit install
 pytest
 pre-commit run --all-files
 ```
+
+`pre-commit install` es el paso fácil de saltarse: sin él los hooks sólo corren
+cuando se les llama a mano, y mypy —que en CI es informativo por doctrina— se
+queda sin ninguna red.
+
+Córrelo **desde el entorno en el que commiteas**. El hook que genera apunta al
+intérprete que lo instaló, así que uno instalado desde WSL aborta los commits
+hechos desde Windows (PyCharm, Git Bash) con un `pre-commit not found`. Si
+trabajas partido —herramientas en WSL, git en Windows— instala `pre-commit`
+también en el Python de ese lado: el hook lo busca en el `PATH` como segundo
+camino y entonces sirve a los dos.
 
 Los tests que necesitan infraestructura real usan testcontainers y se **saltan**
 si no hay un daemon de Docker, así que `pytest` pasa en una máquina sin el stack

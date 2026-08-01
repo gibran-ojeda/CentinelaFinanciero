@@ -103,6 +103,9 @@ dev = [
     "ruff",
     "black",
     "mypy",
+    # §18 pone el listón de mypy en el commit, no en el CI, donde es
+    # informativo. Sin la herramienta instalada esa mitad no existe.
+    "pre-commit",
 ]
 
 [project.urls]
