@@ -107,6 +107,19 @@ docker compose exec -T db psql -U centinela -d centinela \
 
 Si el recomputo de banderas lleva días sin correr, algo se apagó y nadie se enteró.
 
+Las cadencias, para saber qué esperar en esa lista:
+
+| Job | Cuándo | Qué hace |
+| --- | --- | --- |
+| `tasas_fetch_dirigido` | cada 4 h (`..:45`) | nivel 2: lee las páginas oficiales curadas |
+| `tasas_research_abierta` | cada 4 h (`..:15`) | nivel 3: busca en abierto **sólo** lo que el nivel 2 no cubre, y a cada institución una vez al día como mucho |
+| `banxico_sync_series` | 07:00 diario | series del SIE (UDI, INPC, CETES) |
+| `cnbv_boletines` | 05:30 diario | indicadores de salud |
+| `banderas_recompute` | 04:30 diario | recomputo de banderas |
+| `frescura_check` | 08:00 diario | sólo mira y reporta |
+
+El nivel 3 aparecerá casi siempre como `OMITIDO` con el motivo «ninguna institución quedó stale» — eso es lo bueno: significa que el fetch dirigido está cubriendo el catálogo. Y **el agregador no tiene job**: las filas `AGREGADOR` del CSV son una captura manual congelada, sólo sirven de contraste y se van retirando con `cli tasas retirar` conforme llegan las lecturas oficiales.
+
 ### 8. Copia del respaldo fuera del VPS
 
 ```bash

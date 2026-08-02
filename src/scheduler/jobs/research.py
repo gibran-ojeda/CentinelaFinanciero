@@ -1,9 +1,16 @@
-"""Job `tasas_research_abierta`: el nivel 3, los miércoles.
+"""Job `tasas_research_abierta`: el nivel 3, media hora tras cada fetch.
 
-Dos días después del fetch dirigido, y a propósito: para entonces ya se sabe
-qué instituciones siguen sin dato fresco tras el fetch, que son exactamente las
-que este job investiga. Correrlo antes sería buscar lo que el nivel 2 iba a
-traer más barato.
+El desfase es a propósito: para entonces ya se sabe qué instituciones siguen
+sin dato fresco tras el fetch dirigido, que son exactamente las que este job
+investiga. Correrlo antes sería buscar lo que el nivel 2 iba a traer más
+barato.
+
+Comparte la rejilla de 4 horas con el fetch **sin multiplicar el gasto**:
+`investigacion._candidatas` descarta a quien ya tenga una lectura del
+researcher de hoy, así que cada institución se investiga una vez al día y las
+demás corridas sólo consultan. Ese guard vive en la selección y no en el
+reviewer por una razón de dinero: la idempotencia descarta la escritura
+duplicada, pero sólo después de haber pagado el tool-loop entero.
 
 Doble gate como el resto. Y el techo de gasto del `ClienteLLM` es aquí más
 importante que en ninguna otra parte: un tool-loop que no converge puede dar
