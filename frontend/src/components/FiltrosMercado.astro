@@ -3,11 +3,14 @@
  * Los filtros de §7.
  *
  * Es un `<form method="get">` de verdad, no una isla. Sin JavaScript funciona
- * entero —se envía y el servidor devuelve la página filtrada— y con
- * JavaScript un script lo mejora: los `<select multiple>` se convierten en los
- * desplegables con casillas del diseño y el envío es automático al cambiar.
+ * entero —el `<select multiple>` nativo más el botón «Aplicar filtros»— y con
+ * JavaScript el script de abajo convierte cada multiselect en el desplegable
+ * con casillas del diseño. Las casillas NO envían: sincronizan los `<option>`
+ * del select oculto, que sigue siendo el portador del dato, y el formulario
+ * se envía al CERRAR el desplegable. Enviar en cada casilla navegaba la
+ * página y hacía imposible marcar dos opciones.
  *
- * Esa decisión es la que hace que `/?plazo=91&seguro=IPAB` sea una URL
+ * Esa decisión es la que hace que `/?plazo=91&categoria=SOFIPO` sea una URL
  * indexable con contenido real detrás, en vez de un estado de cliente que
  * Google ve vacío.
  */
@@ -29,16 +32,18 @@ const PLAZOS = [
   ['365+', '365 días o más'],
 ];
 
-const SEGUROS = [
-  ['SOBERANO', 'Soberano (CETES)'],
-  ['IPAB', 'IPAB (bancos)'],
-  ['PROSOFIPO', 'PROSOFIPO (SOFIPOs)'],
-];
-
+/**
+ * Sin IFPE este filtro no podía llegar a Mercado Pago; sin BANCO_TRADICIONAL
+ * a propósito — cero instituciones en el catálogo, sería un filtro que
+ * garantiza vacío. El seguro de depósito ya no es un control: se deriva por
+ * completo de la categoría, la columna Cobertura lo dice fila por fila, y el
+ * saneador de la página conserva `?seguro=` por las URLs ya indexadas.
+ */
 const CATEGORIAS = [
   ['GOBIERNO', 'Gobierno'],
   ['BANCO_DIGITAL', 'Banco digital'],
   ['SOFIPO', 'SOFIPO'],
+  ['IFPE', 'IFPE (sin seguro)'],
 ];
 
 const ORDENES = [
@@ -63,22 +68,9 @@ const ORDENES = [
     </select>
   </div>
 
-  <div class="campo" data-multi="seguro">
-    <label for="f-seguro">Seguro de depósito</label>
-    <select id="f-seguro" name="seguro" class="control" multiple size="3">
-      {
-        SEGUROS.map(([valor, etiqueta]) => (
-          <option value={valor} selected={filtros.seguros.includes(valor as never)}>
-            {etiqueta}
-          </option>
-        ))
-      }
-    </select>
-  </div>
-
   <div class="campo" data-multi="categoria">
     <label for="f-categoria">Categoría</label>
-    <select id="f-categoria" name="categoria" class="control" multiple size="3">
+    <select id="f-categoria" name="categoria" class="control" multiple size="4">
       {
         CATEGORIAS.map(([valor, etiqueta]) => (
           <option value={valor} selected={filtros.categorias.includes(valor as never)}>
@@ -126,6 +118,101 @@ const ORDENES = [
 
 <p class="conteo etiqueta" aria-live="polite">{total} productos</p>
 
+<script>
+  // La mejora progresiva del multiselect. El select nativo queda oculto pero
+  // sigue en el formulario y ES el dato: cada casilla sincroniza su <option>,
+  // así que el GET produce los mismos `?categoria=…` repetidos de siempre y
+  // el saneador del servidor no distingue de dónde vino la petición.
+  for (const campo of document.querySelectorAll<HTMLElement>('.campo[data-multi]')) {
+    const select = campo.querySelector<HTMLSelectElement>('select[multiple]');
+    if (!select) continue;
+    const formularioPadre = select.form;
+    const opciones = [...select.options];
+    const nombre = campo.querySelector('label')?.textContent ?? '';
+
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'multi-boton';
+    boton.setAttribute('aria-haspopup', 'listbox');
+    boton.setAttribute('aria-expanded', 'false');
+    const resumen = document.createElement('span');
+    resumen.className = 'multi-resumen';
+    boton.append(resumen);
+    boton.insertAdjacentHTML(
+      'beforeend',
+      '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>'
+    );
+
+    const panel = document.createElement('div');
+    panel.className = 'multi-panel';
+    panel.hidden = true;
+    panel.setAttribute('role', 'group');
+    if (nombre) panel.setAttribute('aria-label', nombre);
+
+    function pintarResumen() {
+      const marcadas = opciones.filter((o) => o.selected);
+      resumen.textContent =
+        marcadas.length === 0
+          ? 'Todas'
+          : marcadas.length === 1
+            ? marcadas[0].text
+            : `${marcadas[0].text} +${marcadas.length - 1}`;
+    }
+
+    let sucio = false;
+    for (const opcion of opciones) {
+      const fila = document.createElement('label');
+      fila.className = 'multi-opcion';
+      const casilla = document.createElement('input');
+      casilla.type = 'checkbox';
+      casilla.value = opcion.value;
+      casilla.checked = opcion.selected;
+      casilla.addEventListener('change', () => {
+        opcion.selected = casilla.checked;
+        sucio = true;
+        pintarResumen();
+      });
+      fila.append(casilla, document.createTextNode(opcion.text));
+      panel.append(fila);
+    }
+
+    // Enviar al cerrar —click en el botón, click fuera o Escape— y solo si
+    // algo cambió: es lo que permite marcar varias casillas en una visita.
+    function cerrar() {
+      if (panel.hidden) return;
+      panel.hidden = true;
+      boton.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', alClickFuera, true);
+      document.removeEventListener('keydown', alEscape, true);
+      if (sucio) {
+        sucio = false;
+        formularioPadre?.requestSubmit();
+      }
+    }
+    function abrir() {
+      panel.hidden = false;
+      boton.setAttribute('aria-expanded', 'true');
+      document.addEventListener('click', alClickFuera, true);
+      document.addEventListener('keydown', alEscape, true);
+    }
+    const alClickFuera = (evento: MouseEvent) => {
+      if (!campo.contains(evento.target as Node)) cerrar();
+    };
+    const alEscape = (evento: KeyboardEvent) => {
+      if (evento.key === 'Escape') {
+        cerrar();
+        boton.focus();
+      }
+    };
+    boton.addEventListener('click', () => (panel.hidden ? abrir() : cerrar()));
+
+    select.hidden = true;
+    select.insertAdjacentElement('afterend', boton);
+    boton.insertAdjacentElement('afterend', panel);
+    pintarResumen();
+  }
+</script>
+
 <style>
   .filtros {
     display: grid;
@@ -161,6 +248,68 @@ const ORDENES = [
   select[multiple].control option {
     padding: 4px 8px;
     border-radius: 6px;
+  }
+
+  /* El widget de casillas se construye por JS, así que sus nodos no llevan el
+     atributo de scope de Astro: se estilan con :global, anclados al campo. */
+  .campo[data-multi] {
+    position: relative;
+  }
+  .campo[data-multi] :global(.multi-boton) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    text-align: left;
+    color: var(--texto);
+    background: var(--panel);
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-campo);
+    cursor: pointer;
+  }
+  .campo[data-multi] :global(.multi-boton:hover) {
+    border-color: rgba(167, 224, 219, 0.45);
+  }
+  .campo[data-multi] :global(.multi-boton svg) {
+    flex: none;
+    opacity: 0.7;
+  }
+  .campo[data-multi] :global(.multi-panel) {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 45;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 230px;
+    padding: 6px;
+    background: var(--panel);
+    border: 1px solid var(--linea-fuerte);
+    border-radius: 12px;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4);
+  }
+  .campo[data-multi] :global(.multi-opcion) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    font-size: 13px;
+    color: var(--texto);
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .campo[data-multi] :global(.multi-opcion:hover) {
+    background: rgba(167, 224, 219, 0.08);
+  }
+  .campo[data-multi] :global(.multi-opcion input) {
+    accent-color: var(--marca-300);
   }
 
   .toggle {

@@ -75,6 +75,14 @@ export interface InstitucionResumen {
   es_demostracion: boolean;
 }
 
+/** Un escalón de una tasa escalonada por saldo: [desde, hasta). */
+export interface TramoTasa {
+  desde: string;
+  /** null = sin techo publicado (infinito). */
+  hasta: string | null;
+  tasa_nominal: string;
+}
+
 export interface FilaComparador {
   institucion: InstitucionResumen;
   producto_id: number;
@@ -85,12 +93,19 @@ export interface FilaComparador {
   plazo_dias: number | null;
   monto_minimo: string;
   liquidez: string;
+  /** En un producto escalonado, la tasa del primer tramo — la titular. */
   tasa_nominal: string;
   ten: string;
   gat: Gat;
   cobertura: Cobertura;
   banderas: Bandera[];
   procedencia: Procedencia;
+  escalonada: boolean;
+  /** Escalera por saldo; vacía = la tasa aplica a todo el saldo. */
+  tramos: TramoTasa[];
+  /** Ponderada al monto consultado; null sin monto. En filas planas, igual a la titular. */
+  tasa_efectiva: string | null;
+  ten_efectiva: string | null;
 }
 
 export interface RespuestaComparador {
@@ -99,6 +114,7 @@ export interface RespuestaComparador {
   inflacion_anual: string;
   valor_udi: string;
   tasa_retencion_capital: string;
+  monto_consultado: string | null;
   generado_en: string;
   disclaimer: string;
 }
@@ -139,6 +155,8 @@ export interface ProductoDetalle {
   ten: string | null;
   gat: Gat | null;
   procedencia: Procedencia | null;
+  escalonada: boolean;
+  tramos: TramoTasa[];
 }
 
 export interface DetalleInstitucion {
@@ -182,8 +200,11 @@ export interface Asignacion {
   plazo_dias: number | null;
   porcentaje: string;
   monto: string;
+  /** TEN efectiva del monto asignado: en un escalonado, la de la ponderada. */
   ten: string;
   cascada: Cascada;
+  escalonada: boolean;
+  tramos: TramoTasa[];
   cobertura: Cobertura;
   monto_cubierto: string;
   monto_expuesto: string;

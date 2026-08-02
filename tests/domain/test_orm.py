@@ -11,7 +11,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -24,7 +24,7 @@ from domain.enums import (
     TipoProducto,
     TipoSeguro,
 )
-from domain.orm import Base, Institucion, Producto, Tasa
+from domain.orm import Base, Institucion, Producto, Tasa, TramoTasa
 
 pytestmark = pytest.mark.requires_docker
 
@@ -92,6 +92,7 @@ async def test_schema_creates_every_table(session: AsyncSession) -> None:
         "config_store",
         "config_versions",
         "job_runs",
+        "tramos_tasas",
     }
     assert esperadas <= set(Base.metadata.tables)
 
@@ -284,4 +285,92 @@ async def test_deleting_an_institution_cascades(session: AsyncSession) -> None:
     await session.commit()
 
     restantes = (await session.execute(Producto.__table__.select())).all()
+    assert restantes == []
+
+
+def _tasa(producto: Producto, **kwargs: object) -> Tasa:
+    defaults: dict[str, object] = {
+        "producto": producto,
+        "tasa_nominal": Decimal("13.0000"),
+        "fecha_dato": date(2026, 8, 1),
+        "fuente": FuenteTasa.MANUAL,
+        "estado": EstadoTasa.VIGENTE,
+    }
+    defaults.update(kwargs)
+    return Tasa(**defaults)  # type: ignore[arg-type]
+
+
+async def test_a_ladder_round_trips_ordered_and_as_decimal(session: AsyncSession) -> None:
+    """La escalera vuelve completa, ordenada por piso y en Decimal.
+
+    Se consulta con un `select(Tasa)` fresco tras expulsar todo de la sesión:
+    es la garantía de que `lazy="selectin"` carga los tramos en la consulta —
+    un lazy de verdad reventaría aquí con MissingGreenlet bajo async.
+    """
+    tasa = _tasa(_producto(_institucion()))
+    # A propósito en desorden: el `order_by` de la relación es quien ordena.
+    tasa.tramos = [
+        TramoTasa(desde=Decimal("30000.00"), hasta=None, tasa_nominal=Decimal("6.3000")),
+        TramoTasa(
+            desde=Decimal("0.00"), hasta=Decimal("30000.00"), tasa_nominal=Decimal("13.0000")
+        ),
+    ]
+    session.add(tasa)
+    await session.commit()
+    session.expunge_all()
+
+    recuperada = (await session.execute(select(Tasa))).scalars().one()
+    assert [t.desde for t in recuperada.tramos] == [Decimal("0.00"), Decimal("30000.00")]
+    assert recuperada.tramos[0].hasta == Decimal("30000.00")
+    assert recuperada.tramos[1].hasta is None
+    assert isinstance(recuperada.tramos[0].tasa_nominal, Decimal)
+
+
+async def test_a_flat_rate_has_no_tiers(session: AsyncSession) -> None:
+    """Cero filas hijas = tasa plana: el catálogo previo no cambia de forma."""
+    session.add(_tasa(_producto(_institucion())))
+    await session.commit()
+    session.expunge_all()
+
+    recuperada = (await session.execute(select(Tasa))).scalars().one()
+    assert recuperada.tramos == []
+
+
+async def test_two_tiers_with_the_same_floor_are_rejected(session: AsyncSession) -> None:
+    tasa = _tasa(_producto(_institucion()))
+    tasa.tramos = [
+        TramoTasa(desde=Decimal("0.00"), hasta=Decimal("30000.00"), tasa_nominal=Decimal("13")),
+        TramoTasa(desde=Decimal("0.00"), hasta=None, tasa_nominal=Decimal("6.3")),
+    ]
+    session.add(tasa)
+    with pytest.raises(IntegrityError):
+        await session.commit()
+
+
+async def test_a_tier_ceiling_must_exceed_its_floor(session: AsyncSession) -> None:
+    tasa = _tasa(_producto(_institucion()))
+    tasa.tramos = [
+        TramoTasa(
+            desde=Decimal("30000.00"), hasta=Decimal("30000.00"), tasa_nominal=Decimal("6.3")
+        )
+    ]
+    session.add(tasa)
+    with pytest.raises(IntegrityError):
+        await session.commit()
+
+
+async def test_deleting_the_observation_cascades_its_tiers(session: AsyncSession) -> None:
+    """Los tramos no sobreviven a su observación: snapshot, no catálogo."""
+    tasa = _tasa(_producto(_institucion()))
+    tasa.tramos = [
+        TramoTasa(desde=Decimal("0.00"), hasta=Decimal("30000.00"), tasa_nominal=Decimal("13")),
+        TramoTasa(desde=Decimal("30000.00"), hasta=None, tasa_nominal=Decimal("6.3")),
+    ]
+    session.add(tasa)
+    await session.commit()
+
+    await session.delete(tasa)
+    await session.commit()
+
+    restantes = (await session.execute(TramoTasa.__table__.select())).all()
     assert restantes == []

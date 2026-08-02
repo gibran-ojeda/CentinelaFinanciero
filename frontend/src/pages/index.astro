@@ -140,7 +140,7 @@ const jsonLd = mercado
     <BarraSeleccion client:idle />
 
     {error && <p class="error">{error}</p>}
-    {mercado && <TablaComparador filas={mercado.filas} hayFiltros={hayFiltros} />}
+    {mercado && <TablaComparador filas={mercado.filas} hayFiltros={hayFiltros} monto={filtros.monto} />}
 
     {mercado && <p class="tenue-2 disclaimer">{mercado.disclaimer}</p>}
   </section>
@@ -188,7 +188,17 @@ const jsonLd = mercado
   if (formulario) {
     // Con JavaScript el formulario se envía al cambiar cualquier control. Sin
     // él, el botón "Aplicar filtros" sigue ahí y hace lo mismo.
-    for (const control of formulario.querySelectorAll<HTMLElement>('select, input')) {
+    //
+    // Los multiselects quedan FUERA a propósito: en un `<select multiple>` el
+    // evento `input` dispara en cada clic sobre una opción, así que enviar
+    // aquí navegaba la página y hacía imposible marcar dos valores. Su envío
+    // lo gobierna el desplegable de casillas de FiltrosMercado, al cerrarse —
+    // y el `closest` blinda también a sus casillas, se construyan cuando se
+    // construyan.
+    for (const control of formulario.querySelectorAll<HTMLElement>(
+      'select:not([multiple]), input'
+    )) {
+      if (control.closest('[data-multi]')) continue;
       const evento = control.matches('input[type="text"]') ? 'change' : 'input';
       control.addEventListener(evento, () => formulario.requestSubmit());
     }

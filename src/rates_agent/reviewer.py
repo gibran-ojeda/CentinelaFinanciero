@@ -28,7 +28,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config_store import effective
 from core.logging import get_logger
 from domain.enums import EstadoRevision, EstadoTasa, FuenteTasa
-from domain.orm import Producto, RevisionTasa, Tasa
+from domain.orm import Producto, RevisionTasa, Tasa, TramoTasa
+from metrics.tramos import Tramo
+from rates_agent.escalera import EscaleraExtraida, render_escalera
 from rates_agent.extractor import TasaExtraida
 
 log = get_logger(__name__)
@@ -101,6 +103,44 @@ def _diferencia(nueva: Decimal, anterior: Decimal) -> Decimal:
     return abs(nueva - anterior)
 
 
+def _tramos_de(tasa: Tasa) -> tuple[Tramo, ...]:
+    return tuple(
+        Tramo(desde=t.desde, hasta=t.hasta, tasa_nominal=t.tasa_nominal) for t in tasa.tramos
+    )
+
+
+def _misma_estructura(previos: tuple[Tramo, ...], nuevos: tuple[Tramo, ...]) -> bool:
+    """Los mismos cortes: igual número de tramos con iguales pisos y techos."""
+    return len(previos) == len(nuevos) and all(
+        p.desde == n.desde and p.hasta == n.hasta for p, n in zip(previos, nuevos, strict=True)
+    )
+
+
+def _delta(
+    extraida: TasaExtraida,
+    vigente: Tasa | None,
+    comparada: Tasa | None,
+    escalera: EscaleraExtraida | None,
+) -> Decimal | None:
+    """Cuánto se movió la lectura respecto a lo comparado.
+
+    Con escaleras de la misma estructura, el delta es el **máximo por tramo**:
+    el criterio más conservador que sigue explicándose en una frase. Si la
+    estructura cambió, `_motivo` manda a revisión antes de mirar este número,
+    así que el delta de titulares basta como respaldo.
+    """
+    if comparada is None:
+        return None
+    if vigente is not None and escalera is not None:
+        previos = _tramos_de(vigente)
+        if _misma_estructura(previos, escalera.tramos):
+            return max(
+                _diferencia(n.tasa_nominal, p.tasa_nominal)
+                for p, n in zip(previos, escalera.tramos, strict=True)
+            )
+    return _diferencia(extraida.tasa_nominal, comparada.tasa_nominal)
+
+
 async def revisar(
     session: AsyncSession,
     extraida: TasaExtraida,
@@ -111,6 +151,7 @@ async def revisar(
     url: str,
     fecha_dato: date | None = None,
     fuente: FuenteTasa = FuenteTasa.FETCH_DIRIGIDO,
+    escalera: EscaleraExtraida | None = None,
 ) -> Resultado:
     """Decide qué hacer con una tasa extraída y la escribe.
 
@@ -123,15 +164,19 @@ async def revisar(
         fuente: `FETCH_DIRIGIDO` para el nivel 2 y `LLM_RESEARCH` para el 3.
             Cambia de dónde vino el dato, **no las reglas**: las dos pasan por
             aquí y las dos exigen que la primera lectura la apruebe una persona.
+        escalera: los tramos por saldo reconstruidos, cuando la institución
+            publica varios. `extraida` es entonces la cabeza (el tramo 1) y la
+            escalera entera es UNA observación: se persiste como hijos de la
+            misma `Tasa` y cuenta una sola vez bajo `uq_tasa_observacion`.
     """
     fecha = fecha_dato or date.today()
     tolerancia = Decimal(str(effective.tolerancia_revision_pp))
 
     # `tasas` tiene clave única `(producto, fecha, fuente)`, así que una
     # segunda corrida el mismo día chocaría contra la observación de la
-    # primera. Pasa de verdad: un reintento del job un lunes que falló a la
-    # mitad. Se comprueba antes de escribir para que reintentar sea barato en
-    # vez de imposible.
+    # primera. Pasa todos los días: el job corre cada 4 horas, y también en
+    # el reintento de una corrida que falló a la mitad. Se comprueba antes de
+    # escribir para que reintentar sea barato en vez de imposible.
     ya_registrada = await session.scalar(
         select(Tasa).where(
             Tasa.producto_id == producto.id,
@@ -151,23 +196,25 @@ async def revisar(
             tasa_id=ya_registrada.id,
         )
 
-    if vigente is not None and vigente.tasa_nominal == extraida.tasa_nominal:
-        # Lo más común en un ciclo semanal: la institución no movió nada.
-        # Escribir una observación idéntica cada lunes engordaría la tabla sin
-        # añadir información.
+    if (
+        vigente is not None
+        and vigente.tasa_nominal == extraida.tasa_nominal
+        and _tramos_de(vigente) == (escalera.tramos if escalera is not None else ())
+    ):
+        # Lo más común: la institución no movió nada. Escribir una observación
+        # idéntica en cada corrida engordaría la tabla sin añadir información.
+        # La comparación incluye la escalera completa: una vigente plana
+        # contra una lectura escalonada del mismo titular NO es «sin cambio» —
+        # es justo el dato nuevo que hay que revisar.
         log.info("revision_sin_cambio", producto=producto.slug, tasa=str(extraida.tasa_nominal))
         return Resultado(
             Decision.SIN_CAMBIO, "la institución publica lo mismo que ya está vigente"
         )
 
     comparada = vigente or referencia
-    diferencia = (
-        _diferencia(extraida.tasa_nominal, comparada.tasa_nominal)
-        if comparada is not None
-        else None
-    )
+    diferencia = _delta(extraida, vigente, comparada, escalera)
 
-    motivo = _motivo(extraida, vigente, comparada, diferencia, tolerancia)
+    motivo = _motivo(extraida, vigente, comparada, diferencia, tolerancia, escalera)
 
     tasa = Tasa(
         producto_id=producto.id,
@@ -178,10 +225,17 @@ async def revisar(
         fuente=fuente,
         fuente_url=url,
         estado=EstadoTasa.VIGENTE if motivo is None else EstadoTasa.PENDIENTE_REVISION,
-        notas=extraida.condiciones,
+        notas=escalera.condiciones if escalera is not None else extraida.condiciones,
     )
     session.add(tasa)
     await session.flush()
+
+    if escalera is not None:
+        session.add_all(
+            TramoTasa(tasa_id=tasa.id, desde=t.desde, hasta=t.hasta, tasa_nominal=t.tasa_nominal)
+            for t in escalera.tramos
+        )
+        await session.flush()
 
     # Se ramifica sobre `motivo is None` y no sobre una bandera aparte: el
     # motivo *es* la razón de no publicar, así que su ausencia y la publicación
@@ -220,8 +274,15 @@ def _motivo(
     comparada: Tasa | None,
     diferencia: Decimal | None,
     tolerancia: Decimal,
+    escalera: EscaleraExtraida | None,
 ) -> str | None:
     """Por qué esta tasa necesita a una persona. `None` = se publica sola."""
+    leida = (
+        f"la escalera {render_escalera(escalera.tramos)}"
+        if escalera is not None
+        else f"{extraida.tasa_nominal}%"
+    )
+
     if vigente is None:
         procedencia = (
             f"; el dato de contraste ({comparada.fuente.value}) decía "
@@ -230,18 +291,34 @@ def _motivo(
             else "; no hay ningún dato previo con el que contrastar"
         )
         return (
-            f"Primera lectura oficial de este producto{procedencia}. "
+            f"Primera lectura oficial de este producto: {leida}{procedencia}. "
             f"Coincidir con un dato sin verificar no lo verifica: la primera "
             f"publicación la aprueba una persona."
         )
 
     if extraida.confianza == "baja":
         return (
-            f"El extractor declaró confianza baja sobre {extraida.tasa_nominal}% "
+            f"El extractor declaró confianza baja sobre {leida} "
             f"(vigente {vigente.tasa_nominal}%)."
         )
 
+    previos = _tramos_de(vigente)
+    nuevos = escalera.tramos if escalera is not None else ()
+    if not _misma_estructura(previos, nuevos):
+        # Cambió QUÉ es el producto —de plano a escalonado, o los cortes— y
+        # eso no es un movimiento de décimas que la tolerancia sepa juzgar:
+        # siempre lo mira una persona, con ambas escaleras enfrente.
+        antes = render_escalera(previos) if previos else f"plana ({vigente.tasa_nominal}%)"
+        ahora = render_escalera(nuevos) if nuevos else f"plana ({extraida.tasa_nominal}%)"
+        return f"La escalera cambió de estructura: antes {antes}; ahora {ahora}."
+
     if diferencia is not None and diferencia > tolerancia:
+        if escalera is not None:
+            return (
+                f"Algún tramo se movió {diferencia} pp, por encima de la "
+                f"tolerancia de {tolerancia} pp: antes {render_escalera(previos)}; "
+                f"ahora {render_escalera(nuevos)}."
+            )
         return (
             f"Cambio de {vigente.tasa_nominal}% a {extraida.tasa_nominal}% "
             f"({diferencia} pp), por encima de la tolerancia de {tolerancia} pp."

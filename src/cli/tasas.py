@@ -13,6 +13,7 @@ clave natural es (producto, fecha_dato, fuente).
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -28,15 +29,16 @@ from core.db import session_scope
 from core.logging import get_logger
 from core.settings import settings
 from domain.enums import EstadoTasa, FuenteTasa
-from domain.orm import FuenteTasas, Institucion, Producto, Tasa
+from domain.orm import FuenteTasas, Institucion, Producto, Tasa, TramoTasa
+from metrics.tramos import Tramo, validar_escalera
 from rates_agent import pipeline
 from rates_agent.pipeline import ReporteCorrida
 from scheduler.bitacora import registrar_corrida
 
 #: Id propio para las corridas disparadas desde la terminal. Con el mismo id
-#: que el job del lunes, la pasada local con navegador y la del VPS se pisaban
-#: en `job_runs`: `cli revisiones list` sólo miraba «la última corrida» y los
-#: huecos de una borraban los de la otra.
+#: que el job programado, la pasada local con navegador y la del VPS se
+#: pisaban en `job_runs`: `cli revisiones list` sólo miraba «la última
+#: corrida» y los huecos de una borraban los de la otra.
 JOB_ID_FETCH_MANUAL = "tasas_fetch_manual"
 
 log = get_logger(__name__)
@@ -87,6 +89,54 @@ def _fecha(raw: str, fila: int) -> date:
         return datetime.strptime(raw.strip(), "%Y-%m-%d").date()
     except ValueError as exc:
         raise ImportError_(f"fila {fila}: 'fecha_dato' debe ser YYYY-MM-DD ('{raw}')") from exc
+
+
+#: Un segmento de la columna `tramos`: `desde-hasta:tasa`, con `hasta` vacío
+#: para el tramo sin techo. Montos enteros en pesos.
+_SEGMENTO_TRAMO = re.compile(r"(\d+)-(\d*):(\d+(?:\.\d+)?)")
+
+
+def _tramos(raw: str | None, tasa_nominal: Decimal, fila: int) -> tuple[Tramo, ...]:
+    """Parsea la columna opcional `tramos`: `0-30000:13.00;30000-:6.30`.
+
+    Pasa por `validar_escalera` —el constructor único— y exige que la
+    `tasa_nominal` de la fila sea la del primer tramo: la titular ES el tramo
+    1, y una fila que diga otra cosa es una captura incoherente, no una
+    interpretación posible.
+    """
+    valor = (raw or "").strip()
+    if not valor:
+        return ()
+
+    tramos: list[Tramo] = []
+    for segmento in valor.split(";"):
+        limpio = segmento.strip()
+        cotejo = _SEGMENTO_TRAMO.fullmatch(limpio)
+        if cotejo is None:
+            raise ImportError_(
+                f"fila {fila}: tramo '{limpio}' no sigue el formato desde-hasta:tasa "
+                f"(hasta vacío = sin techo), p. ej. 0-30000:13.00;30000-:6.30"
+            )
+        desde, hasta, tasa = cotejo.groups()
+        tramos.append(
+            Tramo(
+                desde=Decimal(desde),
+                hasta=Decimal(hasta) if hasta else None,
+                tasa_nominal=Decimal(tasa),
+            )
+        )
+
+    try:
+        escalera = validar_escalera(tramos)
+    except ValueError as exc:
+        raise ImportError_(f"fila {fila}: {exc}") from exc
+
+    if escalera and escalera[0].tasa_nominal != tasa_nominal:
+        raise ImportError_(
+            f"fila {fila}: la tasa_nominal ({tasa_nominal}) debe ser la del primer "
+            f"tramo ({escalera[0].tasa_nominal}) — la titular ES el tramo 1"
+        )
+    return escalera
 
 
 async def import_csv(path: Path, *, dry_run: bool = False) -> ImportReport:
@@ -162,19 +212,33 @@ async def import_csv(path: Path, *, dry_run: bool = False) -> ImportReport:
                 report.duplicadas += 1
                 continue
 
-            session.add(
-                Tasa(
-                    producto_id=producto.id,
-                    tasa_nominal=tasa_nominal,
-                    gat_nominal=_decimal(fila.get("gat_nominal", ""), "gat_nominal", numero),
-                    gat_real=_decimal(fila.get("gat_real", ""), "gat_real", numero),
-                    fecha_dato=fecha_dato,
-                    fuente=fuente,
-                    fuente_url=(fila.get("fuente_url") or "").strip() or None,
-                    estado=estado,
-                    notas=(fila.get("notas") or "").strip() or None,
-                )
+            # La escalera se rechaza por fila, no abortando el archivo entero:
+            # una captura incoherente de tramos es un error de esa observación,
+            # como un producto desconocido, no un CSV mal formado.
+            try:
+                tramos = _tramos(fila.get("tramos"), tasa_nominal, numero)
+            except ImportError_ as exc:
+                report.errores.append(str(exc))
+                continue
+
+            tasa = Tasa(
+                producto_id=producto.id,
+                tasa_nominal=tasa_nominal,
+                gat_nominal=_decimal(fila.get("gat_nominal", ""), "gat_nominal", numero),
+                gat_real=_decimal(fila.get("gat_real", ""), "gat_real", numero),
+                fecha_dato=fecha_dato,
+                fuente=fuente,
+                fuente_url=(fila.get("fuente_url") or "").strip() or None,
+                estado=estado,
+                notas=(fila.get("notas") or "").strip() or None,
             )
+            if tramos:
+                # El cascade de la relación persiste a los hijos con la madre.
+                tasa.tramos = [
+                    TramoTasa(desde=t.desde, hasta=t.hasta, tasa_nominal=t.tasa_nominal)
+                    for t in tramos
+                ]
+            session.add(tasa)
             existentes.add(clave)
             report.creadas += 1
             report.por_estado[estado.value] = report.por_estado.get(estado.value, 0) + 1
@@ -438,9 +502,9 @@ async def retirar_sustituidas(path: Path, *, dry_run: bool = False) -> ReporteRe
 
 
 #: Backoff temporal para una corrida interactiva. Los 300 y 1200 segundos que
-#: usa el job están calibrados para algo desatendido a las seis de la mañana;
-#: delante de una terminal son veinticinco minutos mirando un cursor. Se
-#: reintenta una vez, corto, y lo que no salga se reporta para la próxima.
+#: usa el job están calibrados para algo desatendido y de rejilla; delante de
+#: una terminal son veinticinco minutos mirando un cursor. Se reintenta una
+#: vez, corto, y lo que no salga se reporta para la próxima.
 ESPERAS_INTERACTIVAS: tuple[float, ...] = (20.0,)
 
 
@@ -452,10 +516,10 @@ async def correr_fetch(
 ) -> ReporteCorrida:
     """Corre el pipeline de lectura desde la terminal.
 
-    Es el mismo código que ejecuta el job semanal: si fueran dos, la corrida
-    a mano acabaría comportándose distinto de la del lunes. Los filtros
-    `--solo-navegador` / `--sin-navegador` son de depuración — repetir una
-    mitad de la corrida sin pagar la otra.
+    Es el mismo código que ejecuta el job programado: si fueran dos, la
+    corrida a mano acabaría comportándose distinto de la programada. Los
+    filtros `--solo-navegador` / `--sin-navegador` son de depuración —
+    repetir una mitad de la corrida sin pagar la otra.
 
     Lo único que cambia es la **espera**, y por una razón de quién mira: un job
     desatendido puede permitirse esperar veinte minutos a que un sitio deje de
@@ -481,7 +545,7 @@ async def correr_fetch(
     fetcher = Fetcher(transportes, esperas_backoff_s=esperas)
 
     # La corrida deja su fila en `job_runs` aunque la dispare una persona —
-    # una pasada local es una corrida igual de real que la del lunes— pero
+    # una pasada local es una corrida igual de real que la programada— pero
     # bajo su propio id: `cli revisiones list` agrega los huecos de las
     # corridas recientes de ambos, y así ninguna borra lo que vio la otra.
     async with registrar_corrida(JOB_ID_FETCH_MANUAL) as corrida:

@@ -28,6 +28,7 @@ from api.services.mappers import (
     cobertura_de,
     gat_schema,
     procedencia,
+    tramos_schema,
 )
 from api.services.tasas_vigentes import tasas_vigentes_por_producto
 from domain.models import from_orm_indicadores
@@ -124,6 +125,8 @@ async def detalle(
                 ),
                 gat=gat_schema(gat) if gat else None,
                 procedencia=procedencia(tasa) if tasa else None,
+                escalonada=bool(tasa.tramos) if tasa else False,
+                tramos=tramos_schema(tasa) if tasa else [],
             )
         )
 

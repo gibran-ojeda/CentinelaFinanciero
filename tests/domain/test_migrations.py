@@ -25,8 +25,11 @@ pytestmark = pytest.mark.requires_docker
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-#: Todas las tablas del esquema, más la bitácora de Alembic.
-TABLAS_ESPERADAS = {
+#: Las tablas del esquema inicial (`4dc69f00aae0`). Un rollback de UNA
+#: revisión puede llevarse la tabla que esa migración creó, pero jamás estas:
+#: son la vara del test de reversibilidad, que no puede usar el set completo
+#: sin nombrar qué hace la última migración.
+TABLAS_INICIALES = {
     "instituciones",
     "productos",
     "tasas",
@@ -41,6 +44,10 @@ TABLAS_ESPERADAS = {
     "config_versions",
     "job_runs",
 }
+
+#: Todas las tablas del esquema en head: las iniciales más las que añadieron
+#: migraciones posteriores. Toda tabla nueva se registra aquí.
+TABLAS_ESPERADAS = TABLAS_INICIALES | {"tramos_tasas"}
 
 
 @pytest.fixture
@@ -133,8 +140,10 @@ def test_the_last_migration_is_reversible_on_its_own(sync_url: str) -> None:
     antes = _foto_del_esquema(sync_url)
 
     command.downgrade(config, "-1")
-    # Un paso atrás no es un `downgrade base`: el resto del esquema sigue en pie.
-    assert TABLAS_ESPERADAS <= _tablas(sync_url)
+    # Un paso atrás no es un `downgrade base`: el resto del esquema sigue en
+    # pie. La vara son las tablas iniciales — la última migración puede haber
+    # creado una tabla y su rollback legítimamente se la lleva.
+    assert TABLAS_INICIALES <= _tablas(sync_url)
 
     command.upgrade(config, "head")
     assert _foto_del_esquema(sync_url) == antes

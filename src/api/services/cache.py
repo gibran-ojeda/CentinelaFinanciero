@@ -2,7 +2,7 @@
 
 El comparador es la vista más pedida y la más cara: recorre el catálogo, une
 tasas vigentes y banderas, y calcula métricas por fila. Como los datos cambian
-en ciclo semanal —o diario, cuando la ingesta de Banxico entre en juego— y las
+unas pocas veces al día como mucho —las ingestas invalidan al publicar— y las
 consultas se repiten muchísimo, cachearla es la optimización obvia.
 
 Dos cuidados que no lo son tanto:
@@ -38,7 +38,7 @@ log = get_logger(__name__)
 #: todo el cache de golpe cambiando este número cuando cambie la forma de la
 #: respuesta — un despliegue nuevo no puede servir respuestas con el esquema
 #: anterior.
-PREFIJO = "centinela:comparador:v1:"
+PREFIJO = "centinela:comparador:v2:"
 PATRON = f"{PREFIJO}*"
 
 

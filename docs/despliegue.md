@@ -45,7 +45,7 @@ git clone https://github.com/gibran-ojeda/centinela-financiero.git ~/centinela-f
 | `API_READ_KEY`, `API_ADMIN_KEY` | `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `SITE_URL` | `https://centinelafinanciero.lat` |
 | `BANXICO_TOKEN` | token del SIE ([solicitud](https://www.banxico.org.mx/SieAPIRest/service/v1/token)). Opcional: sin él, `banxico_sync_series` se marca OMITIDO y la UDI cae al valor de respaldo congelado |
-| `DEEPSEEK_API_KEY` | llave de DeepSeek. Opcional: sin ella, el fetch L2 de los lunes falla (FALLIDO en `job_runs`, no en silencio) |
+| `DEEPSEEK_API_KEY` | llave de DeepSeek. Opcional: sin ella, el fetch L2 (cada 4 horas) falla (FALLIDO en `job_runs`, no en silencio) |
 
 También existen las **variables** de repo (Settings → Secrets and variables →
 Actions → pestaña *Variables* — no son secretos):
@@ -171,11 +171,19 @@ medición de abajo antes del merge**.
 Once de las dieciocho fuentes de tasas se pintan con JavaScript. Chromium
 viaja ahora en la imagen (capa propia del [Dockerfile](../docker/app/Dockerfile),
 `playwright install --with-deps chromium` con `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`
-para que el uid sin privilegios pueda leerlo), el job del lunes arma su cadena
+para que el uid sin privilegios pueda leerlo), el job de tasas arma su cadena
 httpx + navegador y cubre las dieciocho fuentes, y el límite del scheduler
 subió a **768M** en el overlay. La pasada semanal desde la laptop deja de ser
 un modo de operación; los flags `--solo-navegador` / `--sin-navegador` de la
 CLI quedan como filtros de depuración.
+
+> **Cadencia (2026-08-01):** el job corre **cada 4 horas** (rejilla ..:45)
+> para probar el ciclo completo; el destino es bajarlo a diario editando el
+> trigger en `src/scheduler/registry.py`. Chromium levanta ahora seis veces
+> al día en vez de una a la semana — vigilar `free -h` (`available`) los
+> primeros días. El costo LLM no se multiplica: el cortocircuito por hash
+> hace gratis las corridas sin cambios, y el techo `llm_cost_daily_limit_usd`
+> es diario y compartido (agotado ⇒ OMITIDO, no FALLIDO).
 
 **El repliegue, en dos niveles:**
 

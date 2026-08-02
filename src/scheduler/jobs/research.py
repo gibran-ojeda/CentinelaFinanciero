@@ -1,7 +1,7 @@
 """Job `tasas_research_abierta`: el nivel 3, los miércoles.
 
 Dos días después del fetch dirigido, y a propósito: para entonces ya se sabe
-qué instituciones quedaron sin dato fresco el lunes, que son exactamente las
+qué instituciones siguen sin dato fresco tras el fetch, que son exactamente las
 que este job investiga. Correrlo antes sería buscar lo que el nivel 2 iba a
 traer más barato.
 

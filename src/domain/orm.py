@@ -242,6 +242,16 @@ class Tasa(TimestampMixin, Base):
     notas: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     producto: Mapped[Producto] = relationship(back_populates="tasas")
+    #: `selectin` y no lazy: bajo async, un acceso perezoso fuera de la sesión
+    #: revienta con MissingGreenlet. Con selectin, todo `select(Tasa)` — la
+    #: ventana de vigencia incluida — trae sus tramos en una segunda consulta
+    #: automática y ningún consumidor cambia de forma.
+    tramos: Mapped[list[TramoTasa]] = relationship(
+        back_populates="tasa",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="TramoTasa.desde",
+    )
 
     __table_args__ = (
         _enum_check("fuente", FuenteTasa),
@@ -250,6 +260,49 @@ class Tasa(TimestampMixin, Base):
         # Idempotencia de la carga: reimportar el mismo CSV no duplica.
         UniqueConstraint("producto_id", "fecha_dato", "fuente", name="uq_tasa_observacion"),
         Index("ix_tasas_vigentes", "producto_id", "estado", "fecha_dato"),
+    )
+
+
+class TramoTasa(Base):
+    """Tramo de saldo de una observación de tasa.
+
+    Openbank paga 13% por los primeros $30,000 y 6.3% de ahí a $1,000,000: una
+    sola fila de `tasas` no puede decirlo sin mentir en uno de los dos tramos.
+    La escalera cuelga de la **observación**, no del producto: es un snapshot
+    append-only por herencia — nunca se edita, se supersede la `Tasa` entera y
+    la historia de escaleras queda auditable.
+
+    Semántica que hace cumplir `metrics.tramos.validar_escalera` (el no-solape
+    y la contigüidad no caben en un CHECK portable):
+
+    - 0 filas hijas = tasa plana; `Tasa.tasa_nominal` aplica a todo el saldo.
+    - ≥ 2 filas = escalera completa: piso 0, contigua, y solo el último tramo
+      sin techo. `Tasa.tasa_nominal` es SIEMPRE la tasa del primer tramo.
+    - La GAT se queda en `Tasa`: es la revelación regulada del titular; una
+      «GAT ponderada» sería una métrica inventada.
+    """
+
+    __tablename__ = "tramos_tasas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tasa_id: Mapped[int] = mapped_column(
+        ForeignKey("tasas.id", ondelete="CASCADE"), nullable=False
+    )
+    desde: Mapped[Decimal] = mapped_column(Dinero, nullable=False)
+    """Piso del tramo en MXN, inclusive."""
+
+    hasta: Mapped[Decimal | None] = mapped_column(Dinero, nullable=True)
+    """Techo exclusivo en MXN. NULL = sin techo publicado (infinito)."""
+
+    tasa_nominal: Mapped[Decimal] = mapped_column(Porcentaje, nullable=False)
+
+    tasa: Mapped[Tasa] = relationship(back_populates="tramos")
+
+    __table_args__ = (
+        CheckConstraint("desde >= 0", name="ck_tramo_desde_no_negativo"),
+        CheckConstraint("hasta IS NULL OR hasta > desde", name="ck_tramo_hasta_mayor_que_desde"),
+        CheckConstraint("tasa_nominal >= 0", name="ck_tramo_tasa_no_negativa"),
+        UniqueConstraint("tasa_id", "desde", name="uq_tramo_desde"),
     )
 
 

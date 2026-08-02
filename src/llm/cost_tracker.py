@@ -1,9 +1,12 @@
 """Techo de gasto diario en llamadas al LLM (decisión D2: $1 USD/día).
 
-No es un presupuesto operativo. Con ~18 páginas semanales y un modelo económico
-lo esperado son **centavos por semana**: dos órdenes de magnitud por debajo del
-techo. El límite existe para que un bucle —un reintento que no converge, un job
-que se re-dispara— no se coma la cuenta antes de que nadie lo note.
+No es un presupuesto operativo. Con ~18 fuentes por corrida —y el
+cortocircuito por hash pagando solo las páginas que cambiaron— lo esperado
+siguen siendo **centavos**: dos órdenes de magnitud por debajo del techo,
+aunque el fetch corra cada 4 horas. El límite existe para que un bucle —un
+reintento que no converge, un job que se re-dispara, una página que mete
+tokens dinámicos y rompe el hash— no se coma la cuenta antes de que nadie lo
+note.
 
 El acumulado vive en Redis con una llave por día y TTL de 48 h, así que rota
 solo. Se incrementa con `INCRBYFLOAT`, que es atómico: dos extracciones en

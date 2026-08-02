@@ -35,12 +35,15 @@ from api.services.mappers import (
     cobertura_de,
     institucion_resumen,
     procedencia,
+    tramos_de,
+    tramos_schema,
 )
 from api.services.tasas_vigentes import tasas_vigentes_por_producto
 from domain.models import from_orm_producto
 from domain.orm import Bandera, Producto
 from metrics.coverage import resolver_cobertura
 from metrics.real import desglose_cascada
+from metrics.tramos import escalera_de, tasa_ponderada
 
 router = APIRouter(prefix="/api/v1", tags=["calculadora"])
 
@@ -127,9 +130,14 @@ async def calcular(
         # router: se pasa por el modelo en vez de repetir la regla aquí.
         plazo = solicitud.plazo_dias or from_orm_producto(producto).plazo_efectivo_dias
 
+        # Ponderar primero, cascada después: en un producto escalonado la tasa
+        # que este monto gana de verdad es la ponderada de su escalera, y toda
+        # la cascada debe salir de ella para que los importes cuadren con la
+        # tasa mostrada. En un producto plano es la titular, sin cambio.
+        aplicada = tasa_ponderada(solicitud.monto, escalera_de(tasa.tasa_nominal, tramos_de(tasa)))
         cascada = desglose_cascada(
             monto=solicitud.monto,
-            tasa_nominal=tasa.tasa_nominal,
+            tasa_nominal=aplicada,
             instrumento=producto.instrumento,
             plazo_dias=plazo,
             inflacion_anual=inflacion,
@@ -147,6 +155,8 @@ async def calcular(
                 monto_expuesto=cobertura.monto_expuesto(solicitud.monto),
                 banderas=[bandera_desde_orm(b) for b in banderas.get(producto.institucion_id, [])],
                 procedencia=procedencia(tasa),
+                escalonada=bool(tasa.tramos),
+                tramos=tramos_schema(tasa),
             )
         )
 

@@ -1,8 +1,14 @@
-"""Job `tasas_fetch_dirigido`: el ciclo semanal de tasas, automatizado.
+"""Job `tasas_fetch_dirigido`: el ciclo de tasas, automatizado.
 
-Lunes de madrugada. Recorre las fuentes curadas, lee lo que cada institución
-publica, y deja lo que cambió publicado o en la cola de revisión según la
-tolerancia. Es el nivel 2 de §15 del foundation.
+Cada cuatro horas (rejilla ..:45). Recorre las fuentes curadas, lee lo que
+cada institución publica, y deja lo que cambió publicado o en la cola de
+revisión según la tolerancia. Es el nivel 2 de §15 del foundation.
+
+La cadencia alta no multiplica el costo: el pipeline cortocircuita por hash
+de contenido, así que una página idéntica a la corrida anterior no llama al
+LLM — la mayoría de las corridas del día son gratis. Las seis comparten el
+techo diario `llm_cost_daily_limit_usd`; agotado, las siguientes quedan
+OMITIDO, no FALLIDO.
 
 Doble gate como el resto: `SCHEDULER_TASAS_ENABLED` decide si se registra, y
 `tasas_fetch_enabled` del ConfigStore lo apaga en caliente sin reiniciar nada.
@@ -37,7 +43,7 @@ def _armar_fetcher() -> Fetcher:
     vive aquí y no en el default de `Fetcher()` a propósito: sin él, apagar
     el gate ensancharía la consulta a las fuentes JS con una cadena que no
     puede renderizarlas, y las once contarían como «vacías» con corrida
-    EXITOSA — el fallo silencioso semanal.
+    EXITOSA — el fallo silencioso, seis veces al día.
     """
     agente = settings.fetch_user_agent
     transportes: list[Transporte] = [TransporteHttpx(user_agent=agente)]
@@ -88,7 +94,7 @@ async def tasas_fetch_dirigido() -> None:
 
         # Sólo si algo llegó a publicarse: la cola de revisión no cambia lo
         # que el comparador sirve, así que invalidar por ella sería tirar el
-        # cache cada lunes sin motivo.
+        # cache en cada corrida sin motivo.
         if reporte.publicadas:
             await cache.invalidar()
 

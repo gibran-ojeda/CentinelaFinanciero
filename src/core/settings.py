@@ -126,10 +126,11 @@ class Settings(BaseSettings):
     cache_comparador_ttl_seconds: int = 300
     banderas_recompute_enabled: bool = True
     tasas_fetch_enabled: bool = True
-    #: Chromium vive en la imagen y el job del lunes lee las dieciocho
-    #: fuentes. `true` es ahora el repliegue: apaga el navegador sin deploy
-    #: (la cadena vuelve a solo-httpx y la consulta a las fuentes sin JS) si
-    #: la RAM del VPS protesta. Ver «Navegador en el VPS» en docs/despliegue.md.
+    #: Chromium vive en la imagen y el job de tasas (cada 4 horas) lee las
+    #: dieciocho fuentes. `true` es ahora el repliegue: apaga el navegador sin
+    #: deploy (la cadena vuelve a solo-httpx y la consulta a las fuentes sin
+    #: JS) si la RAM del VPS protesta. Ver «Navegador en el VPS» en
+    #: docs/despliegue.md.
     tasas_fetch_solo_sin_js: bool = False
     #: Kill-switch caliente de la ingesta de Banxico. Sin `BANXICO_TOKEN` el
     #: job se omite igualmente, así que esto es para apagarla teniéndolo.

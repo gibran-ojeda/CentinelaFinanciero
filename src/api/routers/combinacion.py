@@ -28,6 +28,7 @@ from api.schemas import (
     RespuestaCombinacion,
     SolicitudCombinacion,
     SolicitudOptimizador,
+    TramoSchema,
 )
 from api.services.combinacion import Catalogo, cargar_catalogo, narrativa
 from api.services.mappers import (
@@ -59,6 +60,11 @@ def _asignacion_schema(asignacion: Asignacion, catalogo: Catalogo) -> Asignacion
         monto=asignacion.monto,
         ten=asignacion.ten,
         cascada=CascadaSchema.model_validate(asignacion.cascada, from_attributes=True),
+        escalonada=asignacion.candidato.escalonada,
+        tramos=[
+            TramoSchema(desde=t.desde, hasta=t.hasta, tasa_nominal=t.tasa_nominal)
+            for t in asignacion.candidato.tramos
+        ],
         cobertura=cobertura_schema(asignacion.cobertura),
         monto_cubierto=asignacion.monto_cubierto,
         monto_expuesto=asignacion.monto_expuesto,

@@ -44,11 +44,12 @@ async def test_a_source_without_data_is_not_out_of_sla(api_lectura: AsyncClient)
 async def test_reports_the_latest_date_and_the_count(api_lectura: AsyncClient) -> None:
     cuerpo = (await api_lectura.get("/api/v1/meta/frescura")).json()
 
-    # Cinco: las gubernamentales verificadas contra fuente primaria. Las otras
-    # treinta del catálogo son de agregador y no cuentan.
+    # Seis: las gubernamentales verificadas contra fuente primaria más la
+    # escalera de Openbank. Las otras veintinueve del catálogo son de
+    # agregador y no cuentan.
     manual = next(f for f in cuerpo["fuentes"] if f["fuente"] == FuenteTasa.MANUAL)
-    assert manual["observaciones"] == 5
-    assert manual["ultima_actualizacion"] == "2026-07-25"
+    assert manual["observaciones"] == 6
+    assert manual["ultima_actualizacion"] == "2026-08-01"
     # Informativa: se reporta con fecha y conteo, sin SLA que la ponga en rojo.
     assert manual["sla_dias"] is None
     assert manual["dentro_de_sla"] is True

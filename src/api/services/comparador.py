@@ -34,6 +34,8 @@ from api.services.mappers import (
     gat_schema,
     institucion_resumen,
     procedencia,
+    tramos_de,
+    tramos_schema,
 )
 from api.services.tasas_vigentes import tasas_vigentes_por_producto
 from domain.enums import CategoriaInstitucion, Liquidez, TipoProducto, TipoSeguro
@@ -41,6 +43,7 @@ from domain.orm import Bandera, Institucion, Producto, Tasa
 from metrics.coverage import resolver_cobertura
 from metrics.gat import Gat, resolver_gat
 from metrics.ten import ten
+from metrics.tramos import escalera_de, tasa_ponderada
 
 
 class OrdenComparador(StrEnum):
@@ -88,6 +91,10 @@ class _Candidato:
     gat: Gat
     cobertura_mxn: Decimal | None
     banderas: list[Bandera] = field(default_factory=list)
+    #: Solo cuando la petición trae monto: la nominal ponderada de la escalera
+    #: a ese monto y su TEN. En productos planos coinciden con las titulares.
+    tasa_efectiva: Decimal | None = None
+    ten_efectiva: Decimal | None = None
 
 
 def _aplicar_filtros_sql(
@@ -127,11 +134,18 @@ def _aplicar_filtros_sql(
 
 
 def _clave_orden(candidato: _Candidato, orden: OrdenComparador) -> Decimal:
+    # Con monto consultado mandan las efectivas: ordenar por la titular
+    # pondría el «13% hasta $30 mil» de un escalonado por encima de un 9%
+    # plano incluso para quien invierte $500,000. Sin monto, las titulares.
     match orden:
         case OrdenComparador.TASA_NOMINAL:
-            return candidato.tasa.tasa_nominal
+            return (
+                candidato.tasa_efectiva
+                if candidato.tasa_efectiva is not None
+                else candidato.tasa.tasa_nominal
+            )
         case OrdenComparador.TEN:
-            return candidato.ten
+            return candidato.ten_efectiva if candidato.ten_efectiva is not None else candidato.ten
         case OrdenComparador.GAT:
             # Usa la publicada y cae a la equivalente calculada. Ambas están ya
             # resueltas en `candidato.gat`, marcadas con su origen.
@@ -190,6 +204,18 @@ async def construir_comparador(
             continue
 
         cobertura = resolver_cobertura(producto.institucion.tipo_seguro, contexto.valor_udi)
+
+        # Con monto en la petición, TODAS las filas llevan su efectiva — en
+        # las planas coincide con la titular. La uniformidad simplifica el
+        # orden y evita que el frontend mezcle columnas de dos semánticas.
+        tasa_efectiva: Decimal | None = None
+        ten_efectiva: Decimal | None = None
+        if filtros.monto is not None:
+            tasa_efectiva = tasa_ponderada(
+                filtros.monto, escalera_de(tasa.tasa_nominal, tramos_de(tasa))
+            )
+            ten_efectiva = ten(tasa_efectiva, producto.instrumento, contexto.params_fiscales)
+
         candidatos.append(
             _Candidato(
                 producto=producto,
@@ -203,6 +229,8 @@ async def construir_comparador(
                 ),
                 cobertura_mxn=cobertura.limite_mxn,
                 banderas=banderas_por_institucion.get(producto.institucion_id, []),
+                tasa_efectiva=tasa_efectiva,
+                ten_efectiva=ten_efectiva,
             )
         )
 
@@ -231,6 +259,10 @@ async def construir_comparador(
             cobertura=cobertura_de(c.producto.institucion, contexto.valor_udi),
             banderas=[bandera_desde_orm(b) for b in c.banderas],
             procedencia=procedencia(c.tasa),
+            escalonada=bool(c.tasa.tramos),
+            tramos=tramos_schema(c.tasa),
+            tasa_efectiva=c.tasa_efectiva,
+            ten_efectiva=c.ten_efectiva,
         )
         for c in candidatos
     ]

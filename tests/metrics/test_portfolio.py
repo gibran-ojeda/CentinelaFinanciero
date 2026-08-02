@@ -26,6 +26,7 @@ from metrics.portfolio import (
     normalizar,
     optimizar,
 )
+from metrics.tramos import Tramo
 
 #: Redonda a propósito: hace que los topes salgan en números que se pueden
 #: comprobar a mano (IPAB = $4,000,000; PROSOFIPO = $250,000).
@@ -569,3 +570,178 @@ def test_the_optimiser_output_feeds_the_evaluator(fiscal_2026: ParametrosFiscale
         == combinacion.isr_retenido + combinacion.efecto_inflacion + combinacion.ganancia_real
     )
     assert sum(a.porcentaje for a in combinacion.asignaciones) == Decimal("100")
+
+
+# ─── Optimizador con escaleras ────────────────────────────────
+
+#: El caso Openbank: 13% los primeros $30,000, 6.3% de ahí a $1,000,000.
+ESCALERA_OPENBANK = (
+    Tramo(desde=Decimal("0"), hasta=Decimal("30000"), tasa_nominal=Decimal("13.00")),
+    Tramo(desde=Decimal("30000"), hasta=Decimal("1000000"), tasa_nominal=Decimal("6.30")),
+)
+
+ESCALONADO = Candidato(
+    producto_id=7,
+    institucion_id=700,
+    tipo_seguro=TipoSeguro.IPAB,
+    instrumento=TipoInstrumento.DEPOSITO_BANCARIO,
+    tasa_nominal=Decimal("13.00"),
+    plazo_dias=None,
+    monto_minimo=Decimal("0"),
+    tramos=ESCALERA_OPENBANK,
+)
+PLANO_MEDIO = Candidato(
+    producto_id=8,
+    institucion_id=800,
+    tipo_seguro=TipoSeguro.IPAB,
+    instrumento=TipoInstrumento.DEPOSITO_BANCARIO,
+    tasa_nominal=Decimal("9.00"),
+    plazo_dias=None,
+    monto_minimo=Decimal("0"),
+)
+
+
+def test_the_best_marginal_segment_crosses_products(fiscal_2026: ParametrosFiscales) -> None:
+    """Lleno el tramo alto, el siguiente peso se va al otro emisor.
+
+    El 13% de Openbank solo existe para $30,000; a partir de ahí su marginal
+    (6.3%) pierde contra un 9% plano. El greedy clásico —una pasada por
+    producto— habría dejado los $100,000 enteros en el escalonado.
+    """
+    reparto = _optimizar([ESCALONADO, PLANO_MEDIO], fiscal_2026)
+
+    por_id = {c.producto_id: m for c, m in reparto.asignaciones}
+    assert por_id[ESCALONADO.producto_id] == Decimal("30000.00")
+    assert por_id[PLANO_MEDIO.producto_id] == Decimal("70000.00")
+    # El escalonado abrió primero: su tramo alto era la mejor oferta inicial.
+    assert reparto.candidatos[0].producto_id == ESCALONADO.producto_id
+
+
+def test_a_minimum_above_the_first_ceiling_buys_the_lower_tier_too(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    """La oferta de entrada es la TEN efectiva del mínimo, no la del tramo 1.
+
+    Con mínimo de $50,000 y tramo alto de $30,000, entrar cuesta comprar
+    también $20,000 del tramo bajo: la entrada ofrece 10.32% (no 13%), aún
+    mejor que el 10% plano de al lado — pero el marginal siguiente ya no.
+    """
+    escalonado_con_minimo = Candidato(
+        producto_id=9,
+        institucion_id=900,
+        tipo_seguro=TipoSeguro.IPAB,
+        instrumento=TipoInstrumento.DEPOSITO_BANCARIO,
+        tasa_nominal=Decimal("13.00"),
+        plazo_dias=None,
+        monto_minimo=Decimal("50000"),
+        tramos=ESCALERA_OPENBANK,
+    )
+    plano_diez = Candidato(
+        producto_id=10,
+        institucion_id=1000,
+        tipo_seguro=TipoSeguro.IPAB,
+        instrumento=TipoInstrumento.DEPOSITO_BANCARIO,
+        tasa_nominal=Decimal("10.00"),
+        plazo_dias=None,
+        monto_minimo=Decimal("0"),
+    )
+    reparto = _optimizar(
+        [escalonado_con_minimo, plano_diez], fiscal_2026, monto_total=Decimal("200000")
+    )
+
+    por_id = {c.producto_id: m for c, m in reparto.asignaciones}
+    assert por_id[escalonado_con_minimo.producto_id] == Decimal("50000.00")
+    assert por_id[plano_diez.producto_id] == Decimal("150000.00")
+
+
+def test_a_product_that_cannot_reach_its_minimum_is_left_out(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    """Proponer una asignación por debajo del mínimo es proponer algo incontratable."""
+    sofipo_llena = Candidato(
+        producto_id=11,
+        institucion_id=1100,
+        tipo_seguro=TipoSeguro.PROSOFIPO,
+        instrumento=TipoInstrumento.DEPOSITO_SOFIPO,
+        tasa_nominal=Decimal("12.00"),
+        plazo_dias=None,
+        monto_minimo=Decimal("0"),
+    )
+    banco_exigente = Candidato(
+        producto_id=12,
+        institucion_id=1200,
+        tipo_seguro=TipoSeguro.IPAB,
+        instrumento=TipoInstrumento.DEPOSITO_BANCARIO,
+        tasa_nominal=Decimal("11.00"),
+        plazo_dias=None,
+        monto_minimo=Decimal("80000"),
+    )
+    # La SOFIPO llena su tope de $250,000 y quedan $50,000: menos que el
+    # mínimo del banco, así que el banco no entra y el remanente se declara.
+    reparto = _optimizar(
+        [sofipo_llena, banco_exigente], fiscal_2026, monto_total=Decimal("300000")
+    )
+
+    assert {c.producto_id for c in reparto.candidatos} == {sofipo_llena.producto_id}
+    assert reparto.monto_no_asignado == Decimal("50000.00")
+
+
+def test_an_institution_cap_cuts_a_segment_short(fiscal_2026: ParametrosFiscales) -> None:
+    """El tope del emisor manda incluso a mitad de un tramo."""
+    escalonada_sofipo = Candidato(
+        producto_id=13,
+        institucion_id=1300,
+        tipo_seguro=TipoSeguro.PROSOFIPO,
+        instrumento=TipoInstrumento.DEPOSITO_SOFIPO,
+        tasa_nominal=Decimal("13.00"),
+        plazo_dias=None,
+        monto_minimo=Decimal("0"),
+        tramos=(
+            Tramo(desde=Decimal("0"), hasta=Decimal("300000"), tasa_nominal=Decimal("13.00")),
+            Tramo(desde=Decimal("300000"), hasta=None, tasa_nominal=Decimal("6.00")),
+        ),
+    )
+    reparto = _optimizar([escalonada_sofipo], fiscal_2026, monto_total=Decimal("400000"))
+
+    # PROSOFIPO con UDI=10 cubre $250,000: el tramo de $300,000 se corta ahí.
+    assert reparto.asignaciones == [(escalonada_sofipo, Decimal("250000.00"))]
+    assert reparto.monto_no_asignado == Decimal("150000.00")
+
+
+def test_a_rising_ladder_is_excluded_from_the_optimiser(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    """El greedy marginal solo es óptimo con escaleras no crecientes."""
+    creciente = Candidato(
+        producto_id=14,
+        institucion_id=1400,
+        tipo_seguro=TipoSeguro.IPAB,
+        instrumento=TipoInstrumento.DEPOSITO_BANCARIO,
+        tasa_nominal=Decimal("5.00"),
+        plazo_dias=None,
+        monto_minimo=Decimal("0"),
+        tramos=(
+            Tramo(desde=Decimal("0"), hasta=Decimal("30000"), tasa_nominal=Decimal("5.00")),
+            Tramo(desde=Decimal("30000"), hasta=None, tasa_nominal=Decimal("9.00")),
+        ),
+    )
+    reparto = _optimizar([creciente, CETES], fiscal_2026)
+
+    assert creciente.producto_id not in {c.producto_id for c in reparto.candidatos}
+    assert reparto.montos == [Decimal("100000.00")]
+
+
+def test_evaluar_reparto_blends_tiered_candidates(fiscal_2026: ParametrosFiscales) -> None:
+    """TEN y cascada de una asignación escalonada salen de la ponderada."""
+    combinacion = evaluar_reparto(
+        [ESCALONADO],
+        [Decimal("50000")],
+        horizonte_dias=HORIZONTE,
+        inflacion_anual=Decimal("4.5"),
+        params=fiscal_2026,
+        valor_udi=UDI,
+    )
+
+    asignacion = combinacion.asignaciones[0]
+    assert asignacion.cascada.tasa_nominal == Decimal("10.3200")
+    assert asignacion.ten == Decimal("9.4200")

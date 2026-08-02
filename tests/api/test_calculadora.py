@@ -225,6 +225,36 @@ async def test_compares_several_products_in_the_requested_order(
     assert [r["producto_id"] for r in cuerpo["resultados"]] == ids
 
 
+# ─── Tramos por saldo ─────────────────────────────────────────
+
+
+async def test_a_tiered_product_blends_its_cascade(api_lectura: AsyncClient) -> None:
+    """Ponderar primero, cascada después.
+
+    A $50,000 la tasa que Openbank paga de verdad es (30,000 × 13 + 20,000 ×
+    6.3) / 50,000 = 10.32%, y toda la cascada debe salir de ella para que los
+    importes cuadren con la tasa mostrada.
+    """
+    cuerpo = await _calcular(
+        api_lectura, monto="50000", producto_ids=[await _producto_id("openbank-vista")]
+    )
+
+    resultado = cuerpo["resultados"][0]
+    assert resultado["escalonada"] is True
+    assert len(resultado["tramos"]) == 2
+    assert Decimal(resultado["cascada"]["tasa_nominal"]) == Decimal("10.3200")
+    assert Decimal(resultado["cascada"]["ten"]) == Decimal("9.4200")
+
+
+async def test_an_amount_inside_the_first_tier_pays_the_headline(
+    api_lectura: AsyncClient,
+) -> None:
+    cuerpo = await _calcular(
+        api_lectura, monto="20000", producto_ids=[await _producto_id("openbank-vista")]
+    )
+    assert Decimal(cuerpo["resultados"][0]["cascada"]["tasa_nominal"]) == Decimal("13.0000")
+
+
 async def test_a_higher_nominal_rate_can_lose_to_a_lower_one(
     api_lectura: AsyncClient,
 ) -> None:

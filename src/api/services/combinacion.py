@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.dependencies import ContextoMercado
+from api.services.mappers import tramos_de
 from api.services.tasas_vigentes import tasas_vigentes_por_producto
 from domain.enums import Severidad
 from domain.orm import Bandera, Institucion, Producto, Tasa
@@ -110,6 +111,7 @@ async def cargar_catalogo(session: AsyncSession, contexto: ContextoMercado) -> C
             tiene_bandera_roja=any(
                 b.severidad is Severidad.ROJA for b in banderas.get(producto.institucion_id, [])
             ),
+            tramos=tramos_de(tasas[producto.id]),
         )
         for producto in productos
         if producto.id in tasas
