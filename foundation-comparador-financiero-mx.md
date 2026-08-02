@@ -528,10 +528,6 @@ Cada fuente tiene un **SLA de frescura**; si se excede, `frescura_check` genera 
 
 ## 17. Estructura del Repositorio
 
-> El directorio del repositorio sigue llamándose `brujula-financiera` por el
-> nombre original del proyecto; renombrarlo es un movimiento independiente del
-> rebrand y no afecta a nada del código, que ya no lo menciona.
-
 ```
 centinela-financiero/
 ├── foundation-comparador-financiero-mx.md

@@ -6,7 +6,7 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.12"
 authors = [
-    { name = "Gibran Ojeda", email = "gibran.ojeda.7@gmail.com" },
+    { name = "Gibran Ojeda", email = "contacto@centinelafinanciero.lat" },
 ]
 keywords = [
     "finanzas",
@@ -15,6 +15,16 @@ keywords = [
     "sofipo",
     "gat",
     "comparador",
+]
+# Sin classifier `License ::` a propósito: PEP 639 los deprecó y la licencia
+# ya está declarada arriba.
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.12",
+    "Natural Language :: Spanish",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Topic :: Office/Business :: Financial",
 ]
 # Núcleo compartido por todos los servicios: config, logging, persistencia,
 # cache y migraciones. Lo específico de cada módulo vive en los extras.
@@ -109,7 +119,9 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/gibran-ojeda/brujula-financiera"
+Homepage = "https://centinelafinanciero.lat"
+Repository = "https://github.com/gibran-ojeda/centinela-financiero"
+Issues = "https://github.com/gibran-ojeda/centinela-financiero/issues"
 
 [build-system]
 requires = ["setuptools>=69"]

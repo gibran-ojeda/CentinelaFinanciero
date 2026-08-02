@@ -31,10 +31,8 @@ El overlay de producción reserva ~2.0 GB de techo entre los cinco servicios (db
 **3. Directorio propio en el VPS**, nunca el de NarrativeAlpha:
 
 ```bash
-git clone https://github.com/gibran-ojeda/brujula-financiera.git ~/centinela-financiero
+git clone https://github.com/gibran-ojeda/centinela-financiero.git ~/centinela-financiero
 ```
-
-> El repositorio conserva el nombre viejo; todo lo demás —contenedores, volúmenes, base, usuario, directorio— dice `centinela`.
 
 **4. Secretos en GitHub** (Settings → Secrets → Actions):
 
