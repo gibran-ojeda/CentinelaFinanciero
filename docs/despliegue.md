@@ -78,7 +78,7 @@ ssh -L 8011:127.0.0.1:8011 <usuario>@<vps>
 
 Con el túnel abierto, `http://127.0.0.1:8011` desde el navegador local.
 
-**6. El site block en el Caddyfile de NarrativeAlpha** (`docker/caddy/Caddyfile` de *ese* repo):
+**6. El site block en el Caddyfile compartido** (vive en el repo del stack vecino):
 
 ```caddyfile
 # Stack Centinela — repo aparte, ver docs/despliegue.md de centinela.
@@ -92,7 +92,7 @@ centinelafinanciero.lat {
 Recarga sin downtime del vecino:
 
 ```bash
-docker exec narrativealpha-caddy caddy reload --config /etc/caddy/Caddyfile
+docker exec <contenedor-caddy> caddy reload --config /etc/caddy/Caddyfile
 ```
 
 Dejar una nota en ese Caddyfile apuntando aquí: el acoplamiento entre los dos repos tiene que estar escrito en los dos lados.
@@ -210,7 +210,7 @@ aplicar el repliegue de arriba.
 
 ## Cosas que muerden en este VPS
 
-- **`ufw` dropea `docker0 → host`.** Un contenedor de Centinela en bridge no alcanza nada publicado en el loopback del host — causa documentada de 502 en NarrativeAlpha. Si algún día Centinela necesita consumir un servicio del vecino (su SearXNG, por ejemplo), la vía es adjuntar el contenedor a la red bridge de NarrativeAlpha como red externa, nunca pasar por la gateway de Docker.
+- **`ufw` dropea `docker0 → host`.** Un contenedor de Centinela en bridge no alcanza nada publicado en el loopback del host. Si algún día Centinela necesita consumir un servicio del vecino, la vía es adjuntar el contenedor a la red bridge del vecino como red externa, nunca pasar por la gateway de Docker.
 - **Centinela no levanta Caddy.** 80/443 los tiene el de NarrativeAlpha en `network_mode: host`.
 - **`SITE_URL` es obligatoria en producción.** El overlay falla si no está, a propósito: sin ella la canónica y el `sitemap.xml` anunciarían el loopback y el fallo sería invisible hasta que el índice estuviera hecho.
 - **La política de transición del lanzamiento** publica las tasas en

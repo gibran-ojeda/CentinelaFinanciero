@@ -10,24 +10,13 @@ El MVP en producción con actualización **manual semanal** de tasas — exactam
 
 ## Contexto: lo que ya corre en ese VPS
 
-NarrativeAlpha ocupa estos puertos — verificado en su `docker-compose.yml` y `Caddyfile`:
+El VPS ya sostiene otro stack (NarrativeAlpha), verificado contra su configuración real: su Caddy corre en `network_mode: host` como **único edge de la máquina**, ocupando 80/443, y varios servicios suyos ocupan puertos publicados en loopback — de ahí que Centinela use 5433/6380/8010/8011 y no los estándar.
 
-| Puerto | Servicio | Modo |
-|---|---|---|
-| 80 / 443 | `narrativealpha-caddy` | **`network_mode: host`** — único edge del VPS |
-| 5432 | `narrativealpha-db` | loopback |
-| 6379 | `narrativealpha-redis` | loopback |
-| 8000 | `narrativealpha-api` | loopback |
-| 8001 | `narrativealpha-mcp` | **todas las interfaces** |
-| 8002 | `narrativealpha-dashboard` | `network_mode: host` |
-| 8080 | `narrativealpha-searxng` | loopback |
-| 8899 | motor Vibe-Trading (otro compose) | loopback |
+Tres consecuencias de diseño:
 
-Tres consecuencias de diseño, todas verificadas contra la configuración real:
-
-1. **Centinela no levanta Caddy.** 80/443 están tomados por un Caddy en host mode. Se añade un site block al Caddyfile existente de NarrativeAlpha, que pasa a ser **infraestructura compartida del VPS**.
-2. **Centinela no usa `network_mode: host`.** NarrativeAlpha lo necesita por el motor Vibe-Trading en `127.0.0.1:8899`; Centinela no tiene esa restricción. Bridge con puertos publicados en loopback basta: Caddy en host mode los alcanza por `127.0.0.1`.
-3. **`ufw` dropea `docker0 → host`** en este VPS (causa documentada de 502 en NarrativeAlpha). Un contenedor de Centinela en bridge **no** alcanza nada publicado en el loopback del host. Si en el futuro Centinela quisiera consumir el SearXNG de NarrativeAlpha, la vía es adjuntar el contenedor a la red bridge de NarrativeAlpha como red externa — nunca por la gateway de Docker.
+1. **Centinela no levanta Caddy.** 80/443 están tomados por un Caddy en host mode. Se añade un site block al Caddyfile existente del vecino, que pasa a ser **infraestructura compartida del VPS**.
+2. **Centinela no usa `network_mode: host`.** El vecino lo necesita por un servicio suyo anclado al loopback del host; Centinela no tiene esa restricción. Bridge con puertos publicados en loopback basta: Caddy en host mode los alcanza por `127.0.0.1`.
+3. **`ufw` dropea `docker0 → host`** en este VPS. Un contenedor de Centinela en bridge **no** alcanza nada publicado en el loopback del host. Si en el futuro Centinela quisiera consumir un servicio del vecino, la vía es adjuntar el contenedor a la red bridge del vecino como red externa — nunca por la gateway de Docker.
 
 ## Asignación de recursos de Centinela
 
@@ -43,7 +32,7 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 
 ## Entregables
 
-- **Site block en el Caddyfile compartido** (en el repo de NarrativeAlpha, `docker/caddy/Caddyfile`):
+- **Site block en el Caddyfile compartido** (vive en el repo del stack vecino):
 
   ```
   centinelafinanciero.lat {
@@ -54,7 +43,7 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
   }
   ```
 
-  La recarga se hace **sin downtime de NarrativeAlpha**: `docker exec narrativealpha-caddy caddy reload --config /etc/caddy/Caddyfile`. Documentar este acoplamiento entre repos en ambos lados (nota en el Caddyfile de NarrativeAlpha apuntando a este archivo).
+  La recarga se hace **sin downtime del vecino**: `docker exec <contenedor-caddy> caddy reload --config /etc/caddy/Caddyfile`. Documentar este acoplamiento entre repos en ambos lados (nota en ese Caddyfile apuntando a este archivo).
 - [`docs/despliegue.md`](../docs/despliegue.md) — prerrequisitos, secretos, site block de Caddy, rollback, respaldos y las trampas de este VPS.
 - `docker-compose.yml` + [`docker-compose.prod.yml`](../docker-compose.prod.yml) de Centinela — servicios `web`, `api`, `scheduler`, `db`, `redis` con la asignación de puertos de arriba, healthchecks, `restart: unless-stopped`, logging `json-file` rotado (10m × 3) y **límites de memoria** por servicio (el VPS ya sostiene 9 contenedores).
 - **Postgres afinado para co-hosting**: `shared_buffers` y `work_mem` modestos, `max_connections` acotado — el catálogo del MVP es pequeño y la RAM se comparte con NarrativeAlpha.
@@ -67,7 +56,7 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
   6. **Gates duros** (abortan el deploy si fallan):
      - Deriva de esquema: `python -m core.schema_check` deriva el contrato desde el metadata del ORM (no de una lista a mano) y lo compara contra la BD real, además de comprobar que esté en el head.
      - Humo HTTP: `/healthz`, `GET /api/v1/meta/frescura`, y la portada **con filas** — un 200 con la tabla vacía es justo el fallo que hay que ver — más que la canónica apunte al dominio y no al loopback.
-     - **No-interferencia**: los contenedores `narrativealpha-*` siguen `healthy` y `https://narrative-alpha.cloud` responde 200 después del deploy.
+     - **No-interferencia**: los contenedores del vecino siguen `healthy` y su dominio responde 200 después del deploy (señas por variables de repo, ver docs/despliegue.md).
      - TLS público: `https://centinelafinanciero.lat` responde 200.
   7. Rollback: `workflow_dispatch` con el SHA anterior en `ref`, más `alembic downgrade -1` a mano si la migración fue el problema.
 - **Respaldos**: [`scripts/respaldar.sh`](../scripts/respaldar.sh) — `pg_dump` diario del contenedor `centinela-db` con nombre y retención propios (14 días), sin colisionar con los de NarrativeAlpha; copia fuera del VPS por `scp` en el ciclo semanal; [`scripts/restaurar.sh`](../scripts/restaurar.sh) restaura en un Postgres desechable y comprueba que los datos estén.
@@ -99,7 +88,7 @@ Tres consecuencias de diseño, todas verificadas contra la configuración real:
 
 - [ ] `https://centinelafinanciero.lat` responde con TLS válido; la API interna (8010) no es alcanzable desde internet.
 - [ ] ~~`mostrar_datos_demo` está en `false`: ninguna institución ◆ ni ninguna tasa sin verificar aparece en el sitio público.~~ **Superado (2026-07-31)**: ver la nota del paso 9 — las ficticias se purgaron y lo pendiente se publica etiquetado bajo `mostrar_tasas_sin_verificar`.
-- [ ] `https://narrative-alpha.cloud` sigue respondiendo 200 y todos los contenedores `narrativealpha-*` siguen `healthy` — cero regresión en el vecino.
+- [ ] El dominio del vecino sigue respondiendo 200 y todos sus contenedores siguen `healthy` — cero regresión en el vecino.
 - [ ] Ningún puerto de Centinela colisiona con los de NarrativeAlpha (verificar con `ss -tlnp`).
 - [ ] Los volúmenes y contenedores de Centinela llevan prefijo propio; `docker volume ls` no muestra ambigüedad.
 - [ ] Un push a `main` despliega automáticamente y los gates se ejecutan; un gate en rojo aborta el deploy.
