@@ -29,16 +29,18 @@ const PLAZOS = [
   ['365+', '365 días o más'],
 ];
 
-const SEGUROS = [
-  ['SOBERANO', 'Soberano (CETES)'],
-  ['IPAB', 'IPAB (bancos)'],
-  ['PROSOFIPO', 'PROSOFIPO (SOFIPOs)'],
-];
-
+/**
+ * Sin IFPE este filtro no podía llegar a Mercado Pago; sin BANCO_TRADICIONAL
+ * a propósito — cero instituciones en el catálogo, sería un filtro que
+ * garantiza vacío. El seguro de depósito ya no es un control: se deriva por
+ * completo de la categoría, la columna Cobertura lo dice fila por fila, y el
+ * saneador de la página conserva `?seguro=` por las URLs ya indexadas.
+ */
 const CATEGORIAS = [
   ['GOBIERNO', 'Gobierno'],
   ['BANCO_DIGITAL', 'Banco digital'],
   ['SOFIPO', 'SOFIPO'],
+  ['IFPE', 'IFPE (sin seguro)'],
 ];
 
 const ORDENES = [
@@ -63,22 +65,9 @@ const ORDENES = [
     </select>
   </div>
 
-  <div class="campo" data-multi="seguro">
-    <label for="f-seguro">Seguro de depósito</label>
-    <select id="f-seguro" name="seguro" class="control" multiple size="3">
-      {
-        SEGUROS.map(([valor, etiqueta]) => (
-          <option value={valor} selected={filtros.seguros.includes(valor as never)}>
-            {etiqueta}
-          </option>
-        ))
-      }
-    </select>
-  </div>
-
   <div class="campo" data-multi="categoria">
     <label for="f-categoria">Categoría</label>
-    <select id="f-categoria" name="categoria" class="control" multiple size="3">
+    <select id="f-categoria" name="categoria" class="control" multiple size="4">
       {
         CATEGORIAS.map(([valor, etiqueta]) => (
           <option value={valor} selected={filtros.categorias.includes(valor as never)}>
