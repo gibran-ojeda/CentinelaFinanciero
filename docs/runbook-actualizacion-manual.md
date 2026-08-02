@@ -18,21 +18,14 @@ A partir de la segunda lectura, un movimiento pequeño de una tasa ya aprobada s
 
 ## El ciclo
 
-### 0. La pasada de las páginas con JavaScript
-
-El job del lunes lee solo las siete fuentes que rinden a un cliente HTTP plano. Las otras once necesitan un navegador, que **no está en la imagen del VPS** — el porqué y qué lo reabre están en [despliegue.md](despliegue.md#navegador-en-el-vps--decisión-aplazada). Se corren desde la máquina local, con el mismo código:
-
-```bash
-python -m cli tasas fetch --solo-navegador
-```
-
-Requiere el extra del navegador una sola vez:
-
-```bash
-pip install -e '.[browser]' && playwright install chromium
-```
-
-Lo que encuentre entra por la misma cola de revisión que el job. Si esta pasada se salta dos semanas seguidas, es la señal de que el paso manual no se sostiene y toca reabrir la decisión.
+> **Nota (2026-08-01):** la pasada semanal de las páginas con JavaScript
+> desde la laptop **ya no existe como paso**: Chromium vive en la imagen del
+> VPS y el job del lunes lee las dieciocho fuentes — ver
+> [despliegue.md](despliegue.md#navegador-en-el-vps--decisión-aplicada). Una
+> corrida a mano (`python -m cli tasas fetch`, con `--solo-navegador` /
+> `--sin-navegador` como filtros de depuración) sigue siendo posible: queda
+> registrada bajo su propio id `tasas_fetch_manual` y `cli revisiones list`
+> agrega sus huecos de catálogo junto a los del job y a los del researcher.
 
 ### 1. Qué falta
 

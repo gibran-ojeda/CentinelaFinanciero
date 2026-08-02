@@ -217,13 +217,34 @@ async def test_an_institution_without_any_rate_is_a_candidate(
     assert len(candidatas) > 5
 
 
-async def test_demonstration_institutions_are_never_investigated(
+async def test_an_institution_with_only_a_level3_source_is_a_candidate(
     catalogo_cargado: None,
 ) -> None:
-    """No existen: buscarlas gastaría tokens en encontrar nada."""
+    """La portada de nivel 3 no cuenta como fuente del fetch dirigido.
+
+    Se le da a CAME una tasa vigente fresca para aislar el motivo: sin el
+    filtro de nivel, su portada contaba como «con fuente» y una institución
+    que el extractor jamás va a leer quedaba fuera del researcher.
+    """
+    async with session_scope() as session:
+        producto_id = await session.scalar(
+            select(Producto.id).where(Producto.slug == "came-plazo-364")
+        )
+        assert producto_id is not None
+        session.add(
+            Tasa(
+                producto_id=producto_id,
+                tasa_nominal=Decimal("9.00"),
+                fecha_dato=HOY,
+                fuente=FuenteTasa.MANUAL,
+                estado=EstadoTasa.VIGENTE,
+            )
+        )
+
     candidatas = await investigacion._candidatas(HOY)
 
-    assert "Alcancía Fuerte" not in {c.nombre for c in candidatas}
+    came = next(c for c in candidatas if c.nombre == "CAME")
+    assert came.motivo == "sin fuente activa para el fetch dirigido"
 
 
 # ─── Qué se hace con lo que sale ──────────────────────────────
@@ -322,17 +343,27 @@ async def test_an_invented_url_never_reaches_the_database(catalogo_cargado: None
     assert tasa is None
 
 
-async def test_a_tenor_the_catalogue_does_not_have_is_reported_not_forced(
+async def test_a_tenor_the_catalogue_does_not_have_is_a_structured_gap(
     catalogo_cargado: None,
 ) -> None:
-    """Encajar 360 días en el producto de 364 es el error que trajo el agregador."""
+    """Encajar 360 días en el producto de 364 es el error que trajo el agregador.
+
+    Y un hueco en texto libre dentro de `errores` era invisible para
+    `cli revisiones list`: viaja con el mismo shape que los del nivel 2.
+    """
     await _solo_finsus_stale()
 
     reporte = await _correr("https://finsus.test/tasas", plazo=360)
 
     assert reporte.hallazgos == 1
     assert reporte.publicadas == 0 and reporte.en_revision == 0
-    assert any("360" in e for e in reporte.errores)
+    assert reporte.errores == []
+    assert len(reporte.huecos_catalogo) == 1
+    hueco = reporte.huecos_catalogo[0]
+    assert hueco["institucion"] == "Finsus"
+    assert hueco["plazo_dias"] == 360
+    assert hueco["url"] == "https://finsus.test/tasas"
+    assert reporte.como_metricas()["huecos_catalogo"] == reporte.huecos_catalogo
 
 
 async def test_all_engines_down_marks_the_run_degraded(catalogo_cargado: None) -> None:
@@ -360,14 +391,27 @@ async def test_the_run_reports_its_cost(catalogo_cargado: None) -> None:
 # ─── El job ───────────────────────────────────────────────────
 
 
-def test_the_job_is_registered_but_starts_off() -> None:
-    """El nivel 3 es el camino más caro: se enciende a mano, cuando toque."""
+def test_the_job_is_registered_and_starts_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """El nivel 3 se enciende por código; sus guardas son el techo y la llave.
+
+    Se afirma el default de la **clase** y no `settings.`: ese valor viene del
+    `.env` de quien corra la suite, y el test dejaría de medir el código. El
+    gate frío se prueba en ambas posiciones parcheando el objeto vivo.
+    """
+    from core.settings import Settings, settings
     from scheduler.jobs.research import JOB_ID
     from scheduler.registry import build_registry
 
+    assert Settings.model_fields["scheduler_research_enabled"].default is True
+
+    monkeypatch.setattr(settings, "scheduler_research_enabled", True)
+    spec = next(j for j in build_registry() if j.id == JOB_ID)
+    assert spec.enabled is True
+    assert spec.lock_ttl_seconds == 3600
+
+    monkeypatch.setattr(settings, "scheduler_research_enabled", False)
     spec = next(j for j in build_registry() if j.id == JOB_ID)
     assert spec.enabled is False
-    assert spec.lock_ttl_seconds == 3600
 
 
 async def test_the_job_skips_when_nothing_is_stale(

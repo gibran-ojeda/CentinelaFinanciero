@@ -27,6 +27,7 @@ from core.config_store import effective
 from core.db import session_scope
 from core.frescura import evaluar
 from core.logging import get_logger
+from domain.enums import FuenteTasa
 from ingest_cnbv import loader
 from scheduler.bitacora import registrar_corrida
 
@@ -34,6 +35,17 @@ log = get_logger(__name__)
 
 JOB_ID = "cnbv_boletines"
 JOB_ID_FRESCURA = "frescura_check"
+
+#: Kill-switch caliente que alimenta cada fuente vigilada. El endpoint de
+#: frescura trata «sin datos» como sano porque no sabe qué jobs están
+#: encendidos; este job sí lo sabe, y una vigilada en cero con su gate
+#: encendido no es «aún no se usa»: es un job que dice estar vivo y no ha
+#: entregado nada.
+_GATE_DE_FUENTE: dict[FuenteTasa, str] = {
+    FuenteTasa.BANXICO_API: "banxico_sync_enabled",
+    FuenteTasa.CNBV: "cnbv_ingesta_enabled",
+    FuenteTasa.FETCH_DIRIGIDO: "tasas_fetch_enabled",
+}
 
 
 async def cnbv_boletines() -> None:
@@ -76,6 +88,13 @@ async def frescura_check() -> None:
             estados = await evaluar(session)
 
         atrasadas = [e for e in estados if not e.dentro_de_sla]
+        sin_datos = [
+            e
+            for e in estados
+            if e.sla_dias is not None
+            and e.observaciones == 0
+            and getattr(effective, _GATE_DE_FUENTE[e.fuente])
+        ]
         corrida.metricas.update(
             {
                 "fuentes": {
@@ -91,6 +110,7 @@ async def frescura_check() -> None:
                     for e in estados
                 },
                 "fuera_de_sla": [e.fuente.value for e in atrasadas],
+                "vigiladas_sin_datos": [e.fuente.value for e in sin_datos],
                 "todo_dentro_de_sla": not atrasadas,
             }
         )
@@ -107,6 +127,8 @@ async def frescura_check() -> None:
                     else None
                 ),
             )
+        for estado in sin_datos:
+            log.warning("fuente_vigilada_sin_datos", fuente=estado.fuente.value)
 
 
 __all__ = ["JOB_ID", "JOB_ID_FRESCURA", "cnbv_boletines", "frescura_check"]

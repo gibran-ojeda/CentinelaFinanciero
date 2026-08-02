@@ -50,13 +50,24 @@ def build_parser() -> argparse.ArgumentParser:
         "pendientes",
         help="lista de revisión: qué falta verificar para que salga al sitio público",
     )
+    retirar = tasas_sub.add_parser(
+        "retirar",
+        help="comenta en el CSV semilla las filas de agregador ya sustituidas por lectura oficial",
+    )
+    retirar.add_argument(
+        "--csv",
+        type=Path,
+        default=Path("seeds/tasas.csv"),
+        help="archivo a podar (default: seeds/tasas.csv)",
+    )
+    retirar.add_argument("--dry-run", action="store_true", help="reporta sin escribir")
     fetch = tasas_sub.add_parser(
         "fetch",
         help="lee las páginas de las instituciones y encola lo que cambió",
     )
-    # El job del VPS corre `--sin-navegador`; la pasada de las páginas con
-    # JavaScript se hace desde local con `--solo-navegador` mientras Chromium
-    # no viva en la imagen. Ver docs/despliegue.md.
+    # Filtros de depuración: el job del lunes lee todo con su propia cadena
+    # (httpx + navegador). Estos dos sirven para repetir a mano una mitad —
+    # p. ej. reintentar sólo las páginas JS tras un fallo puntual.
     grupo = fetch.add_mutually_exclusive_group()
     grupo.add_argument(
         "--solo-navegador",
@@ -97,6 +108,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="vuelve a cargar el último periodo aunque ya esté (p. ej. tras corregir un mapeo)",
     )
 
+    research = sub.add_parser("research", help="calibración de la búsqueda abierta (nivel 3)")
+    research_sub = research.add_subparsers(dest="subcomando", required=True)
+    research_reporte = research_sub.add_parser(
+        "reporte",
+        help="costo semanal, huecos y tasa de aprobación por fuente",
+    )
+    research_reporte.add_argument(
+        "--semanas", type=int, default=4, help="ventana hacia atrás (default 4)"
+    )
+
     revs = sub.add_parser("revisiones", help="cola de revisión humana de tasas")
     revs_sub = revs.add_subparsers(dest="subcomando", required=True)
 
@@ -122,7 +143,9 @@ def build_parser() -> argparse.ArgumentParser:
     config_sub = config.add_subparsers(dest="subcomando", required=True)
 
     listar = config_sub.add_parser("list", help="valor efectivo de cada parámetro")
-    listar.add_argument("--grupo", default=None, help="banderas | fiscal | revision | scheduler")
+    listar.add_argument(
+        "--grupo", default=None, help="banderas | fiscal | llm | revision | scheduler"
+    )
 
     fijar = config_sub.add_parser("set", help="sobrescribe un parámetro en caliente")
     fijar.add_argument("key")
@@ -155,6 +178,18 @@ async def _run(args: argparse.Namespace) -> int:
                 print("Pendientes de verificar contra la fuente oficial:")
                 print(lista.render())
                 return 0
+            if args.subcomando == "retirar":
+                reporte_retiro = await tasas_module.retirar_sustituidas(
+                    args.csv, dry_run=args.dry_run
+                )
+                titulo = (
+                    "Simulación de retiro de agregador"
+                    if args.dry_run
+                    else "Retiro de filas de agregador sustituidas"
+                )
+                print(f"{titulo}:")
+                print(reporte_retiro.render())
+                return 0
             if args.subcomando == "fetch":
                 reporte = await tasas_module.correr_fetch(
                     solo_navegador=args.solo_navegador, sin_navegador=args.sin_navegador
@@ -162,9 +197,10 @@ async def _run(args: argparse.Namespace) -> int:
                 print("Lectura de tasas:")
                 print(reporte.render())
                 # Que una fuente falle no es un fallo del comando: se reporta y
-                # la siguiente corrida lo reintenta. Sólo el techo de gasto,
-                # que corta la corrida a medias, merece salida distinta de 0.
-                return 1 if reporte.presupuesto_agotado else 0
+                # la siguiente corrida lo reintenta. Salida distinta de 0 sólo
+                # cuando no hubo corrida que valga: el techo de gasto la cortó
+                # a medias, o todas las fuentes fallaron.
+                return 1 if reporte.presupuesto_agotado or reporte.fracaso_total else 0
             resultado = await tasas_module.import_csv(args.csv, dry_run=args.dry_run)
             titulo = "Simulación de alta de tasas" if args.dry_run else "Alta de tasas"
             print(f"{titulo}:")
@@ -190,6 +226,12 @@ async def _run(args: argparse.Namespace) -> int:
             # Un cambio de formato es un fallo operativo: alguien tiene que
             # mirar el boletín y ajustar la declaración de `fuentes.py`.
             return 1 if reporte_cnbv.hubo_errores else 0
+        case "research":
+            from cli import research as research_module
+
+            print("Calibración del researcher:")
+            print((await research_module.reporte(args.semanas)).render())
+            return 0
         case "revisiones":
             from cli import revisiones as revisiones_module
 

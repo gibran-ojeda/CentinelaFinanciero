@@ -118,6 +118,24 @@ services:
       SCHEDULER_HEARTBEAT_INTERVAL_SECONDS: ${SCHEDULER_HEARTBEAT_INTERVAL_SECONDS:-60}
       SCHEDULER_LOCK_TTL_SECONDS: ${SCHEDULER_LOCK_TTL_SECONDS:-300}
       SCHEDULER_TIMEZONE: ${SCHEDULER_TIMEZONE:-America/Mexico_City}
+      # Gates fríos de los jobs de ingesta, por la misma regla del mapa de
+      # arriba: lo que no está aquí no entra al contenedor. Los seis arrancan
+      # encendidos; las guardas del research son el techo de gasto diario y su
+      # kill-switch caliente, y el apagado de emergencia es poner la variable
+      # de repo SCHEDULER_RESEARCH_ENABLED=false (el deploy la reenvía).
+      SCHEDULER_BANDERAS_ENABLED: ${SCHEDULER_BANDERAS_ENABLED:-true}
+      SCHEDULER_TASAS_ENABLED: ${SCHEDULER_TASAS_ENABLED:-true}
+      SCHEDULER_BANXICO_ENABLED: ${SCHEDULER_BANXICO_ENABLED:-true}
+      SCHEDULER_CNBV_ENABLED: ${SCHEDULER_CNBV_ENABLED:-true}
+      SCHEDULER_FRESCURA_ENABLED: ${SCHEDULER_FRESCURA_ENABLED:-true}
+      SCHEDULER_RESEARCH_ENABLED: ${SCHEDULER_RESEARCH_ENABLED:-true}
+      # Los boletines crudos de la CNBV son la evidencia de cada indicador
+      # publicado: van a un volumen para sobrevivir a los deploys (cada build
+      # recrea el contenedor). Valor fijo, no interpolado: tiene que coincidir
+      # con el montaje de abajo.
+      CNBV_DIRECTORIO_DESCARGAS: /app/var/cnbv
+    volumes:
+      - cnbvdata:/app/var/cnbv
     depends_on:
       db:
         condition: service_healthy
@@ -181,6 +199,8 @@ volumes:
     name: centinela-pgdata
   redisdata:
     name: centinela-redisdata
+  cnbvdata:
+    name: centinela-cnbvdata
 
 networks:
   default:

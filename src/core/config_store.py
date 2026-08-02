@@ -164,12 +164,12 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         "Desviación respecto a la tasa vigente que manda a revisión humana (pp)",
     ),
     ConfigKeySpec(
-        "mostrar_datos_demo",
+        "mostrar_tasas_sin_verificar",
         "bool",
         "revision",
         (
-            "Publica instituciones ilustrativas y tasas sin verificar, marcadas. "
-            "Apagar antes de exponer el sitio a internet (fase 6)"
+            "Publica las tasas en PENDIENTE_REVISION marcadas «sin verificar» "
+            "hasta que su lectura oficial las sustituya (transición del lanzamiento)"
         ),
     ),
     # Operación.
@@ -193,9 +193,9 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         "bool",
         "scheduler",
         (
-            "El job sólo lee las fuentes que rinden sin navegador. En true "
-            "mientras Chromium no esté en la imagen: las que necesitan JS se "
-            "corren desde local con `cli tasas fetch --solo-navegador`"
+            "Repliegue del navegador sin deploy: en true, el job del lunes "
+            "vuelve a solo-httpx y a las fuentes sin JavaScript (p. ej. si la "
+            "RAM del VPS protesta)"
         ),
     ),
     ConfigKeySpec(
@@ -217,6 +217,28 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         "Kill-switch caliente de la búsqueda abierta (nivel 3)",
     ),
     ConfigKeySpec("config_cache_ttl_seconds", "int", "scheduler", "TTL del snapshot de config"),
+    # El camino LLM (fase 9): lo que la calibración puede querer mover con lo
+    # observado, sin deploy. En producción lo que no está aquí queda clavado
+    # al default de Settings — el compose no pasa estas variables al
+    # contenedor, así que la llave caliente es la única palanca real.
+    ConfigKeySpec(
+        "llm_cost_daily_limit_usd",
+        "float",
+        "llm",
+        "Techo duro de gasto diario en USD (red contra bucles, no presupuesto)",
+    ),
+    ConfigKeySpec(
+        "research_max_rondas",
+        "int",
+        "llm",
+        "Vueltas de tool-use antes de retirar las herramientas y exigir el JSON final",
+    ),
+    ConfigKeySpec(
+        "research_motores",
+        "str",
+        "llm",
+        "Cadena de motores de búsqueda, en orden y separados por coma",
+    ),
 )
 
 REGISTRY_BY_KEY: dict[str, ConfigKeySpec] = {spec.key: spec for spec in CONFIG_REGISTRY}

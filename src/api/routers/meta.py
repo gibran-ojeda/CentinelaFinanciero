@@ -51,7 +51,7 @@ async def frescura(session: SessionDep, _nivel: LecturaDep) -> RespuestaFrescura
         # parámetros fiscales y devuelve 503 si faltan, lo que haría que una
         # petición sin credenciales recibiera 503 en vez de 401. Este endpoint
         # informa, no calcula.
-        modo_demo=effective.mostrar_datos_demo,
+        mostrar_tasas_sin_verificar=effective.mostrar_tasas_sin_verificar,
         generado_en=datetime.now(UTC),
         todo_dentro_de_sla=all(f.dentro_de_sla for f in fuentes),
     )

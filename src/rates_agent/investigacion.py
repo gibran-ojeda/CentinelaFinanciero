@@ -34,7 +34,7 @@ from llm.client import ClienteLLM
 from llm.providers.base import ErrorPresupuestoAgotado, ErrorProveedor
 from rates_agent.extractor import TasaExtraida
 from rates_agent.researcher import Hallazgo, investigar
-from rates_agent.reviewer import Decision, revisar
+from rates_agent.reviewer import Decision, HuecoCatalogo, revisar
 from rates_agent.search import SearchExecutor
 
 log = get_logger(__name__)
@@ -57,6 +57,10 @@ class ReporteInvestigacion:
     costo_usd: float = 0.0
     degradada: bool = False
     presupuesto_agotado: bool = False
+    #: Mismo shape que los del nivel 2 (`HuecoCatalogo.como_dict()`): así
+    #: `cli revisiones list` los agrega junto a los del fetch sin distinguir
+    #: de qué nivel vinieron.
+    huecos_catalogo: list[dict[str, Any]] = field(default_factory=list)
     errores: list[str] = field(default_factory=list)
 
     def como_metricas(self) -> dict[str, Any]:
@@ -74,6 +78,7 @@ class ReporteInvestigacion:
             "costo_usd": round(self.costo_usd, 6),
             "degradada": self.degradada,
             "presupuesto_agotado": self.presupuesto_agotado,
+            "huecos_catalogo": self.huecos_catalogo,
             "errores": self.errores[:20],
         }
 
@@ -89,6 +94,8 @@ class ReporteInvestigacion:
             f"  búsquedas               {self.busquedas:>4}",
             f"  costo USD               {self.costo_usd:.6f}",
         ]
+        if self.huecos_catalogo:
+            lineas.append(f"  huecos de catálogo      {len(self.huecos_catalogo):>4}")
         if self.descartados_por_url:
             lineas.append(
                 f"  ⚠ {self.descartados_por_url} hallazgos citaban una URL que "
@@ -203,9 +210,21 @@ async def _investigar_una(
             if producto is None:
                 # Igual que en el nivel 2: un plazo que el catálogo no conoce
                 # es un hueco de catálogo, no una tasa que forzar al producto
-                # más parecido.
-                reporte.errores.append(
-                    f"{candidata.nombre}: plazo {hallazgo.plazo_dias} sin producto"
+                # más parecido — ni un error de texto libre, que era invisible
+                # para `cli revisiones list`.
+                reporte.huecos_catalogo.append(
+                    HuecoCatalogo(
+                        institucion=candidata.nombre,
+                        producto=hallazgo.producto,
+                        plazo_dias=hallazgo.plazo_dias,
+                        tasa_nominal=hallazgo.tasa_nominal,
+                        url=hallazgo.url,
+                    ).como_dict()
+                )
+                log.info(
+                    "hueco_catalogo_research",
+                    institucion=candidata.nombre,
+                    plazo=hallazgo.plazo_dias,
                 )
                 continue
 
@@ -270,7 +289,14 @@ async def _candidatas(hoy: date) -> list[Candidata]:
         con_fuente = set(
             (
                 await session.execute(
-                    select(FuenteTasas.institucion_id).where(FuenteTasas.activa.is_(True))
+                    select(FuenteTasas.institucion_id).where(
+                        FuenteTasas.activa.is_(True),
+                        # Una portada de nivel 3 no cuenta como fuente del
+                        # fetch dirigido: la institución cuyo único registro
+                        # es esa portada es justo la candidata que el
+                        # researcher existe para cubrir.
+                        FuenteTasas.nivel <= 2,
+                    )
                 )
             )
             .scalars()

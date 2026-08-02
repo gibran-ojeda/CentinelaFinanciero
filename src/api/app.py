@@ -33,17 +33,17 @@ log = get_logger(__name__)
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     log.info("api_startup", entorno=settings.environment, puerto=settings.api_port)
-    if effective.mostrar_datos_demo:
-        # Ruidoso a propósito: es la diferencia entre servir un catálogo
-        # verificado y servir uno que incluye instituciones ficticias y tasas
-        # sin confirmar. Van marcadas en cada respuesta, pero nadie debería
-        # descubrir que el modo está activo mirando la UI.
-        log.warning(
-            "modo_demo_activo",
+    if effective.mostrar_tasas_sin_verificar:
+        # Informativo, no alarma: publicar lo pendiente etiquetado es la
+        # política de transición del lanzamiento, no un descuido — un warning
+        # que suena en cada arranque durante meses enseña a ignorar warnings.
+        # El estado es observable en `/api/v1/meta/frescura`.
+        log.info(
+            "tasas_sin_verificar_visibles",
             detalle=(
-                "se publican instituciones ilustrativas y tasas sin verificar, marcadas. "
-                "Apagar con `python -m cli config set mostrar_datos_demo false` antes de "
-                "exponer el sitio a internet."
+                "las tasas en PENDIENTE_REVISION se publican marcadas «sin verificar» "
+                "hasta que su lectura oficial las sustituya. Se ocultan sin deploy con "
+                "`python -m cli config set mostrar_tasas_sin_verificar false`."
             ),
         )
     yield

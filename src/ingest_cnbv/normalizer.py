@@ -27,6 +27,12 @@ Dos listas, y las dos importan por razones distintas:
   banderas de salud. Va a `job_runs` y se mira.
 - **Del boletín sin catálogo**: son decenas —la CNBV publica todo el sector— y
   sólo se cuentan. Son las candidatas a ampliar el catálogo, no un fallo.
+
+Las dos listas se **acotan a las figuras del boletín** (`Fuente.categorias`):
+que una SOFIPO no esté en el boletín de banca es lo normal, no un hueco, y el
+Gobierno Federal no va a estar en ninguno — reportarlo cada corrida sería
+ruido permanente en la única señal que significa «alguien tiene que mapear
+esto». El **casamiento** nunca se acota: ver `mapear`.
 """
 
 from __future__ import annotations
@@ -37,6 +43,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.logging import get_logger
+from domain.enums import CategoriaInstitucion
 from ingest_cnbv.parser import FilaInstitucion
 
 log = get_logger(__name__)
@@ -112,14 +119,27 @@ class Candidata:
     id: int
     nombre: str
     nombre_cnbv: str | None
+    categoria: CategoriaInstitucion
 
 
-def mapear(candidatas: list[Candidata], filas: dict[str, FilaInstitucion]) -> ReporteMapeo:
+def mapear(
+    candidatas: list[Candidata],
+    filas: dict[str, FilaInstitucion],
+    *,
+    categorias: frozenset[CategoriaInstitucion],
+) -> ReporteMapeo:
     """Cruza el catálogo con lo leído del boletín.
 
     Args:
         filas: lo que devuelve `parser.combinar`, indexado por el nombre tal
             cual lo escribe la CNBV.
+        categorias: figuras que esta publicación cubre. **Acotan el reporte,
+            jamás el casamiento**: una institución fuera de figura que sí
+            aparece en el boletín se casa igual — la CNBV publica a Nu México
+            entre las SOFIPOs—, pero su ausencia no cuenta como hueco ni su
+            falta de `nombre_cnbv` como pendiente. (El caso inverso queda a
+            propósito: Nu ausente del boletín de banca sí se reporta, y esa
+            línea se volverá señal el día que la CNBV lo cambie de lista.)
     """
     reporte = ReporteMapeo()
 
@@ -141,7 +161,8 @@ def mapear(candidatas: list[Candidata], filas: dict[str, FilaInstitucion]) -> Re
     del_catalogo: dict[str, Candidata] = {}
     for candidata in candidatas:
         if not candidata.nombre_cnbv:
-            reporte.sin_mapear.append(candidata.nombre)
+            if candidata.categoria in categorias:
+                reporte.sin_mapear.append(candidata.nombre)
             continue
         llave = clave(candidata.nombre_cnbv)
         chocada = del_catalogo.get(llave)
@@ -156,12 +177,13 @@ def mapear(candidatas: list[Candidata], filas: dict[str, FilaInstitucion]) -> Re
     for llave, candidata in del_catalogo.items():
         encontrada = por_clave.get(llave)
         if encontrada is None:
-            reporte.sin_datos.append(candidata.nombre)
-            log.info(
-                "cnbv_sin_datos",
-                institucion=candidata.nombre,
-                nombre_cnbv=candidata.nombre_cnbv,
-            )
+            if candidata.categoria in categorias:
+                reporte.sin_datos.append(candidata.nombre)
+                log.info(
+                    "cnbv_sin_datos",
+                    institucion=candidata.nombre,
+                    nombre_cnbv=candidata.nombre_cnbv,
+                )
             continue
         usadas.add(llave)
         reporte.casadas[candidata.id] = encontrada

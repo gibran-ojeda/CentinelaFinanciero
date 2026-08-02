@@ -76,10 +76,14 @@ class Settings(BaseSettings):
     scheduler_banxico_enabled: bool = True
     scheduler_cnbv_enabled: bool = True
     scheduler_frescura_enabled: bool = True
-    #: Nivel 3. Arranca **apagado**: la búsqueda abierta es el camino más caro
-    #: y menos preciso, y sólo debe encenderse cuando el nivel 2 lleva semanas
-    #: corriendo y se sabe qué instituciones deja fuera de verdad.
-    scheduler_research_enabled: bool = False
+    #: Nivel 3. Encendido: la guarda ya no es este default frío sino el techo
+    #: de gasto diario (`llm_cost_daily_limit_usd`), el kill-switch caliente
+    #: (`tasas_research_enabled`) y la calibración automática
+    #: (`cli research reporte`), que es la que dice si lo que trae vale lo que
+    #: cuesta. El apagado de emergencia en prod es la variable de repo
+    #: `SCHEDULER_RESEARCH_ENABLED=false` — el deploy siempre la escribe
+    #: explícita, así que este default sólo manda fuera del compose.
+    scheduler_research_enabled: bool = True
     scheduler_lock_ttl_seconds: int = 300
     scheduler_timezone: str = "America/Mexico_City"
 
@@ -108,24 +112,25 @@ class Settings(BaseSettings):
 
     tolerancia_revision_pp: Decimal = Decimal("0.5")
 
-    #: Publica las instituciones ilustrativas (◆) y las tasas que siguen en
-    #: PENDIENTE_REVISION, siempre marcadas como tales.
+    #: Publica también las tasas que siguen en PENDIENTE_REVISION, siempre
+    #: marcadas «sin verificar» en su procedencia.
     #:
-    #: El valor por defecto es `True` y es una decisión deliberada: sin él, un
-    #: clon nuevo levanta un comparador con cinco filas de CETES y parece roto.
-    #: Lo que impide que se escape a producción no es el default sino que la
-    #: API avisa por log en cada arranque, `/api/v1/meta/frescura` lo publica
-    #: en `modo_demo`, y la checklist de la fase 6 lo apaga explícitamente.
-    mostrar_datos_demo: bool = True
+    #: Es la política de transición del lanzamiento: las lecturas de agregador
+    #: se muestran etiquetadas hasta que la lectura oficial de cada producto
+    #: las sustituya — la ventana de vigencia prefiere VIGENTE por estado, así
+    #: que la sustitución es automática producto a producto. Cuando ya no
+    #: quede nada sin verificar, la bandera deja de tener efecto; se conserva
+    #: como kill-switch para poder ocultar lo no verificado sin deploy.
+    mostrar_tasas_sin_verificar: bool = True
 
     cache_comparador_ttl_seconds: int = 300
     banderas_recompute_enabled: bool = True
     tasas_fetch_enabled: bool = True
-    #: El job del VPS sólo lee lo que rinde sin navegador. En `true` mientras
-    #: Chromium no esté en la imagen del scheduler: las fuentes que necesitan
-    #: JavaScript se corren desde local con `cli tasas fetch --solo-navegador`.
-    #: Ver la sección «Navegador en el VPS» de docs/despliegue.md.
-    tasas_fetch_solo_sin_js: bool = True
+    #: Chromium vive en la imagen y el job del lunes lee las dieciocho
+    #: fuentes. `true` es ahora el repliegue: apaga el navegador sin deploy
+    #: (la cadena vuelve a solo-httpx y la consulta a las fuentes sin JS) si
+    #: la RAM del VPS protesta. Ver «Navegador en el VPS» en docs/despliegue.md.
+    tasas_fetch_solo_sin_js: bool = False
     #: Kill-switch caliente de la ingesta de Banxico. Sin `BANXICO_TOKEN` el
     #: job se omite igualmente, así que esto es para apagarla teniéndolo.
     banxico_sync_enabled: bool = True

@@ -36,7 +36,7 @@ En la práctica:
 
 Toda tasa, todo indicador y toda métrica derivada muestran **de cuándo son** y **de dónde salieron**, con enlace a la fuente cuando existe. Un dato sin procedencia no se publica, ni siquiera marcado.
 
-Las tasas que no se hayan podido confirmar contra la página de la propia institución se marcan como no verificadas y **no salen al sitio público** (`mostrar_datos_demo=false`). Lo que sí sale lleva enlace a la página de donde se leyó, para que quien quiera comprobarlo lo haga en un clic. Ése es el mecanismo por el que «investiga por tu cuenta» deja de ser una frase.
+Las tasas que no se han podido confirmar contra la página de la propia institución se marcan **«sin verificar»** junto al número. Durante la transición del lanzamiento sí salen al sitio público, etiquetadas (`mostrar_tasas_sin_verificar`), hasta que la lectura oficial de cada producto las sustituye — la promesa operativa es **nada sin etiquetar**, no nada sin verificar: lo único que se afirma sin matiz es lo confirmado en fuente primaria. Todo lo que sale lleva enlace a la página de donde se leyó, para que quien quiera comprobarlo lo haga en un clic. Ése es el mecanismo por el que «investiga por tu cuenta» deja de ser una frase.
 
 La GAT calculada por nosotros se marca `(equiv.)` y nunca se presenta como la GAT publicada por la institución.
 

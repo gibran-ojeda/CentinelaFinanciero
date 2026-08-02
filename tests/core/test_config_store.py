@@ -61,17 +61,29 @@ def test_registry_covers_the_flag_thresholds_of_the_plan() -> None:
 
 def test_the_demo_switch_is_hot_configurable() -> None:
     """Se apaga en producción sin desplegar (paso 9 de la fase 6)."""
-    assert "mostrar_datos_demo" in REGISTRY_BY_KEY
-    assert REGISTRY_BY_KEY["mostrar_datos_demo"].value_type == "bool"
+    assert "mostrar_tasas_sin_verificar" in REGISTRY_BY_KEY
+    assert REGISTRY_BY_KEY["mostrar_tasas_sin_verificar"].value_type == "bool"
 
 
-def test_registry_groups_are_the_four_of_the_plan() -> None:
+def test_registry_groups_are_the_five_of_the_plan() -> None:
     assert {spec.grupo for spec in CONFIG_REGISTRY} == {
         "banderas",
         "fiscal",
+        "llm",
         "revision",
         "scheduler",
     }
+
+
+def test_the_research_knobs_are_hot_tunable() -> None:
+    """La calibración mueve estas tres con lo observado, sin deploy.
+
+    En producción el compose no pasa sus variables al contenedor, así que la
+    llave caliente es la única palanca real que existe.
+    """
+    assert REGISTRY_BY_KEY["llm_cost_daily_limit_usd"].value_type == "float"
+    assert REGISTRY_BY_KEY["research_max_rondas"].value_type == "int"
+    assert REGISTRY_BY_KEY["research_motores"].value_type == "str"
 
 
 def test_effective_falls_back_to_settings_without_overrides() -> None:

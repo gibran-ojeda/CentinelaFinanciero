@@ -1,8 +1,8 @@
 """La corrida completa: leer, extraer y decidir, fuente por fuente.
 
-Una sola función para el job semanal y para el comando de la CLI. No hay dos
-caminos que puedan divergir — que es justo el riesgo mientras el navegador
-no esté en el VPS y la pasada de las páginas con JavaScript se dispare a mano.
+Una sola función para el job semanal y para el comando de la CLI: dos caminos
+acabarían divergiendo, y la corrida a mano dejaría de reproducir a la del
+lunes justo cuando se usa para depurarla.
 
 El orden importa y ahorra dinero:
 
@@ -58,6 +58,16 @@ class ReporteCorrida:
     presupuesto_agotado: bool = False
     errores: list[str] = field(default_factory=list)
 
+    @property
+    def fracaso_total(self) -> bool:
+        """Todas las fuentes fallaron: eso no es una corrida, es un fallo con bucle.
+
+        Las vacías y las «sin cambios» cuentan como éxito — leer una página
+        que no trae tasas es un resultado. Y el presupuesto agotado deja
+        fuentes sin intentar, no fallidas, así que nunca dispara esto.
+        """
+        return self.fuentes > 0 and self.fallidas >= self.fuentes
+
     def como_metricas(self) -> dict[str, Any]:
         return {
             "fuentes": self.fuentes,
@@ -109,8 +119,9 @@ async def correr(
     Args:
         solo_requieren_js: `True` corre sólo las páginas que necesitan
             navegador; `False`, sólo las que no. `None` (por defecto), todas.
-            Es lo que permite repartir la corrida entre el VPS y la máquina
-            local mientras Chromium no viva en la imagen.
+            Es el filtro de depuración de la CLI — repetir una mitad de la
+            corrida sin pagar la otra — y el que usa el repliegue
+            `tasas_fetch_solo_sin_js`.
     """
     reporte = ReporteCorrida()
     propios = fetcher is None or cliente is None
@@ -168,6 +179,10 @@ async def _fuentes(solo_requieren_js: bool | None) -> list[tuple[int, str, str, 
             select(FuenteTasas, Institucion.nombre)
             .join(Institucion, Institucion.id == FuenteTasas.institucion_id)
             .where(FuenteTasas.activa.is_(True))
+            # Las fuentes de nivel 3 son portadas para el researcher, no
+            # páginas de tasas: dárselas al extractor paga tokens por leer
+            # marketing y, en el mejor de los casos, devuelve «vacía».
+            .where(FuenteTasas.nivel <= 2)
             .order_by(FuenteTasas.id)
         )
         if solo_requieren_js is not None:

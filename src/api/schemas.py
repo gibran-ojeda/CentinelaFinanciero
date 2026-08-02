@@ -385,7 +385,8 @@ class FrescuraFuente(Esquema):
     fuente: str
     ultima_actualizacion: date | None
     dias_desde_actualizacion: int | None
-    sla_dias: int
+    #: `null` = fuente informativa, sin cadencia que vigilar (MANUAL, LLM).
+    sla_dias: int | None
     dentro_de_sla: bool
     observaciones: int
 
@@ -398,12 +399,13 @@ class RespuestaFrescura(Esquema):
         default=None,
         description="La más reciente de todas las fuentes. La UI la muestra en la cabecera.",
     )
-    modo_demo: bool = Field(
+    mostrar_tasas_sin_verificar: bool = Field(
         default=False,
         description=(
-            "Si es true, el catálogo incluye instituciones ilustrativas y tasas sin "
-            "verificar. Se publica aquí para que el estado sea observable desde fuera "
-            "y no haya que leer los logs del servidor para saberlo."
+            "Si es true, el catálogo incluye las tasas en PENDIENTE_REVISION marcadas "
+            "«sin verificar» — la política de transición del lanzamiento. Se publica "
+            "aquí para que el estado sea observable desde fuera y no haya que leer "
+            "los logs del servidor para saberlo."
         ),
     )
     generado_en: datetime

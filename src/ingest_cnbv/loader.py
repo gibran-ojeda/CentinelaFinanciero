@@ -193,7 +193,7 @@ async def _procesar(
 
     async with session_scope() as session:
         candidatas = await _candidatas(session)
-        resultado.mapeo = mapear(candidatas, filas)
+        resultado.mapeo = mapear(candidatas, filas, categorias=fuente.categorias)
         for institucion_id, fila in resultado.mapeo.casadas.items():
             creado = await _upsert(
                 session,
@@ -278,7 +278,10 @@ async def _candidatas(session: AsyncSession) -> list[Candidata]:
         .scalars()
         .all()
     )
-    return [Candidata(id=f.id, nombre=f.nombre, nombre_cnbv=f.nombre_cnbv) for f in filas]
+    return [
+        Candidata(id=f.id, nombre=f.nombre, nombre_cnbv=f.nombre_cnbv, categoria=f.categoria)
+        for f in filas
+    ]
 
 
 async def _upsert(

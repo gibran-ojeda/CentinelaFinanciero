@@ -9,18 +9,15 @@ Regla que atraviesa todo el módulo: **sólo se muestra lo publicable**. Un
 producto sin tasa publicable no aparece en el comparador, aunque exista en el
 catálogo: la vista principal no puede tener huecos.
 
-Qué cuenta como publicable depende del modo demostración, que viaja en el
-contexto de la petición. Con el modo apagado —lo que debe estar en producción,
-paso 9 de la fase 6— publicable significa **tasa VIGENTE de institución real**.
-Con el modo encendido entran también las instituciones ilustrativas y las tasas
-sin verificar, pero cada fila lo declara en `institucion.es_demostracion` y en
-`procedencia.verificada`: se amplía lo que se muestra, nunca lo que se afirma.
+Qué cuenta como publicable depende de `mostrar_tasas_sin_verificar`, que viaja
+en el contexto de la petición. Apagada, publicable significa **tasa VIGENTE**.
+Encendida —la política de transición del lanzamiento— entran también las tasas
+en PENDIENTE_REVISION, pero cada fila lo declara en `procedencia.verificada`:
+se amplía lo que se muestra, nunca lo que se afirma.
 """
 
 from __future__ import annotations
 
-import statistics
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
@@ -96,16 +93,14 @@ class _Candidato:
 def _aplicar_filtros_sql(
     consulta: Select[tuple[Producto]],
     f: FiltrosComparador,
-    *,
-    modo_demo: bool,
 ) -> Select[tuple[Producto]]:
     """Los filtros que sí son columnas."""
     consulta = consulta.where(Producto.activo.is_(True), Institucion.activa.is_(True))
 
-    if not modo_demo:
-        # Con el modo apagado las instituciones ficticias no existen para el
-        # público. No basta con no marcarlas: hay que no servirlas.
-        consulta = consulta.where(Institucion.es_demostracion.is_(False))
+    # Invariante, no modo: una institución marcada como demostración jamás se
+    # sirve. Desde la purga no existe ninguna, pero el predicado se queda para
+    # que un respaldo restaurado o un seed viejo no la resuciten en público.
+    consulta = consulta.where(Institucion.es_demostracion.is_(False))
 
     if f.plazo is not None:
         if f.plazo.upper() == PLAZO_VISTA:
@@ -151,19 +146,6 @@ def _clave_orden(candidato: _Candidato, orden: OrdenComparador) -> Decimal:
             )
 
 
-def mediana_por_plazo(candidatos: Sequence[_Candidato]) -> dict[int, Decimal]:
-    """Mediana de tasa nominal por plazo, para la bandera compuesta de §5.2.
-
-    Es contexto de mercado y depende del conjunto comparado, no de la
-    institución: por eso se calcula aquí y se inyecta en el motor de banderas.
-    """
-    por_plazo: dict[int, list[Decimal]] = {}
-    for candidato in candidatos:
-        plazo = candidato.producto.plazo_dias or 0
-        por_plazo.setdefault(plazo, []).append(candidato.tasa.tasa_nominal)
-    return {plazo: statistics.median(tasas) for plazo, tasas in por_plazo.items()}
-
-
 async def construir_comparador(
     session: AsyncSession,
     contexto: ContextoMercado,
@@ -172,7 +154,6 @@ async def construir_comparador(
     consulta = _aplicar_filtros_sql(
         select(Producto).join(Institucion).options(selectinload(Producto.institucion)),
         filtros,
-        modo_demo=contexto.modo_demo,
     )
     productos = (await session.execute(consulta)).scalars().all()
     if not productos:
@@ -181,7 +162,7 @@ async def construir_comparador(
     vigentes = await tasas_vigentes_por_producto(
         session,
         [p.id for p in productos],
-        incluir_pendientes=contexto.modo_demo,
+        incluir_pendientes=contexto.incluir_sin_verificar,
     )
 
     banderas_por_institucion: dict[int, list[Bandera]] = {}
@@ -216,9 +197,7 @@ async def construir_comparador(
                 ten=ten(tasa.tasa_nominal, producto.instrumento, contexto.params_fiscales),
                 gat=resolver_gat(
                     tasa.tasa_nominal,
-                    producto.instrumento,
                     contexto.inflacion_anual,
-                    contexto.params_fiscales,
                     gat_publicada_nominal=tasa.gat_nominal,
                     gat_publicada_real=tasa.gat_real,
                 ),
@@ -263,5 +242,4 @@ __all__ = [
     "FiltrosComparador",
     "OrdenComparador",
     "construir_comparador",
-    "mediana_por_plazo",
 ]

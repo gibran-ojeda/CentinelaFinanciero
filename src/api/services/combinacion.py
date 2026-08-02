@@ -70,11 +70,9 @@ async def cargar_catalogo(session: AsyncSession, contexto: ContextoMercado) -> C
                 .join(Institucion)
                 .options(selectinload(Producto.institucion))
                 .where(Producto.activo.is_(True), Institucion.activa.is_(True))
-                .where(
-                    Institucion.es_demostracion.is_(False)
-                    if not contexto.modo_demo
-                    else Institucion.id.is_not(None)
-                )
+                # Invariante, no modo: una institución de demostración jamás
+                # se sirve, exista o no la bandera de transición.
+                .where(Institucion.es_demostracion.is_(False))
             )
         )
         .scalars()
@@ -82,7 +80,7 @@ async def cargar_catalogo(session: AsyncSession, contexto: ContextoMercado) -> C
     )
 
     tasas = await tasas_vigentes_por_producto(
-        session, [p.id for p in productos], incluir_pendientes=contexto.modo_demo
+        session, [p.id for p in productos], incluir_pendientes=contexto.incluir_sin_verificar
     )
 
     banderas: dict[int, list[Bandera]] = {}

@@ -288,6 +288,37 @@ async def test_the_browser_transport_says_what_to_install_when_absent() -> None:
     assert exc.value.transitorio is False
 
 
+async def test_a_browser_launch_failure_degrades_as_a_download_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Un Chromium que no arranca no puede escapar como excepción cruda.
+
+    Sin el envoltorio, una librería de sistema ausente en la imagen contaba
+    cada fuente JS como fallo suelto —invisible para la cadena— y dejaba
+    playwright arrancado, que es una fuga en un proceso que vive días.
+    """
+    import sys
+    import types
+
+    from rates_agent.navegador import TransporteNavegador
+
+    class _ArranqueRoto:
+        async def start(self) -> None:
+            raise RuntimeError("error while loading shared libraries: libnss3.so")
+
+    stub = types.ModuleType("playwright.async_api")
+    stub.async_playwright = lambda: _ArranqueRoto()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
+    monkeypatch.setitem(sys.modules, "playwright.async_api", stub)
+
+    t = TransporteNavegador(user_agent="prueba")
+    with pytest.raises(ErrorDescarga) as exc:
+        await t.obtener(URL, timeout_s=1.0)
+
+    assert "no arrancó" in str(exc.value)
+    assert exc.value.transitorio is False
+
+
 # ─── El transporte HTTP plano ─────────────────────────────────
 
 

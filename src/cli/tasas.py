@@ -32,7 +32,12 @@ from domain.orm import FuenteTasas, Institucion, Producto, Tasa
 from rates_agent import pipeline
 from rates_agent.pipeline import ReporteCorrida
 from scheduler.bitacora import registrar_corrida
-from scheduler.jobs.tasas import JOB_ID as JOB_ID_FETCH
+
+#: Id propio para las corridas disparadas desde la terminal. Con el mismo id
+#: que el job del lunes, la pasada local con navegador y la del VPS se pisaban
+#: en `job_runs`: `cli revisiones list` sólo miraba «la última corrida» y los
+#: huecos de una borraban los de la otra.
+JOB_ID_FETCH_MANUAL = "tasas_fetch_manual"
 
 log = get_logger(__name__)
 
@@ -254,7 +259,7 @@ class ListaRevision:
         lineas.append(
             f"\n  {total} productos en {instituciones} instituciones. "
             f"Actualiza seeds/tasas.csv con lo que publique cada página "
-            f"(estado VIGENTE, fuente OFICIAL, la URL de la institución) y corre "
+            f"(estado VIGENTE, fuente MANUAL, la URL de la institución) y corre "
             f"`python -m cli tasas import seeds/tasas.csv`."
         )
         return "\n".join(lineas)
@@ -319,6 +324,116 @@ async def listar_pendientes() -> ListaRevision:
     return lista
 
 
+# ─── Retiro de filas de agregador sustituidas ─────────────────
+
+
+@dataclass(slots=True)
+class ReporteRetiro:
+    """Qué filas del CSV ya cumplieron su función de contraste."""
+
+    #: `(slug, fuente que la sustituyó, fecha de esa lectura)`.
+    retiradas: list[tuple[str, str, str]] = field(default_factory=list)
+    conservadas: int = 0
+    desconocidas: list[str] = field(default_factory=list)
+    dry_run: bool = False
+
+    def render(self) -> str:
+        if not (self.retiradas or self.conservadas or self.desconocidas):
+            return "  (ninguna fila de agregador en el CSV)"
+        lineas = []
+        for slug, fuente, fecha in self.retiradas:
+            lineas.append(f"  retirada    {slug:<26} sustituida por {fuente} del {fecha}")
+        lineas.append(f"  conservadas {self.conservadas:>4}  (aún sin lectura oficial)")
+        if self.desconocidas:
+            lineas.append(
+                f"  ⚠ slugs del CSV que el catálogo no conoce: {', '.join(self.desconocidas)}"
+            )
+        if self.dry_run:
+            lineas.append("  (simulación: el archivo no se tocó)")
+        return "\n".join(lineas)
+
+
+async def retirar_sustituidas(path: Path, *, dry_run: bool = False) -> ReporteRetiro:
+    """Comenta las filas AGREGADOR cuyo producto ya tiene lectura oficial.
+
+    Es la promesa del encabezado del propio CSV — «cada una se retira en
+    cuanto su lectura oficial la sustituye» — hecha comando. Retirar es
+    **comentar**, no borrar: los dos lectores (`import_csv` y el seed) ya
+    ignoran las líneas con `#`, y la línea original queda a la vista con la
+    razón del retiro. La base no se toca: las observaciones importadas son
+    historia append-only y la ventana de vigencia ya prefiere la oficial.
+    """
+    reporte = ReporteRetiro(dry_run=dry_run)
+    crudo = path.read_text(encoding="utf-8")
+    termina_en_salto = crudo.endswith("\n")
+    lineas = crudo.splitlines()
+
+    encabezado: list[str] | None = None
+    candidatas: dict[int, str] = {}  # índice de línea → producto_slug
+    for indice, linea in enumerate(lineas):
+        celdas = next(csv.reader([linea]), [])
+        if not celdas or not celdas[0].strip() or celdas[0].strip().startswith("#"):
+            continue
+        if encabezado is None:
+            encabezado = [c.strip() for c in celdas]
+            continue
+        fila = dict(zip(encabezado, (c.strip() for c in celdas), strict=False))
+        if fila.get("fuente") == FuenteTasa.AGREGADOR.value:
+            candidatas[indice] = fila.get("producto_slug", "")
+
+    if not candidatas:
+        return reporte
+
+    async with session_scope() as session:
+        productos = {
+            slug: pid
+            for slug, pid in (
+                await session.execute(
+                    select(Producto.slug, Producto.id).where(
+                        Producto.slug.in_(set(candidatas.values()))
+                    )
+                )
+            )
+            .tuples()
+            .all()
+        }
+        vigentes = await tasas_vigentes_por_producto(
+            session, list(productos.values()), incluir_pendientes=True
+        )
+
+    hoy = date.today().isoformat()
+    for indice, slug in candidatas.items():
+        producto_id = productos.get(slug)
+        if producto_id is None:
+            reporte.desconocidas.append(slug)
+            continue
+        ganadora = vigentes.get(producto_id)
+        # Sustituida ⇔ ya hay lectura oficial vigente. AGREGADOR jamás puede
+        # ser VIGENTE, así que la última condición es redundante; se deja
+        # explícita porque es el criterio.
+        if (
+            ganadora is None
+            or ganadora.estado is not EstadoTasa.VIGENTE
+            or ganadora.fuente is FuenteTasa.AGREGADOR
+        ):
+            reporte.conservadas += 1
+            continue
+        lineas[indice] = (
+            f"# retirada {hoy} (sustituida por {ganadora.fuente.value} "
+            f"{ganadora.fecha_dato.isoformat()}): {lineas[indice]}"
+        )
+        reporte.retiradas.append((slug, ganadora.fuente.value, ganadora.fecha_dato.isoformat()))
+
+    if reporte.retiradas and not dry_run:
+        path.write_text(
+            "\n".join(lineas) + ("\n" if termina_en_salto else ""),
+            encoding="utf-8",
+            newline="\n",
+        )
+
+    return reporte
+
+
 # ─── Lectura automática ───────────────────────────────────────
 
 
@@ -337,17 +452,17 @@ async def correr_fetch(
 ) -> ReporteCorrida:
     """Corre el pipeline de lectura desde la terminal.
 
-    Es el mismo código que ejecuta el job semanal: si fueran dos, el que se
-    corre a mano acabaría comportándose distinto del que corre solo, y el
-    reparto entre el VPS y la máquina local dejaría de ser una decisión de
-    dónde ejecutar para convertirse en dos implementaciones.
+    Es el mismo código que ejecuta el job semanal: si fueran dos, la corrida
+    a mano acabaría comportándose distinto de la del lunes. Los filtros
+    `--solo-navegador` / `--sin-navegador` son de depuración — repetir una
+    mitad de la corrida sin pagar la otra.
 
     Lo único que cambia es la **espera**, y por una razón de quién mira: un job
     desatendido puede permitirse esperar veinte minutos a que un sitio deje de
     limitar; una persona en una terminal, no.
 
-    Con `--solo-navegador` se levanta Chromium; sin eso basta el cliente HTTP
-    plano y no hace falta tener Playwright instalado.
+    Con `--sin-navegador` no se importa Playwright: una máquina sin el extra
+    `[browser]` puede correr la mitad httpx igual.
     """
     solo_js: bool | None = True if solo_navegador else (False if sin_navegador else None)
     agente = settings.fetch_user_agent
@@ -365,24 +480,31 @@ async def correr_fetch(
 
     fetcher = Fetcher(transportes, esperas_backoff_s=esperas)
 
-    # La corrida deja su fila en `job_runs` aunque la dispare una persona. Sin
-    # esto los huecos de catálogo sólo existirían en la consola: `cli revisiones
-    # list` los lee de la última corrida, y una pasada local es una corrida
-    # igual de real que la del lunes.
-    async with registrar_corrida(JOB_ID_FETCH) as corrida:
+    # La corrida deja su fila en `job_runs` aunque la dispare una persona —
+    # una pasada local es una corrida igual de real que la del lunes— pero
+    # bajo su propio id: `cli revisiones list` agrega los huecos de las
+    # corridas recientes de ambos, y así ninguna borra lo que vio la otra.
+    async with registrar_corrida(JOB_ID_FETCH_MANUAL) as corrida:
         reporte = await pipeline.correr(fetcher=fetcher, solo_requieren_js=solo_js)
         corrida.metricas.update(reporte.como_metricas())
         corrida.metricas["disparada_por"] = "cli"
+        if reporte.fracaso_total:
+            # Fallida en la bitácora, pero sin lanzar: la persona delante de
+            # la terminal todavía recibe el render con la primera causa.
+            corrida.fallar(f"las {reporte.fuentes} fuentes fallaron")
     return reporte
 
 
 __all__ = [
+    "JOB_ID_FETCH_MANUAL",
     "TASA_MAXIMA_PLAUSIBLE",
     "ImportReport",
     "ImportError_",
     "ListaRevision",
     "ProductoPendiente",
+    "ReporteRetiro",
     "correr_fetch",
     "import_csv",
     "listar_pendientes",
+    "retirar_sustituidas",
 ]

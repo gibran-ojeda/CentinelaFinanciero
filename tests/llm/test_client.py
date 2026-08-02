@@ -132,6 +132,33 @@ class TestPolitica:
 
         assert doble.llamadas == 0
 
+    async def test_the_ceiling_is_read_hot_from_config(self) -> None:
+        """Sin techo explícito manda la llave del ConfigStore, en cada llamada.
+
+        Es lo que permite bajar el techo a media calibración sin deploy y sin
+        reconstruir el cliente que ya vive dentro de la corrida.
+        """
+        import time
+
+        import core.config_store as cs
+        from llm import cost_tracker
+
+        await cost_tracker.reiniciar()
+        doble = ProveedorDoble()
+        cliente = ClienteLLM(doble)
+
+        previo = cs._snapshot
+        cs._snapshot = cs.ConfigSnapshot(
+            values={"llm_cost_daily_limit_usd": 0.0}, loaded_at=time.monotonic()
+        )
+        try:
+            with pytest.raises(ErrorPresupuestoAgotado):
+                await cliente.completar(sistema="s", usuario="u")
+        finally:
+            cs._snapshot = previo
+
+        assert doble.llamadas == 0
+
     async def test_the_cost_is_recorded_after_a_successful_call(self) -> None:
         from llm import cost_tracker
 

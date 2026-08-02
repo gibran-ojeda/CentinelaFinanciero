@@ -104,6 +104,28 @@ async def _solo_una_fuente(url: str = "https://www.finsus.mx/inversion") -> None
 TASA_364 = {"producto": "Plazo fijo", "tipo": "PLAZO", "plazo_dias": 364, "tasa_nominal": "8.69"}
 
 
+async def test_level3_sources_are_not_fed_to_the_extractor() -> None:
+    """Las portadas de nivel 3 son del researcher, no páginas de tasas.
+
+    Dárselas al extractor paga tokens por leer marketing cada lunes y, en el
+    mejor de los casos, devuelve «vacía». `nivel` es contrato, no adorno.
+    """
+    await run_seed()
+
+    async with session_scope() as session:
+        nivel3 = set(
+            (await session.execute(select(FuenteTasas.url).where(FuenteTasas.nivel == 3)))
+            .scalars()
+            .all()
+        )
+    assert nivel3  # el seed trae las cuatro portadas de nivel 3
+
+    urls = {url for _, url, _, _ in await pipeline._fuentes(None)}
+
+    assert not urls & nivel3
+    assert urls  # y las de nivel 2 siguen entrando
+
+
 async def test_a_read_page_becomes_a_queued_review() -> None:
     """Primera lectura oficial: se encola, no se publica."""
     await _solo_una_fuente()
@@ -250,7 +272,128 @@ async def test_the_budget_ceiling_stops_the_run_without_failing_it() -> None:
     assert reporte.fallidas == 0
 
 
+def test_a_total_failure_is_distinguished_from_a_partial_one() -> None:
+    """La tabla de verdad del fracaso total: todo falló, no hubo corrida."""
+    assert pipeline.ReporteCorrida(fuentes=3, fallidas=3).fracaso_total is True
+    assert pipeline.ReporteCorrida(fuentes=3, fallidas=2).fracaso_total is False
+    assert pipeline.ReporteCorrida(fuentes=0).fracaso_total is False
+    # El presupuesto corta sin marcar fallidas: nunca dispara esto.
+    assert pipeline.ReporteCorrida(fuentes=3, presupuesto_agotado=True).fracaso_total is False
+
+
 # ─── El job ───────────────────────────────────────────────────
+
+
+def test_the_job_chain_includes_the_browser_when_the_gate_allows_js() -> None:
+    """El hueco silencioso que este ensamblaje existe para cerrar.
+
+    Ensanchar la consulta a las fuentes JS sin darle un navegador a la cadena
+    haría que las once devolvieran HTML sin renderizar, contadas como «vacías»
+    con corrida EXITOSA — cada lunes, sin alarma. Construir el transporte no
+    lanza Chromium (el arranque es perezoso), así que esto corre sin browser.
+    """
+    import time
+
+    import core.config_store as cs
+    from scheduler.jobs.tasas import _armar_fetcher
+
+    previo = cs._snapshot
+    try:
+        cs._snapshot = cs.ConfigSnapshot(
+            values={"tasas_fetch_solo_sin_js": False}, loaded_at=time.monotonic()
+        )
+        con_navegador = [t.nombre for t in _armar_fetcher()._transportes]
+        cs._snapshot = cs.ConfigSnapshot(
+            values={"tasas_fetch_solo_sin_js": True}, loaded_at=time.monotonic()
+        )
+        solo_http = [t.nombre for t in _armar_fetcher()._transportes]
+    finally:
+        cs._snapshot = previo
+
+    assert con_navegador == ["httpx", "navegador"]
+    assert solo_http == ["httpx"]
+
+
+async def test_the_job_hands_its_own_fetcher_to_the_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """El job arma la cadena; el pipeline conserva la propiedad y la cierra."""
+    from scheduler.jobs import tasas as jobs_tasas
+
+    await run_seed()
+    capturado: dict[str, object] = {}
+
+    async def _captura(**kwargs: object) -> pipeline.ReporteCorrida:
+        capturado.update(kwargs)
+        return pipeline.ReporteCorrida()
+
+    monkeypatch.setattr(jobs_tasas.pipeline, "correr", _captura)
+
+    await jobs_tasas.tasas_fetch_dirigido()
+
+    assert capturado["fetcher"] is not None
+    # `cliente` no viaja: con las dos piezas puestas, `propios` sería False y
+    # el pipeline dejaría Chromium vivo entre corridas.
+    assert "cliente" not in capturado
+
+
+async def test_the_job_fails_when_every_source_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Una llave de LLM vacía producía EXITOSO con dieciocho fallos idénticos.
+
+    El peor estado es el que parece sano: si nada funcionó, la fila de
+    `job_runs` tiene que decir FALLIDO — y con las métricas dentro, que la
+    bitácora persiste en su finally aunque el job lance.
+    """
+    from scheduler.jobs import tasas as jobs_tasas
+
+    await run_seed()
+
+    async def _todo_fallo(**kwargs: object) -> pipeline.ReporteCorrida:
+        return pipeline.ReporteCorrida(
+            fuentes=3, fallidas=3, errores=["Finsus: ErrorProveedor: no hay API key"]
+        )
+
+    monkeypatch.setattr(jobs_tasas.pipeline, "correr", _todo_fallo)
+
+    with pytest.raises(RuntimeError, match="3 fuentes fallaron"):
+        await jobs_tasas.tasas_fetch_dirigido()
+
+    async with session_scope() as session:
+        corrida = await session.scalar(
+            select(JobRun).where(JobRun.job_id == jobs_tasas.JOB_ID).order_by(JobRun.id.desc())
+        )
+    assert corrida is not None
+    assert corrida.estado is EstadoJob.FALLIDO
+    assert corrida.metricas is not None and corrida.metricas["fallidas"] == 3
+
+
+async def test_a_total_failure_marks_the_cli_run_as_failed_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """La persona delante de la terminal recibe el render, no un traceback."""
+    from cli import tasas as cli_tasas
+
+    await run_seed()
+
+    async def _todo_fallo(**kwargs: object) -> pipeline.ReporteCorrida:
+        return pipeline.ReporteCorrida(fuentes=2, fallidas=2)
+
+    monkeypatch.setattr(cli_tasas.pipeline, "correr", _todo_fallo)
+
+    reporte = await cli_tasas.correr_fetch(sin_navegador=True)
+
+    assert reporte.fracaso_total
+    async with session_scope() as session:
+        corrida = await session.scalar(
+            select(JobRun)
+            .where(JobRun.job_id == cli_tasas.JOB_ID_FETCH_MANUAL)
+            .order_by(JobRun.id.desc())
+        )
+    assert corrida is not None
+    assert corrida.estado is EstadoJob.FALLIDO
+    assert corrida.metricas is not None and corrida.metricas["motivo_fallo"]
 
 
 async def test_the_hot_kill_switch_skips_the_job() -> None:

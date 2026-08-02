@@ -10,9 +10,17 @@ Dos variantes: **nominal** (rendimiento anual total antes de inflación) y
 
 Para lo que no la publica —deuda gubernamental comprada en directo, IFPEs, o
 productos donde la institución no la muestra— se calcula un **equivalente**
-siguiendo la misma lógica, y se marca como calculado. Que el usuario sepa
+siguiendo la misma definición, y se marca como calculado. Que el usuario sepa
 cuándo mira un dato regulado y cuándo una estimación nuestra es parte de la
 honestidad que pide §11; por eso el resultado viaja con el origen, no suelto.
+
+**La GAT es antes de impuestos por definición regulatoria** — la leyenda que
+la disposición obliga a publicar lo dice literalmente. El equivalente tiene
+que serlo también, o deja de ser equivalente: calculado sobre la TEN (que ya
+descuenta el ISR), quedaba varios puntos por debajo de cualquier GAT publicada
+y el orden por GAT del comparador mezclaba peras con manzanas en cuanto una
+institución publicara la suya. Para el «después de impuestos» ya existe la
+TEN, que es su propia columna.
 """
 
 from __future__ import annotations
@@ -21,10 +29,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
 
-from domain.enums import TipoInstrumento
-from domain.models import ParametrosFiscales
 from metrics.rounding import PORCENTAJE, redondear
-from metrics.ten import ten
 
 
 class OrigenGat(StrEnum):
@@ -50,21 +55,18 @@ class Gat:
 
 def gat_equivalente(
     tasa_nominal: Decimal,
-    instrumento: TipoInstrumento,
     inflacion_anual: Decimal,
-    params: ParametrosFiscales,
     *,
     comisiones_anuales_pct: Decimal = Decimal("0"),
 ) -> Gat:
     """Equivalente GAT para instrumentos que no la publican (§4.4).
 
-    Misma lógica que la GAT regulada: rendimiento anual después de retenciones
-    y comisiones. `comisiones_anuales_pct` cubre casos como BONDDIA, que cobra
-    comisión de administración descontada del rendimiento bruto.
+    Misma definición que la GAT regulada: rendimiento anual neto de
+    comisiones y **antes de impuestos**. `comisiones_anuales_pct` cubre casos
+    como BONDDIA, que cobra comisión de administración descontada del
+    rendimiento bruto. El ISR no entra aquí: entra en la TEN.
     """
-    nominal = redondear(
-        ten(tasa_nominal, instrumento, params) - comisiones_anuales_pct, PORCENTAJE
-    )
+    nominal = redondear(tasa_nominal - comisiones_anuales_pct, PORCENTAJE)
     return Gat(
         nominal=nominal,
         real=redondear(nominal - inflacion_anual, PORCENTAJE),
@@ -74,9 +76,7 @@ def gat_equivalente(
 
 def resolver_gat(
     tasa_nominal: Decimal,
-    instrumento: TipoInstrumento,
     inflacion_anual: Decimal,
-    params: ParametrosFiscales,
     *,
     gat_publicada_nominal: Decimal | None = None,
     gat_publicada_real: Decimal | None = None,
@@ -92,9 +92,7 @@ def resolver_gat(
     if gat_publicada_nominal is None:
         return gat_equivalente(
             tasa_nominal,
-            instrumento,
             inflacion_anual,
-            params,
             comisiones_anuales_pct=comisiones_anuales_pct,
         )
 

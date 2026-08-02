@@ -43,6 +43,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from core.config_store import effective
 from core.logging import get_logger
 from core.settings import settings
 from domain.enums import TipoProducto
@@ -149,7 +150,9 @@ async def investigar(
 ) -> ReporteResearch:
     """Busca la tasa vigente de una institución. Nunca publica nada."""
     ejecutor = ejecutor or SearchExecutor()
-    rondas_max = max_rondas if max_rondas is not None else settings.research_max_rondas
+    # Del ConfigStore y no de Settings: es una de las llaves que la
+    # calibración mueve en caliente.
+    rondas_max = max_rondas if max_rondas is not None else int(effective.research_max_rondas)
     reporte = ReporteResearch(institucion=institucion)
 
     conversacion: list[dict[str, Any]] = [

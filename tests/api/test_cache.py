@@ -142,7 +142,7 @@ class TestConRedisReal:
 
 
 @pytest.mark.requires_docker
-@pytest.mark.usefixtures("comparador_poblado", "real_redis", "sin_modo_demo")
+@pytest.mark.usefixtures("comparador_poblado", "real_redis", "solo_verificadas")
 class TestEndpoint:
     async def test_second_request_is_served_from_cache(self, api_lectura: AsyncClient) -> None:
         primera = await api_lectura.get("/api/v1/comparador", params={"plazo": "91"})

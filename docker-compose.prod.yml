@@ -69,7 +69,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          # 768M y no 256M: el lunes este servicio levanta Chromium (~300 MB
+          # al cargar una página). La condición para este número es la
+          # medición registrada en docs/despliegue.md («Navegador en el
+          # VPS»): free -h con ≥1 GiB en `available` de forma sostenida.
+          memory: 768M
 
   web:
     environment:

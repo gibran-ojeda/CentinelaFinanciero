@@ -177,3 +177,22 @@ def test_the_engine_chain_is_configurable() -> None:
     nombres = [m.nombre for m in motores_por_defecto()]
 
     assert nombres == ["ddgs:duckduckgo", "ddgs:google", "ddgs:brave"]
+
+
+def test_the_engine_chain_is_read_hot_from_config() -> None:
+    """Y además es llave caliente: la calibración la mueve sin deploy."""
+    import time
+
+    import core.config_store as cs
+    from rates_agent.search import motores_por_defecto
+
+    previo = cs._snapshot
+    cs._snapshot = cs.ConfigSnapshot(
+        values={"research_motores": "searxng, brave"}, loaded_at=time.monotonic()
+    )
+    try:
+        nombres = [m.nombre for m in motores_por_defecto()]
+    finally:
+        cs._snapshot = previo
+
+    assert nombres == ["ddgs:searxng", "ddgs:brave"]

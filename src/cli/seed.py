@@ -30,14 +30,12 @@ from core.logging import get_logger
 from domain.enums import (
     CategoriaInstitucion,
     Liquidez,
-    NivelCapitalizacion,
     TipoInstrumento,
     TipoProducto,
     TipoSeguro,
 )
 from domain.orm import (
     FuenteTasas,
-    IndicadorFinanciero,
     Institucion,
     ParametroFiscal,
     Producto,
@@ -331,48 +329,6 @@ async def _seed_series(
     await session.flush()
 
 
-async def _seed_indicadores(
-    session: AsyncSession,
-    filas: list[dict[str, str]],
-    instituciones: dict[str, Institucion],
-    report: SeedReport,
-) -> None:
-    existentes = {
-        (row.institucion_id, row.periodo): row
-        for row in (await session.execute(select(IndicadorFinanciero))).scalars()
-    }
-
-    for fila in filas:
-        institucion = instituciones.get(fila["institucion"])
-        if institucion is None:
-            raise SeedError(
-                f"El indicador referencia una institución que no está en el "
-                f"catálogo: '{fila['institucion']}'"
-            )
-        periodo = _fecha(fila["periodo"])
-        nivel = fila.get("nicap_nivel") or None
-        campos = {
-            "imor": _decimal(fila.get("imor")),
-            "icap": _decimal(fila.get("icap")),
-            "icor": _decimal(fila.get("icor")),
-            "nicap_nivel": NivelCapitalizacion(nivel) if nivel else None,
-            "captacion": _decimal(fila.get("captacion")),
-            "cartera_total": _decimal(fila.get("cartera_total")),
-            "capital_contable": _decimal(fila.get("capital_contable")),
-            "pasivo_total": _decimal(fila.get("pasivo_total")),
-            "fuente_url": fila.get("fuente_url") or None,
-        }
-        if (actual := existentes.get((institucion.id, periodo))) is None:
-            session.add(
-                IndicadorFinanciero(institucion_id=institucion.id, periodo=periodo, **campos)
-            )
-            report.registrar("indicadores_financieros", "creados")
-        else:
-            _aplicar(actual, campos, report, "indicadores_financieros")
-
-    await session.flush()
-
-
 # ─── Entrada ──────────────────────────────────────────────────
 
 
@@ -380,9 +336,9 @@ async def run_seed(seeds_dir: Path | None = None) -> SeedReport:
     """Carga todos los catálogos. Una sola transacción: todo o nada."""
     # Se resuelve aquí y no al importar: en el contenedor depende del `cwd`.
     directorio = seeds_dir or _default_seeds_dir()
-    # Que falte un archivo suelto es tolerable —`indicadores.csv` está casi
-    # vacío a propósito— pero que falte el directorio entero no: significa que
-    # la carga no va a hacer nada, y sin esto lo haría anunciando éxito.
+    # Que falte un archivo suelto es tolerable, pero que falte el directorio
+    # entero no: significa que la carga no va a hacer nada, y sin esto lo
+    # haría anunciando éxito.
     if not directorio.is_dir():
         raise SeedError(f"no existe el directorio de semillas: {directorio}")
     report = SeedReport()
@@ -409,9 +365,6 @@ async def run_seed(seeds_dir: Path | None = None) -> SeedReport:
             report,
         )
         await _seed_series(session, _read_csv(directorio / "series.csv"), report)
-        await _seed_indicadores(
-            session, _read_csv(directorio / "indicadores.csv"), instituciones, report
-        )
 
     # El catálogo es la mitad de cada fila del comparador: instituciones,
     # productos y sus plazos. Sembrar sin invalidar deja la vista sirviendo un

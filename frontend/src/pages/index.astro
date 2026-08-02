@@ -64,9 +64,17 @@ try {
   console.error('[mercado]', e);
 }
 
-const hayDemo =
-  frescura?.modo_demo ??
-  (mercado?.filas.some((f) => f.institucion.es_demostracion || !f.procedencia.verificada) ?? false);
+const hayNoVerificadas =
+  frescura?.mostrar_tasas_sin_verificar ??
+  (mercado?.filas.some((f) => !f.procedencia.verificada) ?? false);
+
+const hayFiltros = Boolean(
+  filtros.plazo ||
+    filtros.seguros.length ||
+    filtros.categorias.length ||
+    filtros.monto ||
+    filtros.sinBanderas
+);
 
 const jsonLd = mercado
   ? {
@@ -114,12 +122,12 @@ const jsonLd = mercado
         <span class="tenue-2 aviso-texto">
           Cada tasa muestra su fecha y su fuente.
           {
-            hayDemo && (
+            hayNoVerificadas && (
               <>
                 {' '}
-                Las instituciones marcadas <strong>◆</strong> son ejemplos ilustrativos y las
-                tasas <strong>sin verificar</strong> no se han podido confirmar con la
-                institución.
+                Las tasas marcadas <strong>sin verificar</strong> se leyeron de un agregador de
+                terceros y aún no se confirman con la institución; cada una se sustituye en
+                cuanto llega su lectura oficial.
               </>
             )
           }
@@ -132,7 +140,7 @@ const jsonLd = mercado
     <BarraSeleccion client:idle />
 
     {error && <p class="error">{error}</p>}
-    {mercado && <TablaComparador filas={mercado.filas} />}
+    {mercado && <TablaComparador filas={mercado.filas} hayFiltros={hayFiltros} />}
 
     {mercado && <p class="tenue-2 disclaimer">{mercado.disclaimer}</p>}
   </section>

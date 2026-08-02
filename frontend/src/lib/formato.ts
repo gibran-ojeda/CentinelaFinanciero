@@ -102,7 +102,7 @@ export function plazoLargo(plazoDias: number | null, tipo: string): string {
   return `${plazoDias} días`;
 }
 
-/** Iniciales para el avatar: "Nu México" → "NU", "Ahorra+ Capital" → "A+". */
+/** Iniciales para el avatar: "Nu México" → "NU", "Mercado Pago" → "MP". */
 export function iniciales(nombre: string): string {
   const palabras = nombre.trim().split(/\s+/);
   if (palabras.length === 1) return palabras[0].slice(0, 2).toUpperCase();

@@ -20,6 +20,7 @@ import asyncio
 import random
 from typing import Any
 
+from core.config_store import effective
 from core.logging import get_logger
 from core.settings import settings
 from llm import cost_tracker, parsers
@@ -62,11 +63,11 @@ class ClienteLLM:
             base_url=settings.llm_base_url,
             timeout_s=settings.llm_timeout_seconds,
         )
-        self._limite = (
-            limite_diario_usd
-            if limite_diario_usd is not None
-            else settings.llm_cost_daily_limit_usd
-        )
+        #: El techo explícito del constructor manda cuando existe (lo usan los
+        #: tests y quien quiera un techo propio); sin él, se resuelve del
+        #: ConfigStore **en cada llamada** — es llave caliente y este cliente
+        #: puede vivir una corrida entera.
+        self._limite_explicito = limite_diario_usd
         self._max_reintentos = max(0, max_reintentos)
         self._base = espera_base_s
         self._tope = espera_tope_s
@@ -92,9 +93,14 @@ class ClienteLLM:
         comprueba **en cada vuelta**, que es lo que impide que un loop que no
         converge se lleve el presupuesto del día.
         """
-        if not await cost_tracker.disponible(self._limite):
+        limite = (
+            self._limite_explicito
+            if self._limite_explicito is not None
+            else float(effective.llm_cost_daily_limit_usd)
+        )
+        if not await cost_tracker.disponible(limite):
             raise ErrorPresupuestoAgotado(
-                f"techo diario de ${self._limite:.2f} USD alcanzado; la corrida no gasta más"
+                f"techo diario de ${limite:.2f} USD alcanzado; la corrida no gasta más"
             )
 
         ultimo: Exception | None = None

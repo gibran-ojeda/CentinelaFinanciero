@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import func, select
 
 from cli.seed import DEFAULT_SEEDS_DIR, run_seed
-from cli.tasas import ImportError_, import_csv, listar_pendientes
+from cli.tasas import ImportError_, import_csv, listar_pendientes, retirar_sustituidas
 from core.db import session_scope
 from domain.enums import EstadoTasa, FuenteTasa
 from domain.orm import Producto, Tasa
@@ -43,9 +43,9 @@ async def test_imports_the_full_seed_dataset() -> None:
     await run_seed()
     report = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
-    assert report.creadas == 37
+    assert report.creadas == 35
     assert report.errores == []
-    assert await _contar_tasas() == 37
+    assert await _contar_tasas() == 35
 
 
 async def test_importing_invalidates_the_comparador_cache(
@@ -102,10 +102,9 @@ async def test_seed_dataset_publishes_only_verified_rates() -> None:
     await run_seed()
     report = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
-    # Siete VIGENTE: las cinco gubernamentales verificadas contra el SIE de
-    # Banxico y cetesdirecto, más las dos de instituciones ficticias — que no
-    # tienen fuente que verificar porque no existen, y van marcadas con ◆.
-    assert report.por_estado["VIGENTE"] == 7
+    # Cinco VIGENTE: las gubernamentales verificadas contra el SIE de Banxico
+    # y cetesdirecto. Todo lo demás es de agregador y queda pendiente.
+    assert report.por_estado["VIGENTE"] == 5
     assert report.por_estado["PENDIENTE_REVISION"] == 30
 
     async with session_scope() as session:
@@ -128,8 +127,6 @@ async def test_seed_dataset_publishes_only_verified_rates() -> None:
         "cetes-28",
         "cetes-364",
         "cetes-91",
-        "ahorra-mas-plazo-364",
-        "alcancia-plazo-182",
     }
 
 
@@ -141,8 +138,8 @@ async def test_reimporting_the_same_file_creates_nothing() -> None:
     segundo = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
     assert segundo.creadas == 0
-    assert segundo.duplicadas == 37
-    assert await _contar_tasas() == 37
+    assert segundo.duplicadas == 35
+    assert await _contar_tasas() == 35
 
 
 async def test_a_new_observation_supersedes_without_deleting(tmp_path: Path) -> None:
@@ -282,8 +279,8 @@ async def test_the_review_list_names_what_cannot_be_published() -> None:
 
     Dos motivos distintos caen en la misma lista: una tasa que existe pero no
     se confirmó contra la institución, y un producto sin ninguna tasa. Los dos
-    son invisibles con `mostrar_datos_demo=false`, así que los dos son trabajo
-    de la misma sesión de revisión.
+    son invisibles con `mostrar_tasas_sin_verificar=false`, así que los dos
+    son trabajo de la misma sesión de revisión.
     """
     await run_seed()
     await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
@@ -294,8 +291,8 @@ async def test_the_review_list_names_what_cannot_be_published() -> None:
     assert motivos == {"sin verificar", "sin tasa"}
     assert sum(p.motivo == "sin verificar" for p in lista.pendientes) == 30
 
-    # Ninguna de las siete VIGENTE aparece: CETES y BONDDIA salen de fuente
-    # primaria, y las dos ficticias no tienen fuente que verificar.
+    # Ninguna de las cinco VIGENTE aparece: CETES y BONDDIA salen de fuente
+    # primaria.
     slugs = {p.producto_slug for p in lista.pendientes}
     assert "cetes-28" not in slugs
     assert "bonddia" not in slugs
@@ -383,3 +380,97 @@ async def test_the_seed_holds_no_aggregator_rate_as_current() -> None:
 
     assert len(agregadas) == 30
     assert all(t.estado is EstadoTasa.PENDIENTE_REVISION for t in agregadas)
+
+
+# ─── Retiro de filas de agregador sustituidas ─────────────────
+
+
+async def _con_hey_sustituida(tmp_path: Path) -> Path:
+    """Seed + import + lectura oficial VIGENTE de hey-vista; copia del CSV."""
+    await run_seed()
+    await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
+    async with session_scope() as session:
+        producto = await session.scalar(select(Producto).where(Producto.slug == "hey-vista"))
+        assert producto is not None
+        session.add(
+            Tasa(
+                producto_id=producto.id,
+                tasa_nominal=Decimal("7.10"),
+                fecha_dato=date.today(),
+                fuente=FuenteTasa.FETCH_DIRIGIDO,
+                estado=EstadoTasa.VIGENTE,
+            )
+        )
+
+    copia = tmp_path / "tasas.csv"
+    copia.write_text(
+        (DEFAULT_SEEDS_DIR / "tasas.csv").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    return copia
+
+
+async def test_a_superseded_aggregator_row_gets_commented_out(tmp_path: Path) -> None:
+    """La promesa del encabezado del CSV, hecha comando.
+
+    Retirar es comentar: la línea original queda a la vista con la razón, y
+    todo lo demás se conserva byte a byte.
+    """
+    copia = await _con_hey_sustituida(tmp_path)
+
+    reporte = await retirar_sustituidas(copia)
+
+    assert [r[0] for r in reporte.retiradas] == ["hey-vista"]
+    assert reporte.conservadas == 29
+
+    original = (DEFAULT_SEEDS_DIR / "tasas.csv").read_text(encoding="utf-8").splitlines()
+    nuevo = copia.read_text(encoding="utf-8").splitlines()
+    distintas = [i for i, (a, b) in enumerate(zip(original, nuevo, strict=True)) if a != b]
+    assert len(distintas) == 1
+    assert nuevo[distintas[0]].startswith("# retirada ")
+    assert "sustituida por FETCH_DIRIGIDO" in nuevo[distintas[0]]
+    assert nuevo[distintas[0]].endswith(original[distintas[0]])
+
+    # Ambos lectores la ignoran: reimportar ve una fila menos.
+    segundo = await import_csv(copia)
+    assert segundo.creadas == 0
+    assert segundo.duplicadas == 34
+
+
+async def test_retiring_is_idempotent(tmp_path: Path) -> None:
+    """Una fila ya comentada deja de ser candidata: la segunda pasada no toca."""
+    copia = await _con_hey_sustituida(tmp_path)
+    await retirar_sustituidas(copia)
+    tras_primera = copia.read_text(encoding="utf-8")
+
+    reporte = await retirar_sustituidas(copia)
+
+    assert reporte.retiradas == []
+    assert copia.read_text(encoding="utf-8") == tras_primera
+
+
+async def test_dry_run_reports_without_writing(tmp_path: Path) -> None:
+    copia = await _con_hey_sustituida(tmp_path)
+    antes = copia.read_text(encoding="utf-8")
+
+    reporte = await retirar_sustituidas(copia, dry_run=True)
+
+    assert [r[0] for r in reporte.retiradas] == ["hey-vista"]
+    assert copia.read_text(encoding="utf-8") == antes
+    assert "simulación" in reporte.render()
+
+
+async def test_nothing_is_retired_without_an_official_reading(tmp_path: Path) -> None:
+    """El contraste se queda mientras siga siendo lo único que hay."""
+    await run_seed()
+    await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
+    copia = tmp_path / "tasas.csv"
+    copia.write_text(
+        (DEFAULT_SEEDS_DIR / "tasas.csv").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    antes = copia.read_text(encoding="utf-8")
+
+    reporte = await retirar_sustituidas(copia)
+
+    assert reporte.retiradas == []
+    assert reporte.conservadas == 30
+    assert copia.read_text(encoding="utf-8") == antes

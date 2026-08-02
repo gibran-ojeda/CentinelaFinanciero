@@ -76,7 +76,12 @@ async def calcular(
     if faltantes:
         raise HTTPException(status_code=404, detail=f"Productos inexistentes: {sorted(faltantes)}")
 
-    vigentes = await tasas_vigentes_por_producto(session, [p.id for p in productos])
+    # El mismo criterio de publicabilidad que el comparador y la combinación:
+    # sin esto, una fila «sin verificar» visible en el comparador respondía
+    # 404 al llegar aquí — tres endpoints, dos reglas.
+    vigentes = await tasas_vigentes_por_producto(
+        session, [p.id for p in productos], incluir_pendientes=contexto.incluir_sin_verificar
+    )
     sin_tasa = [p.slug for p in productos if p.id not in vigentes]
     if sin_tasa:
         # Se falla en vez de omitirlos: una calculadora que devuelve menos

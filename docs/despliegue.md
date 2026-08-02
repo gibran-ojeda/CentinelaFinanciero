@@ -24,7 +24,7 @@ Nada se publica fuera del loopback. A internet sólo llega lo que Caddy sirve.
 free -h && df -h / && docker stats --no-stream
 ```
 
-El overlay de producción reserva ~1.5 GB de techo entre los cinco servicios (db 512M · api 384M · web 256M · scheduler 256M · redis 128M). El uso real medido en local es de ~175 MB. Si la RAM libre no da, se bajan los límites en `docker-compose.prod.yml` antes de seguir.
+El overlay de producción reserva ~2.0 GB de techo entre los cinco servicios (db 512M · api 384M · web 256M · scheduler **768M** · redis 128M) — el scheduler sube por Chromium, y su condición es la medición registrada en «Navegador en el VPS», más abajo. Si la RAM disponible no da, el repliegue inmediato es `cli config set tasas_fetch_solo_sin_js true` y bajar el límite en `docker-compose.prod.yml`.
 
 **2. Dominio.** `centinelafinanciero.lat` (D1b), con un registro A al VPS. Activar también el reenvío de `contacto@centinelafinanciero.lat` — es el canal que publica el [aviso legal](../frontend/src/pages/aviso-legal.astro) y tiene que existir el día que el sitio sea público.
 
@@ -46,8 +46,18 @@ git clone https://github.com/gibran-ojeda/brujula-financiera.git ~/centinela-fin
 | `POSTGRES_PASSWORD` | contraseña de la base |
 | `API_READ_KEY`, `API_ADMIN_KEY` | `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `SITE_URL` | `https://centinelafinanciero.lat` |
+| `BANXICO_TOKEN` | token del SIE ([solicitud](https://www.banxico.org.mx/SieAPIRest/service/v1/token)). Opcional: sin él, `banxico_sync_series` se marca OMITIDO y la UDI cae al valor de respaldo congelado |
+| `DEEPSEEK_API_KEY` | llave de DeepSeek. Opcional: sin ella, el fetch L2 de los lunes falla (FALLIDO en `job_runs`, no en silencio) |
 
-`BANXICO_TOKEN` y `DEEPSEEK_API_KEY` no hacen falta hasta las fases 7 y 9.
+También existe la **variable** de repo `SCHEDULER_RESEARCH_ENABLED` (no
+secreto): el **apagado de emergencia** del researcher L3. Sin definirla queda
+encendido; fijarla en `false` lo apaga sin tocar código. Ojo: si existe con
+valor `false` de antes, anula el encendido por código — borrarla.
+
+> **Ojo**: el compose no declara `env_file`, así que una variable sólo llega al
+> contenedor si está en el mapa `environment:` del servicio. Añadir una nueva
+> exige tocar tres sitios: el secreto/variable en GitHub, el heredoc de
+> `scripts/desplegar.sh` y el mapa del compose.
 
 **5. Levantar el stack sin tocar Caddy**, y comprobar por túnel:
 
@@ -143,36 +153,47 @@ Para escribir sobre la base real hace falta pedirlo: `CONTENEDOR=centinela-db CO
 
 ---
 
-## Navegador en el VPS — decisión aplazada
+## Navegador en el VPS — decisión aplicada
 
-**Estado: aplazada, no descartada.** Fecha: 2026-07-29.
+**Estado: aplicada.** Aplazada el 2026-07-29 por la RAM; revertida la
+prórroga el 2026-08-01 por decisión del propietario, **condicionada a la
+medición de abajo antes del merge**.
 
-Once de las dieciocho fuentes de tasas se pintan con JavaScript y sólo rinden a un navegador. `TransporteNavegador` está escrito y probado, y la cadena del [fetcher](../src/rates_agent/fetcher.py) lo acepta como segundo eslabón sin tocar nada — pero **no se instala en la imagen**, y el job del VPS corre sólo las siete que rinden a un cliente HTTP plano (`tasas_fetch_solo_sin_js=true` en el ConfigStore).
+Once de las dieciocho fuentes de tasas se pintan con JavaScript. Chromium
+viaja ahora en la imagen (capa propia del [Dockerfile](../docker/app/Dockerfile),
+`playwright install --with-deps chromium` con `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`
+para que el uid sin privilegios pueda leerlo), el job del lunes arma su cadena
+httpx + navegador y cubre las dieciocho fuentes, y el límite del scheduler
+subió a **768M** en el overlay. La pasada semanal desde la laptop deja de ser
+un modo de operación; los flags `--solo-navegador` / `--sin-navegador` de la
+CLI quedan como filtros de depuración.
 
-**Por qué no.** Dos costos, y uno es bloqueante:
+**El repliegue, en dos niveles:**
 
-| | Costo |
-|---|---|
-| Disco | ~450 MB en la **imagen única**, que también sirve la API. §13 del foundation es «build una vez, deploy N», así que el peso lo paga cada servicio |
-| RAM | Chromium usa ~300 MB al cargar una página. El límite del scheduler en [docker-compose.prod.yml](../docker-compose.prod.yml) es **256 MB**: tal cual, el OOM killer lo mata a media corrida |
+1. **Sin deploy** — si la RAM protesta (OOM del scheduler, `available` en
+   caída): `docker compose exec -T api python -m cli config set
+   tasas_fetch_solo_sin_js true --motivo "RAM medida AAAA-MM-DD"`. El job
+   vuelve a solo-httpx y Chromium ni se construye.
+2. **Revert** — los tres últimos commits de la cola (docs, flip del default,
+   imagen): Actions → deploy → Run workflow con el SHA anterior a la cola en
+   `ref`, o `git revert` del rango. No hay migraciones en la cola.
 
-Lo bloqueante es la RAM. Subirlo a ~768 MB en un VPS que ya sostiene nueve contenedores de NarrativeAlpha no es un compromiso que se tome sin medir, y esa medición es la tarea 1 de la fase 06.
+**Medición** (la condición del 768M; este registro es el rastro que el
+aplazamiento nunca tuvo):
 
-**Qué se hace mientras.** El mismo código, desde la máquina local, como paso del [ciclo semanal](runbook-actualizacion-manual.md):
-
-```bash
-python -m cli tasas fetch --solo-navegador
+```
+Medición: pendiente de registrar.
+  - free -h (columna available, 3-4 muestras en un día normal): ____
+  - pico de MEM del scheduler durante una corrida con navegador
+    (docker stats centinela-scheduler-1 en paralelo a
+     docker compose ... exec -T scheduler python -m cli tasas fetch): ____
+  - duración de la corrida completa: ____
 ```
 
-El resultado entra por la misma cola de revisión. La diferencia con la opción completa es **quién dispara la corrida**, no qué hace ni cómo se aprueba.
-
-**Qué la reabre.** Cualquiera de estas tres:
-
-1. `free -h` muestra ≥ 1 GB libre de forma sostenida tras el despliegue.
-2. El ciclo semanal se salta la pasada local dos semanas seguidas — señal de que el paso manual no se sostiene.
-3. Las fuentes que necesitan navegador pasan de once a más de la mitad del catálogo.
-
-**Qué costaría hacerlo.** Poco código: `playwright install chromium` en [docker/app/Dockerfile](../docker/app/Dockerfile), subir el límite del scheduler en el overlay, poner `tasas_fetch_solo_sin_js=false` en el ConfigStore — y decidir si el peso extra justifica separar la imagen única en dos.
+Criterio: **≥ 1 GiB en `available` de forma sostenida** (`available`, no
+`free`: `free` no cuenta el page cache recuperable y subestima lo que de
+verdad hay), y el pico del scheduler lejos del límite. Si no se cumple,
+aplicar el repliegue de arriba.
 
 ---
 
@@ -181,10 +202,14 @@ El resultado entra por la misma cola de revisión. La diferencia con la opción 
 - **`ufw` dropea `docker0 → host`.** Un contenedor de Centinela en bridge no alcanza nada publicado en el loopback del host — causa documentada de 502 en NarrativeAlpha. Si algún día Centinela necesita consumir un servicio del vecino (su SearXNG, por ejemplo), la vía es adjuntar el contenedor a la red bridge de NarrativeAlpha como red externa, nunca pasar por la gateway de Docker.
 - **Centinela no levanta Caddy.** 80/443 los tiene el de NarrativeAlpha en `network_mode: host`.
 - **`SITE_URL` es obligatoria en producción.** El overlay falla si no está, a propósito: sin ella la canónica y el `sitemap.xml` anunciarían el loopback y el fallo sería invisible hasta que el índice estuviera hecho.
-- **Antes de difundir el sitio**, apagar el modo demostración:
+- **La política de transición del lanzamiento** publica las tasas en
+  `PENDIENTE_REVISION` etiquetadas «sin verificar» hasta que su lectura oficial
+  las sustituye (`mostrar_tasas_sin_verificar`, encendida por diseño). Para
+  ocultar lo no verificado sin deploy:
 
   ```bash
-  docker compose exec -T api python -m cli config set mostrar_datos_demo false --motivo "lanzamiento público"
+  docker compose exec -T api python -m cli config set mostrar_tasas_sin_verificar false --motivo "solo verificado"
   ```
 
-  Y comprobar que `/api/v1/meta/frescura` devuelve `modo_demo: false`.
+  El estado es observable en `/api/v1/meta/frescura`
+  (`mostrar_tasas_sin_verificar`).
