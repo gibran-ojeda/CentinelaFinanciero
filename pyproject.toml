@@ -170,6 +170,7 @@ asyncio_mode = "auto"
 filterwarnings = ["ignore::DeprecationWarning"]
 markers = [
     "requires_docker: necesita un daemon de Docker (testcontainers); se salta si no lo hay",
+    "requires_bash: necesita un bash que vea el repo; se salta si no lo hay",
 ]
 
 [tool.coverage.run]

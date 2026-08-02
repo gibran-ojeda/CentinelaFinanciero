@@ -40,12 +40,16 @@ for _key, _value in _TEST_ENV.items():
 # (y sobre el `cp .env.example .env` que hace el CI) sin necesidad de borrarlo.
 
 import contextlib  # noqa: E402
+import shutil  # noqa: E402
 import socket  # noqa: E402
 import subprocess  # noqa: E402
 from collections.abc import Iterator  # noqa: E402
 from functools import lru_cache  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @lru_cache(maxsize=1)
@@ -68,19 +72,74 @@ def docker_available() -> bool:
     return result.returncode == 0
 
 
+@lru_cache(maxsize=1)
+def bash_ejecutable() -> str | None:
+    """El primer `bash` que además **vea el repositorio**.
+
+    En Windows, el `bash` del PATH suele ser el de WSL
+    (`C:\\Windows\\System32\\bash.exe`): arranca, devuelve 0, y su raíz es la
+    de la distro, así que no encuentra `C:/Users/...`. Un guard que sólo mirase
+    si hay bash dejaría pasar los tests de `scripts/` para que fallaran con
+    «No such file or directory» sobre una ruta que sí existe — un error que no
+    se parece en nada a su causa. Por eso la prueba es con un archivo real del
+    repo, que es la pregunta que de verdad importa. En el runner de Linux
+    acierta el primer candidato.
+    """
+    testigo = (REPO_ROOT / "pyproject.toml").as_posix()
+    candidatos = [
+        os.environ.get("BASH_PARA_TESTS"),
+        shutil.which("bash"),
+        r"C:\Program Files\Git\bin\bash.exe",
+    ]
+    for candidato in candidatos:
+        if not candidato or not Path(candidato).exists():
+            continue
+        try:
+            resultado = subprocess.run(
+                [candidato, "-c", '[ -f "$1" ]', "bash", testigo],
+                capture_output=True,
+                timeout=20,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if resultado.returncode == 0:
+            return candidato
+    return None
+
+
+@pytest.fixture(scope="session")
+def bash() -> str:
+    """Ruta del bash con el que corren los tests de `scripts/`."""
+    ejecutable = bash_ejecutable()
+    assert ejecutable is not None, "el marcador requires_bash debería haber saltado el test"
+    return ejecutable
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Salta los tests marcados `requires_docker` si no hay daemon.
+    """Salta los tests cuya infraestructura no está disponible.
 
     Se resuelve con un hook y no con un `skipif` importable para que los
     módulos de test no tengan que importar nada de `tests/` (que no es un
     paquete instalable).
+
+    Se acumulan los saltos en vez de volver temprano con el primero: cuando
+    esto era un `if docker_available(): return`, añadir un segundo marcador
+    habría dejado sus tests corriendo en cualquier máquina con Docker.
     """
-    if docker_available():
-        return
-    skip = pytest.mark.skip(reason="requiere un daemon de Docker para testcontainers")
+    saltos = {}
+    if not docker_available():
+        saltos["requires_docker"] = pytest.mark.skip(
+            reason="requiere un daemon de Docker para testcontainers"
+        )
+    if bash_ejecutable() is None:
+        saltos["requires_bash"] = pytest.mark.skip(
+            reason="requiere un bash que vea el repo (en Windows, Git Bash; el de WSL no sirve)"
+        )
     for item in items:
-        if "requires_docker" in item.keywords:
-            item.add_marker(skip)
+        for marca, salto in saltos.items():
+            if marca in item.keywords:
+                item.add_marker(salto)
 
 
 @pytest.fixture(autouse=True)
