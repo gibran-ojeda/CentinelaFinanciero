@@ -32,6 +32,12 @@ jobs:
   deploy:
     name: desplegar y verificar
     runs-on: ubuntu-latest
+    # Registra cada corrida como deployment del entorno `produccion`: es lo que
+    # pinta la sección «Deployments» en la portada del repo, con fecha, estado
+    # y el enlace al sitio. Los rollbacks por dispatch quedan igual de visibles.
+    environment:
+      name: produccion
+      url: https://centinelafinanciero.lat
     timeout-minutes: 25
 
     steps:

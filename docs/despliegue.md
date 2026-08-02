@@ -99,7 +99,7 @@ Dejar una nota en ese Caddyfile apuntando aquí: el acoplamiento entre los dos r
 
 ## Despliegue
 
-Automático en push a `main`. El [workflow](../.github/workflows/deploy.yml) no lleva la lógica dentro: manda [`scripts/desplegar.sh`](../scripts/desplegar.sh) y [`scripts/gates.sh`](../scripts/gates.sh) por stdin. Los secretos van por stdin y no como argumentos de `ssh` porque `ssh host VAR=x bash` los deja en la línea de comandos del proceso remoto, a la vista de cualquier `ps`.
+Automático en push a `main`. Cada corrida queda registrada como *deployment* del entorno `produccion` — la sección «Deployments» de la portada del repo muestra el último, con fecha, estado y enlace al sitio. El [workflow](../.github/workflows/deploy.yml) no lleva la lógica dentro: manda [`scripts/desplegar.sh`](../scripts/desplegar.sh) y [`scripts/gates.sh`](../scripts/gates.sh) por stdin. Los secretos van por stdin y no como argumentos de `ssh` porque `ssh host VAR=x bash` los deja en la línea de comandos del proceso remoto, a la vista de cualquier `ps`.
 
 Qué hace, en orden:
 
