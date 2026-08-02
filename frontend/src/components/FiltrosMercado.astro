@@ -54,7 +54,11 @@ const ORDENES = [
 ];
 ---
 
-<form class="filtros" method="get" action="/" data-filtros>
+<!-- autocomplete="off": al recargar o volver atrás, el navegador restaura el
+     estado previo de los controles aunque la URL no lo traiga — y aquí el
+     estado ES la URL. Sin esto, «Solo sin banderas» podía aparecer marcado
+     de inicio mientras el servidor servía la lista completa. -->
+<form class="filtros" method="get" action="/" data-filtros autocomplete="off">
   <div class="campo">
     <label for="f-plazo">Plazo</label>
     <select id="f-plazo" name="plazo" class="control">
@@ -293,6 +297,11 @@ const ORDENES = [
     border: 1px solid var(--linea-fuerte);
     border-radius: 12px;
     box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4);
+  }
+  /* Sin esto el panel no cierra jamás: el `display: flex` de arriba le gana
+     al `display: none` que el navegador aplica por el atributo `hidden`. */
+  .campo[data-multi] :global(.multi-panel[hidden]) {
+    display: none;
   }
   .campo[data-multi] :global(.multi-opcion) {
     display: flex;
