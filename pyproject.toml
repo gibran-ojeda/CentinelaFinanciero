@@ -3,7 +3,7 @@ name = "centinela-financiero"
 version = "0.1.0"
 description = "Comparador de herramientas financieras en México — tasas, GAT, ganancia real y salud institucional"
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = { text = "MIT" }
 requires-python = ">=3.12"
 authors = [
     { name = "Gibran Ojeda", email = "gibran.ojeda.7@gmail.com" },
