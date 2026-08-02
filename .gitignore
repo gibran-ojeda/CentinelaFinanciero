@@ -47,6 +47,11 @@ Thumbs.db
 *.dump
 *.sql.gz
 /tmp/
+# En el VPS el cron escribe backups/respaldo.log dentro del clon, y el .log
+# no lo cubre ningún patrón de arriba; var/ es el directorio de trabajo de
+# las ingestas (var/cnbv) cuando se corre fuera de Docker.
+backups/
+var/
 
 # Estado local de Claude Code (permisos de esta máquina, no del proyecto).
 .claude/
