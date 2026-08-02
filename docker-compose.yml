@@ -1,8 +1,8 @@
 # Stack de Centinela Financiero.
 #
-# Convive con NarrativeAlpha en el mismo VPS, así que todo lleva prefijo propio
-# y puertos fuera del rango que ese stack ya ocupa (5432, 6379, 8000, 8001,
-# 8002, 8080, 8899). Ver §14 del foundation y la fase 06 del plan.
+# Convive con otro stack en el mismo VPS, así que todo lleva prefijo propio
+# y puertos fuera del rango que ese stack ya ocupa. Ver §14 del foundation y
+# la fase 06 del plan.
 #
 #   COMPOSE_PROJECT_NAME=centinela   →  contenedores y volúmenes `centinela-*`
 #   Todo publicado sólo en 127.0.0.1: Caddy (compartido, en network_mode host)

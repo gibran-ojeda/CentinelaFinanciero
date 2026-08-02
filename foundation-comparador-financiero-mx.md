@@ -473,7 +473,7 @@ flowchart LR
 
 **Patrón BFF:** el navegador solo habla con `web`; `web` consume la API por red interna inyectando `X-API-Key`. La API nunca se expone a internet.
 
-**Co-hosting con NarrativeAlpha:** Centinela corre en el **mismo VPS** que NarrativeAlpha, como stack Docker independiente (proyecto `centinela`, base de datos, Redis e imagen propias — no se comparte estado). El **único recurso compartido es el Caddy del host**, que ya ocupa 80/443 en `network_mode: host`: Centinela no levanta su propio edge, se le añade un site block para `centinelafinanciero.lat` que apunta a `127.0.0.1:8011`. Todos los puertos de Centinela se publican solo en loopback y fuera del rango que NarrativeAlpha ya usa (5432, 6379, 8000, 8001, 8002, 8080, 8899). El detalle operativo —incluida la restricción de `ufw` sobre el tráfico `docker0 → host`— está en la [fase 06 del plan](plan-de-implementacion/06-fase-6-despliegue-mvp.md).
+**Co-hosting con NarrativeAlpha:** Centinela corre en el **mismo VPS** que NarrativeAlpha, como stack Docker independiente (proyecto `centinela`, base de datos, Redis e imagen propias — no se comparte estado). El **único recurso compartido es el Caddy del host**, que ya ocupa 80/443 en `network_mode: host`: Centinela no levanta su propio edge, se le añade un site block para `centinelafinanciero.lat` que apunta a `127.0.0.1:8011`. Todos los puertos de Centinela se publican solo en loopback y fuera del rango que NarrativeAlpha ya usa. El detalle operativo —incluida la restricción de `ufw` sobre el tráfico `docker0 → host`— está en la [fase 06 del plan](plan-de-implementacion/06-fase-6-despliegue-mvp.md).
 
 ---
 
@@ -489,7 +489,7 @@ Los agregadores —otros comparadores, la prensa financiera— **no son fuente p
 
 **Nivel 2 — Fetch dirigido + extracción LLM (primario para tasas sin API).** Las tasas de SOFIPOs, neobancos, PRLV y BONDDIA no tienen API: se publican en la página oficial de cada institución. Se mantiene una lista curada de URLs (~15–25 páginas, tabla `fuentes_tasas`); un fetcher determinista (httpx + trafilatura; Playwright solo para las pocas que renderizan por JavaScript) descarga el contenido y un LLM económico (DeepSeek) extrae producto, tasa, GAT, plazo y condiciones como JSON validado contra esquema pydantic. La parte frágil (obtener la página) es determinista; la parte cambiante (el layout) la absorbe el LLM, que tolera rediseños que romperían cualquier selector CSS.
 
-**Nivel 3 — Búsqueda abierta con agente LLM (descubrimiento y fallback).** Un *tool-use loop* donde el LLM formula queries y un ejecutor determinista las corre contra la librería `ddgs` (costo $0, sin API keys ni infraestructura), con retry → cadena de fallbacks entre engines → circuit breaker, e **invariante anti-alucinación**: todo hallazgo debe citar una URL surgida de resultados reales de búsqueda o se descarta. Se usa solo para descubrir instituciones nuevas, detectar cambios de URL y verificar valores anómalos del nivel 2 — nunca como fuente primaria rutinaria. El backend de búsqueda es intercambiable por configuración: si `ddgs` resulta insuficiente, se reutiliza el SearXNG que ya corre en el VPS en lugar de levantar uno propio.
+**Nivel 3 — Búsqueda abierta con agente LLM (descubrimiento y fallback).** Un *tool-use loop* donde el LLM formula queries y un ejecutor determinista las corre contra la librería `ddgs` (costo $0, sin API keys ni infraestructura), con retry → cadena de fallbacks entre engines → circuit breaker, e **invariante anti-alucinación**: todo hallazgo debe citar una URL surgida de resultados reales de búsqueda o se descarta. Se usa solo para descubrir instituciones nuevas, detectar cambios de URL y verificar valores anómalos del nivel 2 — nunca como fuente primaria rutinaria. El backend de búsqueda es intercambiable por configuración: si `ddgs` resulta insuficiente, puede apuntarse a un SearXNG autohospedado sin refactorizar.
 
 **Control de calidad transversal:** ninguna tasa proveniente de LLM se publica automáticamente si difiere de la vigente más allá de una tolerancia configurable: entra a una cola de revisión humana (`revisiones_tasas`). Como las tasas cambian poco (ciclo semanal), la carga de revisión es de minutos por semana. Toda tasa publicada conserva URL fuente y fecha del dato. Costo estimado del pipeline LLM: centavos de USD por semana, acotado por el `CostTracker`.
 
@@ -527,10 +527,6 @@ Cada fuente tiene un **SLA de frescura**; si se excede, `frescura_check` genera 
 ---
 
 ## 17. Estructura del Repositorio
-
-> El directorio del repositorio sigue llamándose `brujula-financiera` por el
-> nombre original del proyecto; renombrarlo es un movimiento independiente del
-> rebrand y no afecta a nada del código, que ya no lo menciona.
 
 ```
 centinela-financiero/

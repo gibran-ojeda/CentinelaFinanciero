@@ -3,8 +3,8 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Sólo contiene lo que cambia respecto a desarrollo. Dos cosas, y las dos
-# existen por la misma razón: Centinela comparte VPS con NarrativeAlpha, que ya
-# sostiene nueve contenedores. Un servicio de aquí que se coma la RAM no se
+# existen por la misma razón: Centinela comparte VPS con otro stack que ya
+# sostiene el suyo propio. Un servicio de aquí que se coma la RAM no se
 # lleva por delante a Centinela: se lleva al vecino.
 #
 #   1. Límites de memoria por servicio.

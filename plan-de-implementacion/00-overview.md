@@ -81,11 +81,11 @@ Se descarta el scraping clásico por selectores CSS. Toda tasa de origen LLM fue
 
 Centinela **no comparte base de datos, Redis ni imagen** con NarrativeAlpha: son dos stacks Docker independientes en la misma máquina. Reglas que aplican a todas las fases:
 
-- **Proyecto Docker propio**: `COMPOSE_PROJECT_NAME=centinela`; contenedores `centinela-*`, volúmenes `centinela-*`, red propia. Cero colisión de nombres con `narrativealpha-*`.
-- **Puertos**: todo publicado **solo en `127.0.0.1`** y fuera del rango que ya ocupa NarrativeAlpha (5432, 6379, 8000, 8001, 8002, 8080 y 8899 del motor Vibe-Trading). Asignación de Centinela: `db` 5433, `redis` 6380, `api` 8010, `web` 8011.
-- **Caddy es infraestructura compartida**: NarrativeAlpha ya corre el único Caddy del VPS en `network_mode: host` ocupando 80/443. Centinela **no levanta un Caddy propio** — se añade un site block al Caddyfile existente. Ver fase 06.
-- **Sin `network_mode: host`** en los servicios de Centinela: el dashboard de NarrativeAlpha lo usa por el motor Vibe-Trading en `127.0.0.1:8899`, restricción que Centinela no tiene. Bridge con puertos publicados en loopback es suficiente y más limpio (Caddy en host mode los alcanza por `127.0.0.1`).
-- **Cuidado con `ufw`**: en ese VPS el firewall dropea el tráfico `docker0 → host`, así que un contenedor de Centinela en bridge **no** alcanza servicios publicados en el loopback del host. Si Centinela necesitara consumir un servicio de NarrativeAlpha (p. ej. su SearXNG), la vía es adjuntar ese contenedor a la red bridge de NarrativeAlpha como red externa, no pasar por la gateway de Docker.
+- **Proyecto Docker propio**: `COMPOSE_PROJECT_NAME=centinela`; contenedores `centinela-*`, volúmenes `centinela-*`, red propia. Cero colisión de nombres con los del stack vecino.
+- **Puertos**: todo publicado **solo en `127.0.0.1`** y fuera del rango que el stack vecino ya ocupa. Asignación de Centinela: `db` 5433, `redis` 6380, `api` 8010, `web` 8011.
+- **Caddy es infraestructura compartida**: el vecino ya corre el único Caddy del VPS en `network_mode: host` ocupando 80/443. Centinela **no levanta un Caddy propio** — se añade un site block al Caddyfile existente. Ver fase 06.
+- **Sin `network_mode: host`** en los servicios de Centinela: el vecino lo usa por un servicio suyo anclado al loopback del host, restricción que Centinela no tiene. Bridge con puertos publicados en loopback es suficiente y más limpio (Caddy en host mode los alcanza por `127.0.0.1`).
+- **Cuidado con `ufw`**: en ese VPS el firewall dropea el tráfico `docker0 → host`, así que un contenedor de Centinela en bridge **no** alcanza servicios publicados en el loopback del host. Si Centinela necesitara consumir un servicio del vecino, la vía es adjuntar ese contenedor a la red bridge del vecino como red externa, no pasar por la gateway de Docker.
 
 ## Índice de fases
 
