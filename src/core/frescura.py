@@ -6,10 +6,12 @@ consumen dos cosas con propósitos distintos: `GET /api/v1/meta/frescura`, que
 la publica, y el job `frescura_check`, que la vigila. Con dos copias, un día el
 sitio diría que todo está fresco mientras el job avisa de lo contrario.
 
-**Los SLA no son arbitrarios: son la cadencia real de cada fuente.** Banxico
-publica a diario, la CNBV con uno a tres meses de rezago, y la lectura de tasas
-es semanal. Marcar la CNBV como obsoleta a los dos días sería ruido, y ruido
-constante es una alarma que se aprende a ignorar.
+**Los SLA no son arbitrarios: son un techo sobre la cadencia real de cada
+fuente.** Banxico publica a diario y la CNBV con uno a tres meses de rezago.
+El del fetch dirigido quedó holgado a propósito: el job corre cada 4 horas,
+pero el SLA vigila que el CICLO funcione (lectura + revisión humana), no que
+cada corrida traiga algo. Marcar la CNBV como obsoleta a los dos días sería
+ruido, y ruido constante es una alarma que se aprende a ignorar.
 """
 
 from __future__ import annotations

@@ -8,7 +8,7 @@ nivel 2 ya resuelve más barato y mejor.
 
 **Sólo se investigan las que lo necesitan**: sin fuente activa para el fetch
 dirigido, o con la tasa vigente más vieja que el SLA de su fuente. Si el fetch
-del lunes trajo la tasa de Klar, el miércoles no se busca a Klar.
+dirigido ya trajo la tasa de Klar, el miércoles no se busca a Klar.
 
 Lo que encuentre pasa por el **mismo `reviewer`** que el nivel 2, con
 `fuente=LLM_RESEARCH`. La regla no cambia: la primera lectura de un producto

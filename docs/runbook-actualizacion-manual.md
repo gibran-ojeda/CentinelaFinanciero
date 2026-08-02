@@ -1,10 +1,10 @@
 # Runbook: actualización manual de tasas
 
-> El ciclo semanal que mantiene vivo el catálogo. Con la lectura automática funcionando son diez o quince minutos: la mayor parte es resolver la cola de revisión.
+> El ciclo de revisión humana que mantiene vivo el catálogo. La lectura automática corre cada 4 horas; tu sesión sigue siendo semanal — diez o quince minutos, la mayor parte resolver la cola de revisión.
 
 ## Qué hace la máquina y qué haces tú
 
-Las tasas de SOFIPOs y bancos digitales no tienen API: se publican en la página de cada institución, en tablas que cambian de sitio con cada rediseño. La [§15 del foundation](../foundation-comparador-financiero-mx.md) descarta el scraping por selectores CSS y lo resuelve con fetch dirigido y extracción por LLM — eso es el job `tasas_fetch_dirigido`, que corre los lunes.
+Las tasas de SOFIPOs y bancos digitales no tienen API: se publican en la página de cada institución, en tablas que cambian de sitio con cada rediseño. La [§15 del foundation](../foundation-comparador-financiero-mx.md) descarta el scraping por selectores CSS y lo resuelve con fetch dirigido y extracción por LLM — eso es el job `tasas_fetch_dirigido`, que corre cada 4 horas (rejilla ..:45).
 
 Lo que **no** es automático, y no debería serlo:
 
@@ -20,7 +20,7 @@ A partir de la segunda lectura, un movimiento pequeño de una tasa ya aprobada s
 
 > **Nota (2026-08-01):** la pasada semanal de las páginas con JavaScript
 > desde la laptop **ya no existe como paso**: Chromium vive en la imagen del
-> VPS y el job del lunes lee las dieciocho fuentes — ver
+> VPS y el job de tasas lee las dieciocho fuentes en cada corrida — ver
 > [despliegue.md](despliegue.md#navegador-en-el-vps--decisión-aplicada). Una
 > corrida a mano (`python -m cli tasas fetch`, con `--solo-navegador` /
 > `--sin-navegador` como filtros de depuración) sigue siendo posible: queda

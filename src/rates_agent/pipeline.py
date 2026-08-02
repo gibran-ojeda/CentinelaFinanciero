@@ -1,16 +1,17 @@
 """La corrida completa: leer, extraer y decidir, fuente por fuente.
 
-Una sola función para el job semanal y para el comando de la CLI: dos caminos
-acabarían divergiendo, y la corrida a mano dejaría de reproducir a la del
-lunes justo cuando se usa para depurarla.
+Una sola función para el job programado y para el comando de la CLI: dos
+caminos acabarían divergiendo, y la corrida a mano dejaría de reproducir a la
+programada justo cuando se usa para depurarla.
 
 El orden importa y ahorra dinero:
 
 1. `Fetcher` trae la página. Si ninguna capa lo consigue, esa fuente se salta y
    la corrida sigue: un sitio caído no puede costar las otras diecisiete.
 2. **Si el hash del contenido es el de la corrida anterior, no se llama al
-   LLM.** Las tasas se mueven poco; la mayoría de las semanas la mayoría de las
-   páginas son idénticas, y pagar por releerlas sería pagar por nada.
+   LLM.** Las tasas se mueven poco; en la mayoría de las corridas la mayoría
+   de las páginas son idénticas, y pagar por releerlas sería pagar por nada —
+   es lo que hace viable correr esto cada 4 horas.
 3. El extractor convierte el texto en tasas. El reviewer decide.
 
 Un plazo que el catálogo no conoce no se fuerza contra el producto más

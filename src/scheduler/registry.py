@@ -121,23 +121,29 @@ def build_registry() -> tuple[JobSpec, ...]:
         JobSpec(
             id=tasas.JOB_ID,
             func=tasas.tasas_fetch_dirigido,
-            # Lunes temprano: las instituciones publican cambios con el inicio
-            # de semana, y a esa hora sus sitios están descansados.
-            trigger=CronTrigger(day_of_week="mon", hour=6, minute=0),
-            name="Lectura semanal de tasas",
+            # Rejilla absoluta cada 4 horas, al minuto 45: CronTrigger y no
+            # IntervalTrigger para que un redeploy no reinicie el reloj, y el
+            # :45 esquiva banderas (04:30), CNBV (05:30), Banxico (07:00) y
+            # frescura (08:00). El cortocircuito por hash del pipeline hace
+            # gratis la mayoría de corridas; la cadencia es para probar el
+            # ciclo y el dueño la bajará a diaria editando esta misma línea.
+            trigger=CronTrigger(hour="*/4", minute=45),
+            name="Lectura de tasas cada 4 horas",
             enabled=settings.scheduler_tasas_enabled,
             # Dieciocho páginas, con reintentos y hasta veinte minutos de
             # backoff temporal si toda la cadena cae por rate-limit. El TTL
             # tiene que cubrir el peor caso o el lock caduca a media corrida y
-            # otra instancia empieza encima.
+            # otra instancia empieza encima — y sigue muy por debajo de las 4
+            # horas entre corridas, así que tampoco pueden solaparse.
             lock_ttl_seconds=3600,
             tags=("ingesta",),
         ),
         JobSpec(
             id=research.JOB_ID,
             func=research.tasas_research_abierta,
-            # Miércoles: para entonces ya se sabe qué instituciones quedaron
-            # sin dato fresco el lunes, que son las que este job investiga.
+            # Semanal: investiga lo que el fetch dirigido —que corre mucho más
+            # seguido— sigue sin poder traer, así que para el miércoles la
+            # lista de stale es real y no un accidente de calendario.
             trigger=CronTrigger(day_of_week="wed", hour=6, minute=0),
             name="Búsqueda abierta de tasas stale",
             enabled=settings.scheduler_research_enabled,

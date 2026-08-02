@@ -186,14 +186,14 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         "tasas_fetch_enabled",
         "bool",
         "scheduler",
-        "Kill-switch caliente de la lectura semanal de tasas",
+        "Kill-switch caliente de la lectura de tasas (cada 4 horas)",
     ),
     ConfigKeySpec(
         "tasas_fetch_solo_sin_js",
         "bool",
         "scheduler",
         (
-            "Repliegue del navegador sin deploy: en true, el job del lunes "
+            "Repliegue del navegador sin deploy: en true, el job de tasas "
             "vuelve a solo-httpx y a las fuentes sin JavaScript (p. ej. si la "
             "RAM del VPS protesta)"
         ),

@@ -2,7 +2,7 @@
 
 El comparador es la vista más pedida y la más cara: recorre el catálogo, une
 tasas vigentes y banderas, y calcula métricas por fila. Como los datos cambian
-en ciclo semanal —o diario, cuando la ingesta de Banxico entre en juego— y las
+unas pocas veces al día como mucho —las ingestas invalidan al publicar— y las
 consultas se repiten muchísimo, cachearla es la optimización obvia.
 
 Dos cuidados que no lo son tanto:

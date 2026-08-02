@@ -36,9 +36,9 @@ from rates_agent.pipeline import ReporteCorrida
 from scheduler.bitacora import registrar_corrida
 
 #: Id propio para las corridas disparadas desde la terminal. Con el mismo id
-#: que el job del lunes, la pasada local con navegador y la del VPS se pisaban
-#: en `job_runs`: `cli revisiones list` sólo miraba «la última corrida» y los
-#: huecos de una borraban los de la otra.
+#: que el job programado, la pasada local con navegador y la del VPS se
+#: pisaban en `job_runs`: `cli revisiones list` sólo miraba «la última
+#: corrida» y los huecos de una borraban los de la otra.
 JOB_ID_FETCH_MANUAL = "tasas_fetch_manual"
 
 log = get_logger(__name__)
@@ -502,9 +502,9 @@ async def retirar_sustituidas(path: Path, *, dry_run: bool = False) -> ReporteRe
 
 
 #: Backoff temporal para una corrida interactiva. Los 300 y 1200 segundos que
-#: usa el job están calibrados para algo desatendido a las seis de la mañana;
-#: delante de una terminal son veinticinco minutos mirando un cursor. Se
-#: reintenta una vez, corto, y lo que no salga se reporta para la próxima.
+#: usa el job están calibrados para algo desatendido y de rejilla; delante de
+#: una terminal son veinticinco minutos mirando un cursor. Se reintenta una
+#: vez, corto, y lo que no salga se reporta para la próxima.
 ESPERAS_INTERACTIVAS: tuple[float, ...] = (20.0,)
 
 
@@ -516,10 +516,10 @@ async def correr_fetch(
 ) -> ReporteCorrida:
     """Corre el pipeline de lectura desde la terminal.
 
-    Es el mismo código que ejecuta el job semanal: si fueran dos, la corrida
-    a mano acabaría comportándose distinto de la del lunes. Los filtros
-    `--solo-navegador` / `--sin-navegador` son de depuración — repetir una
-    mitad de la corrida sin pagar la otra.
+    Es el mismo código que ejecuta el job programado: si fueran dos, la
+    corrida a mano acabaría comportándose distinto de la programada. Los
+    filtros `--solo-navegador` / `--sin-navegador` son de depuración —
+    repetir una mitad de la corrida sin pagar la otra.
 
     Lo único que cambia es la **espera**, y por una razón de quién mira: un job
     desatendido puede permitirse esperar veinte minutos a que un sitio deje de
@@ -545,7 +545,7 @@ async def correr_fetch(
     fetcher = Fetcher(transportes, esperas_backoff_s=esperas)
 
     # La corrida deja su fila en `job_runs` aunque la dispare una persona —
-    # una pasada local es una corrida igual de real que la del lunes— pero
+    # una pasada local es una corrida igual de real que la programada— pero
     # bajo su propio id: `cli revisiones list` agrega los huecos de las
     # corridas recientes de ambos, y así ninguna borra lo que vio la otra.
     async with registrar_corrida(JOB_ID_FETCH_MANUAL) as corrida:

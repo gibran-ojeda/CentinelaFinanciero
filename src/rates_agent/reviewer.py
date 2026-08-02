@@ -174,9 +174,9 @@ async def revisar(
 
     # `tasas` tiene clave única `(producto, fecha, fuente)`, así que una
     # segunda corrida el mismo día chocaría contra la observación de la
-    # primera. Pasa de verdad: un reintento del job un lunes que falló a la
-    # mitad. Se comprueba antes de escribir para que reintentar sea barato en
-    # vez de imposible.
+    # primera. Pasa todos los días: el job corre cada 4 horas, y también en
+    # el reintento de una corrida que falló a la mitad. Se comprueba antes de
+    # escribir para que reintentar sea barato en vez de imposible.
     ya_registrada = await session.scalar(
         select(Tasa).where(
             Tasa.producto_id == producto.id,
