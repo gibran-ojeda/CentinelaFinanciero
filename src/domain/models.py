@@ -87,6 +87,19 @@ class Producto(DomainModel):
         return self.plazo_dias if self.plazo_dias is not None else 365
 
 
+class TramoTasa(DomainModel):
+    """Tramo de saldo de una observación: [desde, hasta) con su tasa.
+
+    `hasta` en None significa «sin techo publicado». La validación de la
+    escalera completa (piso 0, contigüidad, no-solape) vive en
+    `metrics.tramos.validar_escalera`, no aquí: este espejo solo transporta.
+    """
+
+    desde: Decimal
+    hasta: Decimal | None = None
+    tasa_nominal: Decimal
+
+
 class Tasa(DomainModel):
     """Observación de tasa. Siempre viaja con `fecha_dato` y `fuente`.
 
@@ -104,6 +117,8 @@ class Tasa(DomainModel):
     fuente: FuenteTasa
     fuente_url: str | None = None
     estado: EstadoTasa = EstadoTasa.VIGENTE
+    #: Escalera por saldo; vacía = tasa plana (todo el catálogo previo).
+    tramos: tuple[TramoTasa, ...] = ()
 
     @property
     def publicable(self) -> bool:
