@@ -34,9 +34,12 @@ pytestmark = [
 
 RUTA = "/api/v1/comparador"
 
-#: Lo único verificado contra fuente primaria: deuda gubernamental leída del
-#: SIE de Banxico y de cetesdirecto.
-SLUGS_VERIFICADOS = frozenset({"cetes-28", "cetes-91", "cetes-182", "cetes-364", "bonddia"})
+#: La deuda gubernamental verificada contra el SIE de Banxico y cetesdirecto.
+SLUGS_GOBIERNO = frozenset({"cetes-28", "cetes-91", "cetes-182", "cetes-364", "bonddia"})
+
+#: Todo lo verificado contra fuente primaria: el gobierno más la escalera de
+#: Openbank leída de su página oficial (la fila MANUAL/VIGENTE del seed).
+SLUGS_VERIFICADOS = SLUGS_GOBIERNO | {"openbank-vista"}
 
 #: Tasas VIGENTE que añade `comparador_poblado` sobre instituciones reales,
 #: para que cada filtro de §7 tenga algo que incluir y algo que excluir.
@@ -179,7 +182,6 @@ async def test_an_unverified_rate_never_supersedes_a_verified_one(
 # ─── Tramos y tasa efectiva ───────────────────────────────────
 
 
-@pytest.mark.usefixtures("openbank_escalonado")
 async def test_a_tiered_row_carries_its_ladder(api_lectura: AsyncClient) -> None:
     cuerpo = (await api_lectura.get(RUTA)).json()
     fila = next(f for f in cuerpo["filas"] if f["producto_slug"] == "openbank-vista")
@@ -196,7 +198,6 @@ async def test_a_tiered_row_carries_its_ladder(api_lectura: AsyncClient) -> None
     assert cuerpo["monto_consultado"] is None
 
 
-@pytest.mark.usefixtures("openbank_escalonado")
 async def test_an_amount_switches_every_row_to_its_effective_rate(
     api_lectura: AsyncClient,
 ) -> None:
@@ -219,7 +220,6 @@ async def test_an_amount_switches_every_row_to_its_effective_rate(
     assert Decimal(plana["ten_efectiva"]) == Decimal(plana["ten"])
 
 
-@pytest.mark.usefixtures("openbank_escalonado")
 async def test_the_order_follows_the_effective_rate_when_an_amount_is_given(
     api_lectura: AsyncClient,
 ) -> None:
@@ -312,7 +312,7 @@ async def test_category_filter_includes_and_excludes(api_lectura: AsyncClient) -
 
 async def test_bank_category_excludes_sofipos(api_lectura: AsyncClient) -> None:
     slugs = await _slugs(api_lectura, categoria="BANCO_DIGITAL")
-    assert slugs == {"nu-cajita-turbo", "nu-plazo-91"}
+    assert slugs == {"nu-cajita-turbo", "nu-plazo-91", "openbank-vista"}
 
 
 async def test_several_categories_can_be_selected_at_once(api_lectura: AsyncClient) -> None:
@@ -328,8 +328,9 @@ async def test_several_categories_can_be_selected_at_once(api_lectura: AsyncClie
         "libertad-plazo-364",
         "nu-cajita-turbo",
         "nu-plazo-91",
+        "openbank-vista",
     }
-    assert not slugs & SLUGS_VERIFICADOS  # gobierno no marcado
+    assert not slugs & SLUGS_GOBIERNO  # gobierno no marcado
 
 
 async def test_unknown_category_is_rejected(api_lectura: AsyncClient) -> None:
@@ -356,9 +357,15 @@ async def test_amount_below_every_minimum_leaves_only_free_products(
     api_lectura: AsyncClient,
 ) -> None:
     slugs = await _slugs(api_lectura, monto="1")
-    assert slugs == {"klar-vista", "nu-cajita-turbo", "nu-plazo-91", "mercado-pago-vista"}
+    assert slugs == {
+        "klar-vista",
+        "nu-cajita-turbo",
+        "nu-plazo-91",
+        "mercado-pago-vista",
+        "openbank-vista",
+    }
     # Todo lo que exige un mínimo queda fuera, incluidos los CETES.
-    assert not (slugs & SLUGS_VERIFICADOS)
+    assert not (slugs & SLUGS_GOBIERNO)
 
 
 async def test_non_positive_amount_is_rejected(api_lectura: AsyncClient) -> None:
@@ -370,15 +377,13 @@ async def test_non_positive_amount_is_rejected(api_lectura: AsyncClient) -> None
 
 async def test_ipab_only_includes_and_excludes(api_lectura: AsyncClient) -> None:
     slugs = await _slugs(api_lectura, seguro="IPAB")
-    assert slugs == {"nu-cajita-turbo", "nu-plazo-91"}
+    assert slugs == {"nu-cajita-turbo", "nu-plazo-91", "openbank-vista"}
     assert "finsus-plazo-91" not in slugs
 
 
 async def test_government_only_includes_and_excludes(api_lectura: AsyncClient) -> None:
     slugs = await _slugs(api_lectura, seguro="SOBERANO")
-    # Los gubernamentales son hoy exactamente los verificados: lo que se pudo
-    # confirmar contra fuente primaria fue el SIE de Banxico y cetesdirecto.
-    assert slugs == set(SLUGS_VERIFICADOS)
+    assert slugs == set(SLUGS_GOBIERNO)
     assert "klar-vista" not in slugs
 
 
@@ -391,6 +396,7 @@ async def test_several_coverages_can_be_selected_at_once(api_lectura: AsyncClien
     assert slugs == {
         "nu-cajita-turbo",
         "nu-plazo-91",
+        "openbank-vista",
         "finsus-plazo-91",
         "klar-vista",
         "libertad-plazo-364",
@@ -484,7 +490,10 @@ async def test_orders_by_nominal_rate(api_lectura: AsyncClient) -> None:
     cuerpo = (await api_lectura.get(RUTA, params={"orden": "tasa_nominal"})).json()
     tasas = [Decimal(f["tasa_nominal"]) for f in cuerpo["filas"]]
     assert tasas == sorted(tasas, reverse=True)
-    assert cuerpo["filas"][0]["producto_slug"] == "nu-cajita-turbo"
+    # Nu y Openbank empatan al 13.00 titular; el desempate estable por slug
+    # descendente pone a Openbank primero.
+    assert cuerpo["filas"][0]["producto_slug"] == "openbank-vista"
+    assert cuerpo["filas"][1]["producto_slug"] == "nu-cajita-turbo"
 
 
 async def test_ascending_order_is_supported(api_lectura: AsyncClient) -> None:
@@ -502,7 +511,7 @@ async def test_coverage_order_puts_sovereign_debt_first(
     orden = await _orden(api_lectura, orden="cobertura")
     # Arriba, la deuda soberana (sin límite); abajo del todo, el IFPE, que no
     # tiene fondo de protección de ningún tipo.
-    assert set(orden[: len(SLUGS_VERIFICADOS)]) == set(SLUGS_VERIFICADOS)
+    assert set(orden[: len(SLUGS_GOBIERNO)]) == set(SLUGS_GOBIERNO)
     assert orden[-1] == "mercado-pago-vista"
 
 

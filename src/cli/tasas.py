@@ -13,6 +13,7 @@ clave natural es (producto, fecha_dato, fuente).
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -28,7 +29,8 @@ from core.db import session_scope
 from core.logging import get_logger
 from core.settings import settings
 from domain.enums import EstadoTasa, FuenteTasa
-from domain.orm import FuenteTasas, Institucion, Producto, Tasa
+from domain.orm import FuenteTasas, Institucion, Producto, Tasa, TramoTasa
+from metrics.tramos import Tramo, validar_escalera
 from rates_agent import pipeline
 from rates_agent.pipeline import ReporteCorrida
 from scheduler.bitacora import registrar_corrida
@@ -87,6 +89,54 @@ def _fecha(raw: str, fila: int) -> date:
         return datetime.strptime(raw.strip(), "%Y-%m-%d").date()
     except ValueError as exc:
         raise ImportError_(f"fila {fila}: 'fecha_dato' debe ser YYYY-MM-DD ('{raw}')") from exc
+
+
+#: Un segmento de la columna `tramos`: `desde-hasta:tasa`, con `hasta` vacío
+#: para el tramo sin techo. Montos enteros en pesos.
+_SEGMENTO_TRAMO = re.compile(r"(\d+)-(\d*):(\d+(?:\.\d+)?)")
+
+
+def _tramos(raw: str | None, tasa_nominal: Decimal, fila: int) -> tuple[Tramo, ...]:
+    """Parsea la columna opcional `tramos`: `0-30000:13.00;30000-:6.30`.
+
+    Pasa por `validar_escalera` —el constructor único— y exige que la
+    `tasa_nominal` de la fila sea la del primer tramo: la titular ES el tramo
+    1, y una fila que diga otra cosa es una captura incoherente, no una
+    interpretación posible.
+    """
+    valor = (raw or "").strip()
+    if not valor:
+        return ()
+
+    tramos: list[Tramo] = []
+    for segmento in valor.split(";"):
+        limpio = segmento.strip()
+        cotejo = _SEGMENTO_TRAMO.fullmatch(limpio)
+        if cotejo is None:
+            raise ImportError_(
+                f"fila {fila}: tramo '{limpio}' no sigue el formato desde-hasta:tasa "
+                f"(hasta vacío = sin techo), p. ej. 0-30000:13.00;30000-:6.30"
+            )
+        desde, hasta, tasa = cotejo.groups()
+        tramos.append(
+            Tramo(
+                desde=Decimal(desde),
+                hasta=Decimal(hasta) if hasta else None,
+                tasa_nominal=Decimal(tasa),
+            )
+        )
+
+    try:
+        escalera = validar_escalera(tramos)
+    except ValueError as exc:
+        raise ImportError_(f"fila {fila}: {exc}") from exc
+
+    if escalera and escalera[0].tasa_nominal != tasa_nominal:
+        raise ImportError_(
+            f"fila {fila}: la tasa_nominal ({tasa_nominal}) debe ser la del primer "
+            f"tramo ({escalera[0].tasa_nominal}) — la titular ES el tramo 1"
+        )
+    return escalera
 
 
 async def import_csv(path: Path, *, dry_run: bool = False) -> ImportReport:
@@ -162,19 +212,33 @@ async def import_csv(path: Path, *, dry_run: bool = False) -> ImportReport:
                 report.duplicadas += 1
                 continue
 
-            session.add(
-                Tasa(
-                    producto_id=producto.id,
-                    tasa_nominal=tasa_nominal,
-                    gat_nominal=_decimal(fila.get("gat_nominal", ""), "gat_nominal", numero),
-                    gat_real=_decimal(fila.get("gat_real", ""), "gat_real", numero),
-                    fecha_dato=fecha_dato,
-                    fuente=fuente,
-                    fuente_url=(fila.get("fuente_url") or "").strip() or None,
-                    estado=estado,
-                    notas=(fila.get("notas") or "").strip() or None,
-                )
+            # La escalera se rechaza por fila, no abortando el archivo entero:
+            # una captura incoherente de tramos es un error de esa observación,
+            # como un producto desconocido, no un CSV mal formado.
+            try:
+                tramos = _tramos(fila.get("tramos"), tasa_nominal, numero)
+            except ImportError_ as exc:
+                report.errores.append(str(exc))
+                continue
+
+            tasa = Tasa(
+                producto_id=producto.id,
+                tasa_nominal=tasa_nominal,
+                gat_nominal=_decimal(fila.get("gat_nominal", ""), "gat_nominal", numero),
+                gat_real=_decimal(fila.get("gat_real", ""), "gat_real", numero),
+                fecha_dato=fecha_dato,
+                fuente=fuente,
+                fuente_url=(fila.get("fuente_url") or "").strip() or None,
+                estado=estado,
+                notas=(fila.get("notas") or "").strip() or None,
             )
+            if tramos:
+                # El cascade de la relación persiste a los hijos con la madre.
+                tasa.tramos = [
+                    TramoTasa(desde=t.desde, hasta=t.hasta, tasa_nominal=t.tasa_nominal)
+                    for t in tramos
+                ]
+            session.add(tasa)
             existentes.add(clave)
             report.creadas += 1
             report.por_estado[estado.value] = report.por_estado.get(estado.value, 0) + 1

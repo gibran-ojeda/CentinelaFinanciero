@@ -265,7 +265,6 @@ async def test_the_optimiser_leaves_out_uncovered_issuers(api_lectura: AsyncClie
 # ─── Tramos por saldo ─────────────────────────────────────────
 
 
-@pytest.mark.usefixtures("openbank_escalonado")
 async def test_a_tiered_allocation_carries_its_ladder_and_blends(
     api_lectura: AsyncClient,
 ) -> None:

@@ -110,45 +110,6 @@ _TASAS_DE_PRUEBA: tuple[tuple[str, str], ...] = (
 
 
 @pytest.fixture
-async def openbank_escalonado(comparador_poblado: None) -> None:
-    """Una lectura VIGENTE escalonada sobre `openbank-vista`.
-
-    El caso canónico del modelo de tramos: 13% los primeros $30,000 y 6.3% de
-    ahí a $1,000,000. Se inserta directo porque el CSV del seed deja a Openbank
-    en AGREGADOR/PENDIENTE, que ni es publicable con `solo_verificadas` ni
-    puede llevar la escalera verificada.
-    """
-    from datetime import date
-
-    from sqlalchemy import select
-
-    from core.db import session_scope
-    from domain.enums import EstadoTasa, FuenteTasa
-    from domain.orm import Producto, Tasa, TramoTasa
-
-    async with session_scope() as session:
-        producto_id = await session.scalar(
-            select(Producto.id).where(Producto.slug == "openbank-vista")
-        )
-        assert producto_id is not None
-        tasa = Tasa(
-            producto_id=producto_id,
-            tasa_nominal=Decimal("13.00"),
-            fecha_dato=date(2026, 7, 26),
-            fuente=FuenteTasa.MANUAL,
-            fuente_url="https://example.test/openbank",
-            estado=EstadoTasa.VIGENTE,
-        )
-        tasa.tramos = [
-            TramoTasa(desde=Decimal("0"), hasta=Decimal("30000"), tasa_nominal=Decimal("13.00")),
-            TramoTasa(
-                desde=Decimal("30000"), hasta=Decimal("1000000"), tasa_nominal=Decimal("6.30")
-            ),
-        ]
-        session.add(tasa)
-
-
-@pytest.fixture
 async def comparador_poblado(catalogo_cargado: None) -> None:
     """Catálogo con tasas publicables en todas las categorías y plazos."""
     from datetime import date

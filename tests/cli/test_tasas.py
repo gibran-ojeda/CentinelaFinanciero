@@ -102,10 +102,11 @@ async def test_seed_dataset_publishes_only_verified_rates() -> None:
     await run_seed()
     report = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
-    # Cinco VIGENTE: las gubernamentales verificadas contra el SIE de Banxico
-    # y cetesdirecto. Todo lo demás es de agregador y queda pendiente.
-    assert report.por_estado["VIGENTE"] == 5
-    assert report.por_estado["PENDIENTE_REVISION"] == 30
+    # Seis VIGENTE: las gubernamentales verificadas contra el SIE de Banxico y
+    # cetesdirecto, más la escalera de Openbank leída de su página oficial.
+    # Todo lo demás es de agregador y queda pendiente.
+    assert report.por_estado["VIGENTE"] == 6
+    assert report.por_estado["PENDIENTE_REVISION"] == 29
 
     async with session_scope() as session:
         vigentes = (
@@ -127,6 +128,7 @@ async def test_seed_dataset_publishes_only_verified_rates() -> None:
         "cetes-28",
         "cetes-364",
         "cetes-91",
+        "openbank-vista",
     }
 
 
@@ -140,6 +142,78 @@ async def test_reimporting_the_same_file_creates_nothing() -> None:
     assert segundo.creadas == 0
     assert segundo.duplicadas == 35
     assert await _contar_tasas() == 35
+
+
+# ─── Columna tramos ───────────────────────────────────────────
+
+CABECERA_TRAMOS = CABECERA + ",tramos"
+
+
+def _csv_tramos(tmp_path: Path, *filas: str) -> Path:
+    ruta = tmp_path / "tasas.csv"
+    ruta.write_text("\n".join([CABECERA_TRAMOS, *filas]) + "\n", encoding="utf-8")
+    return ruta
+
+
+async def test_the_tramos_column_creates_the_ladder(tmp_path: Path) -> None:
+    await run_seed()
+    report = await import_csv(
+        _csv_tramos(
+            tmp_path,
+            "cetes-28,13.00,,,2026-07-23,MANUAL,,VIGENTE,,0-30000:13.00;30000-1000000:6.30",
+        )
+    )
+
+    assert report.errores == []
+    assert report.creadas == 1
+    async with session_scope() as session:
+        tasa = (await session.execute(select(Tasa))).scalars().one()
+        assert [(t.desde, t.hasta, t.tasa_nominal) for t in tasa.tramos] == [
+            (Decimal("0.00"), Decimal("30000.00"), Decimal("13.0000")),
+            (Decimal("30000.00"), Decimal("1000000.00"), Decimal("6.3000")),
+        ]
+
+
+async def test_a_malformed_ladder_rejects_the_row_not_the_file(tmp_path: Path) -> None:
+    """Una escalera incoherente es un error de ESA observación, no del CSV."""
+    await run_seed()
+    report = await import_csv(
+        _csv_tramos(
+            tmp_path,
+            "cetes-28,13.00,,,2026-07-23,MANUAL,,VIGENTE,,0-30000-13",
+            "cetes-91,6.49,,,2026-07-23,MANUAL,,VIGENTE,,",
+        )
+    )
+
+    assert report.creadas == 1  # la fila sana entra
+    assert len(report.errores) == 1
+    assert "desde-hasta:tasa" in report.errores[0]
+
+
+async def test_a_ladder_whose_first_tier_contradicts_the_headline_is_rejected(
+    tmp_path: Path,
+) -> None:
+    """La titular ES el tramo 1: una fila que diga otra cosa es captura incoherente."""
+    await run_seed()
+    report = await import_csv(
+        _csv_tramos(
+            tmp_path,
+            "cetes-28,12.00,,,2026-07-23,MANUAL,,VIGENTE,,0-30000:13.00;30000-:6.30",
+        )
+    )
+
+    assert report.creadas == 0
+    assert "primer" in report.errores[0]
+
+
+async def test_rows_without_the_column_stay_flat(tmp_path: Path) -> None:
+    """CSVs viejos siguen importando igual: la columna es opcional."""
+    await run_seed()
+    await import_csv(_csv(tmp_path, "cetes-28,6.18,,,2026-07-23,MANUAL,,VIGENTE,"))
+
+    async with session_scope() as session:
+        tasa = (await session.execute(select(Tasa))).scalars().one()
+        assert tasa.tramos == []
 
 
 async def test_a_new_observation_supersedes_without_deleting(tmp_path: Path) -> None:
@@ -289,13 +363,14 @@ async def test_the_review_list_names_what_cannot_be_published() -> None:
     motivos = {p.motivo for p in lista.pendientes}
 
     assert motivos == {"sin verificar", "sin tasa"}
-    assert sum(p.motivo == "sin verificar" for p in lista.pendientes) == 30
+    assert sum(p.motivo == "sin verificar" for p in lista.pendientes) == 29
 
-    # Ninguna de las cinco VIGENTE aparece: CETES y BONDDIA salen de fuente
-    # primaria.
+    # Ninguna de las seis VIGENTE aparece: CETES, BONDDIA y la escalera de
+    # Openbank salen de fuente primaria.
     slugs = {p.producto_slug for p in lista.pendientes}
     assert "cetes-28" not in slugs
     assert "bonddia" not in slugs
+    assert "openbank-vista" not in slugs
 
 
 async def test_the_review_list_carries_the_official_url_to_open() -> None:
@@ -367,7 +442,11 @@ async def test_an_aggregator_rate_is_accepted_as_pending(tmp_path: Path) -> None
 
 
 async def test_the_seed_holds_no_aggregator_rate_as_current() -> None:
-    """El catálogo semilla cumple la invariante: 30 de agregador, ninguna vigente."""
+    """El catálogo semilla cumple la invariante: 29 de agregador, ninguna vigente.
+
+    Eran 30 hasta que la lectura oficial de Openbank retiró (comentó) su fila
+    de contraste.
+    """
     await run_seed()
     await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
@@ -378,7 +457,7 @@ async def test_the_seed_holds_no_aggregator_rate_as_current() -> None:
             .all()
         )
 
-    assert len(agregadas) == 30
+    assert len(agregadas) == 29
     assert all(t.estado is EstadoTasa.PENDIENTE_REVISION for t in agregadas)
 
 
@@ -420,7 +499,7 @@ async def test_a_superseded_aggregator_row_gets_commented_out(tmp_path: Path) ->
     reporte = await retirar_sustituidas(copia)
 
     assert [r[0] for r in reporte.retiradas] == ["hey-vista"]
-    assert reporte.conservadas == 29
+    assert reporte.conservadas == 28
 
     original = (DEFAULT_SEEDS_DIR / "tasas.csv").read_text(encoding="utf-8").splitlines()
     nuevo = copia.read_text(encoding="utf-8").splitlines()
@@ -472,5 +551,5 @@ async def test_nothing_is_retired_without_an_official_reading(tmp_path: Path) ->
     reporte = await retirar_sustituidas(copia)
 
     assert reporte.retiradas == []
-    assert reporte.conservadas == 30
+    assert reporte.conservadas == 29
     assert copia.read_text(encoding="utf-8") == antes

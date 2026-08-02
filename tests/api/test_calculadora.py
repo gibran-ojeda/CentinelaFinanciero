@@ -228,7 +228,6 @@ async def test_compares_several_products_in_the_requested_order(
 # ─── Tramos por saldo ─────────────────────────────────────────
 
 
-@pytest.mark.usefixtures("openbank_escalonado")
 async def test_a_tiered_product_blends_its_cascade(api_lectura: AsyncClient) -> None:
     """Ponderar primero, cascada después.
 
@@ -247,7 +246,6 @@ async def test_a_tiered_product_blends_its_cascade(api_lectura: AsyncClient) -> 
     assert Decimal(resultado["cascada"]["ten"]) == Decimal("9.4200")
 
 
-@pytest.mark.usefixtures("openbank_escalonado")
 async def test_an_amount_inside_the_first_tier_pays_the_headline(
     api_lectura: AsyncClient,
 ) -> None:

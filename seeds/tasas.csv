@@ -1,6 +1,11 @@
-producto_slug,tasa_nominal,gat_nominal,gat_real,fecha_dato,fuente,fuente_url,estado,notas
+producto_slug,tasa_nominal,gat_nominal,gat_real,fecha_dato,fuente,fuente_url,estado,notas,tramos
 # De donde puede salir un numero que se publica: de la institucion que lo ofrece,
 # de la autoridad (Banxico SIE, CNBV) o del emisor. Nada mas.
+#
+# La columna opcional `tramos` captura tasas escalonadas por saldo con el
+# formato desde-hasta:tasa;... (hasta vacio = sin techo). La tasa_nominal de la
+# fila debe ser la del primer tramo, que es la titular. Ej.:
+#   0-30000:13.00;30000-1000000:6.30
 #
 # Las filas con fuente AGREGADOR salieron de un comparador de terceros. No se
 # publican nunca -el alta las rechaza si alguien intenta ponerlas VIGENTE- y
@@ -39,6 +44,7 @@ nu-plazo-28,6.60,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION
 nu-plazo-91,6.70,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
 nu-plazo-182,6.80,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
 revolut-vista,15.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial. La prensa reporta que la tasa alta aplica solo a un tramo del saldo y baja de forma escalonada por encima.
-openbank-vista,13.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
+# retirada 2026-08-01 (sustituida por MANUAL 2026-08-01): openbank-vista,13.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
+openbank-vista,13.00,,,2026-08-01,MANUAL,https://www.openbank.mx/,VIGENTE,Escalera por saldo leida en la pagina oficial: 13% los primeros 30 mil y 6.3% de ahi a 1 millon; por encima no se publica rendimiento.,0-30000:13.00;30000-1000000:6.30
 hey-vista,7.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial: hey.inc devolvio error 500.
 mercado-pago-vista,12.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial. Tasa con tope de saldo. Sin cobertura IPAB ni PROSOFIPO.

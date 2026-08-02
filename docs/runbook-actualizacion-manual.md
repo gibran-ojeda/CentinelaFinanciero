@@ -63,13 +63,15 @@ Tres cosas que se ven seguido y hay que resistir:
 Cada fila de `seeds/tasas.csv` es una **observación nueva**, no una edición. La tabla es append-only: la vigente de un producto es la más reciente en estado `VIGENTE`.
 
 ```csv
-producto_slug,tasa_nominal,gat_nominal,gat_real,fecha_dato,fuente,fuente_url,estado,notas
-finsus-plazo-360,8.69,8.69,4.56,2026-07-28,MANUAL,https://www.finsus.mx/inversion,VIGENTE,Fecha de calculo de la GAT: 02 de julio de 2026.
+producto_slug,tasa_nominal,gat_nominal,gat_real,fecha_dato,fuente,fuente_url,estado,notas,tramos
+finsus-plazo-360,8.69,8.69,4.56,2026-07-28,MANUAL,https://www.finsus.mx/inversion,VIGENTE,Fecha de calculo de la GAT: 02 de julio de 2026.,
+openbank-vista,13.00,,,2026-08-01,MANUAL,https://www.openbank.mx/,VIGENTE,Escalera por saldo.,0-30000:13.00;30000-1000000:6.30
 ```
 
 - `fuente_url` es **la página de la institución**. Se pinta como enlace en el sitio, así que tiene que ser legible por una persona: nunca un endpoint de API que devuelva JSON.
 - `estado=VIGENTE` sólo si se leyó de la propia institución. Si el dato viene de un agregador o hay dudas, `PENDIENTE_REVISION` — y entonces no sale al sitio público, que es lo correcto.
 - Lo que no se pudo verificar **se deja como está**. Una tasa vieja marcada es mejor que una inventada.
+- `tramos` (opcional) captura tasas **escalonadas por saldo**: segmentos `desde-hasta:tasa` separados por `;`, con `hasta` vacío para el tramo sin techo (`30000-:6.30`). La escalera debe empezar en 0 y ser contigua, la `tasa_nominal` de la fila es la del primer tramo, y lo que quede por encima del último techo publicado se calcula a 0 — no se le regala la última tasa a dinero del que la institución no dijo nada.
 
 ### 5. Importar
 
