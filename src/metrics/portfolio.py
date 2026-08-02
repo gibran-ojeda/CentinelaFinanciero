@@ -17,10 +17,11 @@ Tres cosas que decide aquí y no en el frontend, porque son de dinero:
    cubrir, la respuesta es 99%, no 100%. Redondear al alza convertiría un
    excedente pequeño en una promesa completa.
 
-3. **El optimizador es una heurística, no una recomendación.** Ordena por TEN
-   y llena hasta el tope de cada emisor. Es transparente y reproducible, no
-   óptimo en ningún sentido formal, y así se declara en la respuesta y en la
-   página de metodología (§10 y §19).
+3. **El optimizador es una heurística, no una recomendación.** Cada peso va al
+   tramo que más TEN ofrece, hasta donde alcanza el seguro de cada emisor y
+   respetando el mínimo de entrada de cada producto. Es transparente y
+   reproducible, no óptimo en ningún sentido formal, y así se declara en la
+   respuesta y en la página de metodología (§10 y §19).
 
 Todo en `Decimal`. Un reparto calculado en coma flotante acumula error a lo
 largo de la cascada y acaba mostrando que la suma no cuadra.
@@ -38,6 +39,7 @@ from metrics.coverage import Cobertura, resolver_cobertura
 from metrics.real import desglose_cascada
 from metrics.rounding import CENTAVO, redondear
 from metrics.ten import ten
+from metrics.tramos import Tramo, escalera_de, tasa_ponderada
 
 #: Los porcentajes del reparto se manejan con un decimal, como en la UI. Más
 #: precisión no significaría nada: el usuario los teclea en un campo con
@@ -61,10 +63,23 @@ class Candidato:
 
     monto_minimo: Decimal
     tiene_bandera_roja: bool = False
+    tramos: tuple[Tramo, ...] = ()
+    """Escalera por saldo; vacía = tasa plana. El default preserva a todos los
+    llamadores previos al modelo de tramos."""
 
     @property
     def es_a_la_vista(self) -> bool:
         return self.plazo_dias is None
+
+    @property
+    def escalonada(self) -> bool:
+        return bool(self.tramos)
+
+    def tasa_aplicada(self, monto: Decimal) -> Decimal:
+        """La nominal que este producto paga de verdad a un monto dado."""
+        if monto <= 0:
+            return self.tasa_nominal
+        return tasa_ponderada(monto, escalera_de(self.tasa_nominal, self.tramos))
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,15 +264,20 @@ def evaluar_reparto(
             cubierto = min(monto, disponible)
         usado_por_institucion[candidato.institucion_id] = previo + monto
 
+        # La nominal que este monto gana de verdad: en un producto escalonado
+        # es la ponderada de su escalera, en uno plano es la titular. TEN y
+        # cascada salen de ella para que lo mostrado cuadre con los importes.
+        aplicada = candidato.tasa_aplicada(monto)
+
         asignaciones.append(
             Asignacion(
                 candidato=candidato,
                 porcentaje=porcentaje,
                 monto=monto,
-                ten=ten(candidato.tasa_nominal, candidato.instrumento, params),
+                ten=ten(aplicada, candidato.instrumento, params),
                 cascada=desglose_cascada(
                     monto=monto,
-                    tasa_nominal=candidato.tasa_nominal,
+                    tasa_nominal=aplicada,
                     instrumento=candidato.instrumento,
                     plazo_dias=horizonte_dias,
                     inflacion_anual=inflacion_anual,
@@ -402,66 +422,137 @@ def optimizar(
     respetar_seguro: bool = True,
     excluir_rojas: bool = True,
 ) -> Reparto:
-    """Reparto greedy por TEN, respetando el tope de cada emisor.
+    """Reparto por tramos: cada peso al segmento que más TEN ofrece.
 
-    Devuelve **importes**, no porcentajes. Es una heurística deliberadamente
-    simple y explicable: el usuario tiene que poder entender por qué le
-    propone lo que le propone, y "el que más rinde primero, hasta donde
-    alcanza el seguro" se explica en una frase.
+    Devuelve **importes**, no porcentajes. Sigue siendo una heurística
+    deliberadamente simple y explicable —"el dinero va al tramo que más
+    rinde, hasta donde alcanza el seguro de cada emisor"— pero consciente de
+    las escaleras: el 13% de Openbank solo existe para los primeros $30,000,
+    y una vez llenos la siguiente mejor oferta puede estar en otro emisor. El
+    puntero de segmento por producto garantiza estructuralmente que jamás se
+    asigna al tramo i+1 sin llenar el i. Con candidatos planos degrada
+    exactamente al greedy por TEN de siempre.
 
-    Un producto por institución: dos del mismo emisor comparten tope, así que
-    añadir el segundo no protege más dinero y sólo complica el reparto.
+    Reglas que conserva, y dos que estrena:
 
-    Puede quedar dinero sin colocar —si la cobertura disponible no alcanza para
-    el monto pedido y no hay ningún emisor sin tope— y ese remanente se declara
-    en vez de repartirse. Estirarlo entre los que ya están llenos anularía
-    exactamente la garantía que el usuario acaba de pedir.
+    - Un producto por institución: dos del mismo emisor comparten tope, así
+      que añadir el segundo no protege más dinero y sólo complica el reparto.
+    - Puede quedar dinero sin colocar y el remanente se declara en vez de
+      repartirse entre los que ya están llenos.
+    - **El mínimo de entrada se respeta**: un producto no se abre si el
+      dinero disponible —o el tope de su emisor— no alcanza su
+      `monto_minimo`; proponer una asignación por debajo del mínimo es
+      proponer algo incontratable. Y su oferta de entrada es la TEN efectiva
+      de ese mínimo, no la del primer tramo: entrar a un producto con mínimo
+      de $50,000 y tramo alto de $30,000 obliga a comprar también el bajo.
+    - Las escaleras con algún escalón **creciente** quedan fuera del
+      optimizador (siguen en el comparador y la combinación manual): el
+      greedy marginal solo es óptimo con escaleras no crecientes, y esta
+      respuesta promete una heurística que se explica en una frase.
     """
     if monto_total <= 0:
         raise ValueError("el monto total debe ser positivo")
 
-    disponibles = sorted(
-        elegibles(
-            candidatos,
-            monto_total=monto_total,
-            horizonte_dias=horizonte_dias,
-            excluir_rojas=excluir_rojas,
-        ),
-        key=lambda c: (
-            -ten(c.tasa_nominal, c.instrumento, params),
-            c.producto_id,  # desempate estable: el mismo orden en cada llamada
-        ),
-    )
+    aptos: list[Candidato] = []
+    escaleras: dict[int, tuple[Tramo, ...]] = {}
+    for candidato in elegibles(
+        candidatos,
+        monto_total=monto_total,
+        horizonte_dias=horizonte_dias,
+        excluir_rojas=excluir_rojas,
+    ):
+        escalera = escalera_de(candidato.tasa_nominal, candidato.tramos)
+        crece = any(
+            siguiente.tasa_nominal > tramo.tasa_nominal
+            for tramo, siguiente in zip(escalera, escalera[1:], strict=False)
+        )
+        if crece:
+            continue
+        aptos.append(candidato)
+        escaleras[candidato.producto_id] = escalera
+
+    # Orden estable de exploración: con ofertas empatadas gana el producto de
+    # id menor, el mismo desempate de siempre.
+    aptos.sort(key=lambda c: c.producto_id)
 
     restante = monto_total
-    usados: set[int] = set()
-    reparto: list[tuple[Candidato, Decimal]] = []
+    puntero: dict[int, int] = {c.producto_id: 0 for c in aptos}
+    acumulado: dict[int, Decimal] = {c.producto_id: Decimal("0") for c in aptos}
+    abierta_por: dict[int, int] = {}
+    descartados: set[int] = set()
+    orden_apertura: list[Candidato] = []
 
-    for candidato in disponibles:
-        if restante <= 0:
+    def _tope_restante(candidato: Candidato) -> Decimal:
+        """Cuánto más admite el emisor de este producto sin exponer dinero."""
+        if not respetar_seguro:
+            return restante
+        cobertura = resolver_cobertura(candidato.tipo_seguro, valor_udi)
+        if cobertura.sin_limite:
+            return restante
+        limite = cobertura.limite_mxn or Decimal("0")
+        return max(limite - acumulado[candidato.producto_id], Decimal("0"))
+
+    while restante > 0:
+        mejor: Candidato | None = None
+        mejor_oferta: Decimal | None = None
+        for candidato in aptos:
+            pid = candidato.producto_id
+            if pid in descartados or puntero[pid] >= len(escaleras[pid]):
+                continue
+            duena = abierta_por.get(candidato.institucion_id)
+            if duena is not None and duena != pid:
+                continue
+            tope = _tope_restante(candidato)
+            if tope <= 0:
+                # Emisor lleno (o sin cobertura con el seguro activo, el caso
+                # del IFPE): este producto ya no volverá a ofertar.
+                descartados.add(pid)
+                continue
+            if duena is None and min(restante, tope) < candidato.monto_minimo:
+                descartados.add(pid)
+                continue
+            if duena == pid:
+                marginal = escaleras[pid][puntero[pid]].tasa_nominal
+            elif candidato.monto_minimo > 0:
+                marginal = tasa_ponderada(candidato.monto_minimo, escaleras[pid])
+            else:
+                marginal = escaleras[pid][0].tasa_nominal
+            oferta = ten(marginal, candidato.instrumento, params)
+            if mejor_oferta is None or oferta > mejor_oferta:
+                mejor, mejor_oferta = candidato, oferta
+
+        if mejor is None:
             break
-        if candidato.institucion_id in usados:
-            continue
 
-        if respetar_seguro:
-            cobertura = resolver_cobertura(candidato.tipo_seguro, valor_udi)
-            tope = restante if cobertura.sin_limite else (cobertura.limite_mxn or Decimal("0"))
+        pid = mejor.producto_id
+        escalera = escaleras[pid]
+        tramo = escalera[puntero[pid]]
+        tope = _tope_restante(mejor)
+        capacidad = restante if tramo.hasta is None else tramo.hasta - acumulado[pid]
+
+        if abierta_por.get(mejor.institucion_id) == pid:
+            asignado = min(restante, tope, capacidad)
         else:
-            tope = restante
+            # La apertura compra al menos el mínimo, cruzando tramos si hace
+            # falta: ya se comprobó arriba que el mínimo cabe.
+            asignado = min(restante, tope, max(capacidad, mejor.monto_minimo))
+            abierta_por[mejor.institucion_id] = pid
+            orden_apertura.append(mejor)
 
-        asignado = min(restante, tope)
-        if asignado <= 0:
-            # Sin cobertura y con el seguro activo: no entra. Es el caso de un
-            # IFPE, y omitirlo en silencio es lo correcto — el optimizador no
-            # debe proponer dinero sin proteger cuando le pidieron protegerlo.
-            continue
-
-        reparto.append((candidato, redondear(asignado, CENTAVO)))
-        usados.add(candidato.institucion_id)
+        acumulado[pid] += asignado
         restante -= asignado
+        while puntero[pid] < len(escalera):
+            lleno = escalera[puntero[pid]]
+            if lleno.hasta is not None and acumulado[pid] >= lleno.hasta:
+                puntero[pid] += 1
+            else:
+                break
 
     return Reparto(
-        asignaciones=reparto,
+        asignaciones=[
+            (candidato, redondear(acumulado[candidato.producto_id], CENTAVO))
+            for candidato in orden_apertura
+        ],
         monto_no_asignado=redondear(max(restante, Decimal("0")), CENTAVO),
     )
 
