@@ -13,6 +13,14 @@ del lunes trajo la tasa de Klar, el miércoles no se busca a Klar.
 Lo que encuentre pasa por el **mismo `reviewer`** que el nivel 2, con
 `fuente=LLM_RESEARCH`. La regla no cambia: la primera lectura de un producto
 siempre la aprueba una persona, y ninguna decisión de publicar la toma un modelo.
+
+Límite conocido, aceptado a propósito: el nivel 3 **no reconstruye escaleras
+por saldo** (su esquema de hallazgos ni siquiera trae monto). Si un producto
+escalonado aparece por aquí, cada hallazgo se procesa suelto: el primero se
+escribe y el segundo choca con la idempotencia del día. El daño está acotado
+porque esa lectura siempre es primera-lectura o Δ grande — nunca se publica
+sola — y el remedio de fondo es llevar `rates_agent.escalera` también al
+researcher cuando el nivel 2 haya rodado.
 """
 
 from __future__ import annotations

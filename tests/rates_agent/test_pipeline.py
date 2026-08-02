@@ -431,12 +431,12 @@ def test_the_job_is_registered_with_a_lock_long_enough_for_the_backoff() -> None
     assert spec.lock_ttl_seconds >= 1500
 
 
-async def test_amount_tiers_of_one_product_are_a_catalogue_gap() -> None:
-    """Openbank publica 13% hasta $30 000 y 7% de ahí en adelante.
+async def test_same_type_and_term_without_amounts_is_still_a_catalogue_gap() -> None:
+    """Dos tasas del mismo (tipo, plazo) sin montos no son reconstruibles.
 
-    Las dos van al mismo producto, y `tasas` tiene clave única
-    `(producto, fecha, fuente)`: la segunda chocaría. Elegir una tampoco vale
-    — publicar el 13% sería el «hasta 13%» que el extractor tiene prohibido.
+    Sin `monto_minimo` no se sabe dónde corta cada tramo, y elegir una sería
+    publicar el «hasta 13%» que el extractor tiene prohibido inventar. El caso
+    ambiguo sigue siendo hueco; el reconstruible es el test de abajo.
     """
     await _solo_una_fuente()
     modelo = ModeloFalso(
@@ -454,6 +454,78 @@ async def test_amount_tiers_of_one_product_are_a_catalogue_gap() -> None:
     assert reporte.en_revision == 0
     assert len(reporte.huecos_catalogo) == 2
     assert {h["tasa_nominal"] for h in reporte.huecos_catalogo} == {"13.00", "7.00"}
+
+
+async def test_amount_tiers_with_distinct_floors_become_one_ladder() -> None:
+    """El caso Openbank deja de ser hueco: dos entradas con montos distintos
+    son UNA observación con su escalera, encolada como primera lectura."""
+    await _solo_una_fuente()
+    modelo = ModeloFalso(
+        tasas=[
+            {
+                "producto": "Plazo fijo",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "13.00",
+                "monto_minimo": "0",
+            },
+            {
+                "producto": "Plazo fijo",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "6.30",
+                "monto_minimo": "30000",
+            },
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.huecos_catalogo == []
+    assert reporte.en_revision == 1  # una fila de reporte, no una por tramo
+    assert reporte.publicadas == 0
+
+    async with session_scope() as session:
+        tasa = (await session.execute(select(Tasa))).scalars().one()
+        assert tasa.tasa_nominal == Decimal("13.00")
+        assert tasa.estado is EstadoTasa.PENDIENTE_REVISION
+        assert [(t.desde, t.hasta, t.tasa_nominal) for t in tasa.tramos] == [
+            (Decimal("0.00"), Decimal("30000.00"), Decimal("13.0000")),
+            (Decimal("30000.00"), None, Decimal("6.3000")),
+        ]
+
+
+async def test_a_ladder_that_does_not_start_at_zero_is_a_catalogue_gap() -> None:
+    """Una escalera que no cubre desde el primer peso tiene un tramo base que
+    la página no declaró — y la regla 1 prohíbe inventarlo."""
+    await _solo_una_fuente()
+    modelo = ModeloFalso(
+        tasas=[
+            {
+                "producto": "Plazo fijo",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "13.00",
+                "monto_minimo": "1000",
+            },
+            {
+                "producto": "Plazo fijo",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "6.30",
+                "monto_minimo": "30000",
+            },
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.en_revision == 0
+    assert len(reporte.huecos_catalogo) == 2
 
 
 async def test_an_unexpected_failure_in_one_source_spares_the_rest() -> None:

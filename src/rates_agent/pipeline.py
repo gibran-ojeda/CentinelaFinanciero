@@ -33,6 +33,7 @@ from domain.enums import EstadoTasa, TipoProducto
 from domain.orm import FuenteTasas, Institucion, Producto
 from llm.client import ClienteLLM
 from llm.providers.base import ErrorPresupuestoAgotado, ErrorProveedor
+from rates_agent.escalera import reconstruir_escalera
 from rates_agent.extractor import TasaExtraida, extraer
 from rates_agent.fetcher import CadenaAgotada, Fetcher
 from rates_agent.reviewer import Decision, HuecoCatalogo, revisar
@@ -255,44 +256,55 @@ async def _decidir(
             session, [p.id for p in productos.values()], incluir_pendientes=True
         )
 
-        for extraida, colisiona in _con_colisiones(extraidas):
-            producto = productos.get(_clave(extraida.tipo, extraida.plazo_dias))
-            if producto is None or colisiona:
-                # Dos motivos distintos, mismo destino: o el catálogo no tiene
-                # ese plazo, o la institución publica **varios tramos por monto
-                # para el mismo producto** —Openbank da 13 % hasta $30 000 y
-                # 7 % de ahí en adelante— y el catálogo tiene un solo producto
-                # donde hacen falta tres. Ninguno de los dos casos se resuelve
-                # eligiendo uno: publicar el 13 % sería exactamente el
-                # «hasta 13 %» que el extractor tiene prohibido inventar.
-                reporte.huecos_catalogo.append(
-                    HuecoCatalogo(
+        for clave, grupo in _agrupar(extraidas).items():
+            producto = productos.get(clave)
+            # Varias entradas del mismo (tipo, plazo) son los **tramos por
+            # monto** de un producto —Openbank publica 13 % hasta $30 000 y
+            # 6.3 % de ahí en adelante— y se reconstruyen como UNA observación
+            # con su escalera. Devuelve None cuando los montos no alcanzan
+            # para saber dónde corta cada tramo (repetidos o ausentes): elegir
+            # una de las tasas sería publicar el «hasta 13 %» que el extractor
+            # tiene prohibido inventar, así que ese grupo sigue siendo hueco.
+            escalera = reconstruir_escalera(grupo) if len(grupo) > 1 else None
+            if producto is None or (len(grupo) > 1 and escalera is None):
+                motivo = (
+                    "plazo desconocido"
+                    if producto is None
+                    else "tramos ambiguos (montos repetidos o sin monto)"
+                )
+                for extraida in grupo:
+                    reporte.huecos_catalogo.append(
+                        HuecoCatalogo(
+                            institucion=institucion,
+                            producto=extraida.producto,
+                            plazo_dias=extraida.plazo_dias,
+                            tasa_nominal=extraida.tasa_nominal,
+                            url=url,
+                        ).como_dict()
+                    )
+                    log.info(
+                        "hueco_catalogo",
                         institucion=institucion,
-                        producto=extraida.producto,
                         plazo_dias=extraida.plazo_dias,
-                        tasa_nominal=extraida.tasa_nominal,
-                        url=url,
-                    ).como_dict()
-                )
-                log.info(
-                    "hueco_catalogo",
-                    institucion=institucion,
-                    plazo_dias=extraida.plazo_dias,
-                    tasa=str(extraida.tasa_nominal),
-                    motivo="tramos por monto" if colisiona else "plazo desconocido",
-                )
+                        tasa=str(extraida.tasa_nominal),
+                        motivo=motivo,
+                    )
                 continue
 
+            cabeza = escalera.cabeza if escalera is not None else grupo[0]
             candidata = vigentes.get(producto.id)
             vigente = candidata if candidata and candidata.estado is EstadoTasa.VIGENTE else None
             resultado = await revisar(
                 session,
-                extraida,
+                cabeza,
                 producto=producto,
                 vigente=vigente,
                 referencia=candidata if vigente is None else None,
                 url=url,
+                escalera=escalera,
             )
+            # Una fila de reporte por observación: la escalera entera cuenta
+            # una vez, no una por tramo.
             match resultado.decision:
                 case Decision.PUBLICADA:
                     reporte.publicadas += 1
@@ -302,19 +314,17 @@ async def _decidir(
                     reporte.sin_cambio += 1
 
 
-def _con_colisiones(extraidas: list[TasaExtraida]) -> list[tuple[TasaExtraida, bool]]:
-    """Cada tasa con una marca de si comparte `(tipo, plazo)` con otra.
+def _agrupar(extraidas: list[TasaExtraida]) -> dict[tuple[str, int | None], list[TasaExtraida]]:
+    """Las extracciones por `(tipo, plazo)`, en orden de aparición.
 
-    Pasa cuando una institución publica **tramos por monto** del mismo
-    producto. `tasas` tiene una clave única `(producto, fecha, fuente)`, así
-    que dos tramos el mismo día chocarían — y elegir uno sería publicar una
-    tasa que sólo aplica a una parte del dinero.
+    Un grupo de una entrada es el caso normal; uno de varias son los tramos
+    por monto de un mismo producto, que `reconstruir_escalera` decide si se
+    pueden reconstruir o quedan como hueco.
     """
-    cuantas: dict[tuple[str, int | None], int] = {}
+    grupos: dict[tuple[str, int | None], list[TasaExtraida]] = {}
     for extraida in extraidas:
-        clave = _clave(extraida.tipo, extraida.plazo_dias)
-        cuantas[clave] = cuantas.get(clave, 0) + 1
-    return [(e, cuantas[_clave(e.tipo, e.plazo_dias)] > 1) for e in extraidas]
+        grupos.setdefault(_clave(extraida.tipo, extraida.plazo_dias), []).append(extraida)
+    return grupos
 
 
 async def _productos_de(session: Any, institucion: str) -> dict[tuple[str, int | None], Producto]:

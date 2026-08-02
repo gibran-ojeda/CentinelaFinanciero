@@ -53,7 +53,9 @@ Un objeto JSON con una sola clave `tasas`, con una entrada por producto:
 
 4. **Un tramo por monto es una entrada por tramo.** Si la página dice 13 % hasta
    $30,000 y 7 % de ahí en adelante, son dos entradas con su `monto_minimo` y su
-   condición, no un promedio.
+   condición, no un promedio. Incluye también el tramo base aunque aplique desde
+   el primer peso: ponle `monto_minimo: "0"`. El `monto_minimo` de cada entrada
+   es donde **empieza** su tramo, no el mínimo de contratación del producto.
 
 5. **«Sin tasas» es una respuesta correcta y frecuente.** Muchas páginas sólo
    traen publicidad. Si no encuentras una tasa con plazo y valor, devuelve
