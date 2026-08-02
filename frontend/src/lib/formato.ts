@@ -47,6 +47,26 @@ export function porcentaje(valor: string | number | null | undefined, decimales 
   return `${Number(valor).toFixed(decimales)} %`;
 }
 
+/**
+ * "$30 mil", "$1 M": los cortes de una escalera en poco espacio. Distinto de
+ * `dineroCompacto` a propósito: aquí no hay caso null — un techo ausente
+ * significa «en adelante», no «Sin límite», y eso lo dice `tramoEtiqueta`.
+ */
+export function montoCorto(valor: string | number): string {
+  const n = Number(valor);
+  if (Math.abs(n) >= 1_000_000) {
+    const millones = n / 1_000_000;
+    return `$${Number.isInteger(millones) ? millones : millones.toFixed(2)} M`;
+  }
+  if (Math.abs(n) >= 1_000) return `$${Math.round(n / 1_000)} mil`;
+  return MONEDA_CORTA.format(n);
+}
+
+/** "hasta $30 mil" | "en adelante", para pintar cada tramo de una escalera. */
+export function tramoEtiqueta(hasta: string | null): string {
+  return hasta === null ? 'en adelante' : `hasta ${montoCorto(hasta)}`;
+}
+
 export function miles(valor: string | number | null | undefined): string {
   if (valor === null || valor === undefined || valor === '') return '';
   return MILES.format(Number(valor));

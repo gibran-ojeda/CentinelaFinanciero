@@ -14,7 +14,7 @@
 
 import { useStore } from '@nanostores/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { colorSerie, dinero, miles, porcentaje, soloDigitos } from '~/lib/formato';
+import { colorSerie, dinero, miles, porcentaje, soloDigitos, tramoEtiqueta } from '~/lib/formato';
 import { limpiar, quitar, repartoInicial, seleccion } from '~/lib/seleccion';
 import type { RespuestaCombinacion } from '~/lib/tipos';
 
@@ -383,6 +383,19 @@ export default function Combinador() {
                       {dinero(a.monto)} ({Number(a.porcentaje).toFixed(1)}%)
                     </span>
                     <span className="positivo">TEN {porcentaje(a.ten)}</span>
+                    {a.escalonada && (
+                      /* La TEN de al lado ya es la efectiva del monto asignado
+                         (la calcula la API); esto solo dice por qué y enseña
+                         la escalera al pasar el cursor. */
+                      <span
+                        className="tenue-2"
+                        title={a.tramos
+                          .map((t) => `${porcentaje(t.tasa_nominal)} ${tramoEtiqueta(t.hasta)}`)
+                          .join(' · ')}
+                      >
+                        escalonada
+                      </span>
+                    )}
                     <span className="tenue">real {dinero(a.cascada.ganancia_real)}</span>
                     <span
                       className="cobertura"

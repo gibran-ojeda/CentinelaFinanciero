@@ -140,7 +140,7 @@ const jsonLd = mercado
     <BarraSeleccion client:idle />
 
     {error && <p class="error">{error}</p>}
-    {mercado && <TablaComparador filas={mercado.filas} hayFiltros={hayFiltros} />}
+    {mercado && <TablaComparador filas={mercado.filas} hayFiltros={hayFiltros} monto={filtros.monto} />}
 
     {mercado && <p class="tenue-2 disclaimer">{mercado.disclaimer}</p>}
   </section>

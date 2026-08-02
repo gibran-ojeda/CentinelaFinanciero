@@ -11,15 +11,17 @@ import Avatar from '~/components/Avatar.astro';
 import Bandera from '~/components/Bandera.astro';
 import BotonAgregar from '~/components/BotonAgregar.astro';
 import MarcaDato from '~/components/MarcaDato.astro';
-import { fecha, plazoCorto, plazoLargo, porcentaje } from '~/lib/formato';
+import { fecha, montoCorto, plazoCorto, plazoLargo, porcentaje, tramoEtiqueta } from '~/lib/formato';
 import type { FilaComparador } from '~/lib/tipos';
 
 interface Props {
   filas: FilaComparador[];
   /** Si la petición traía filtros: cambia el mensaje del estado vacío. */
   hayFiltros?: boolean;
+  /** El monto consultado: con él, las columnas pasan a la tasa efectiva. */
+  monto?: string | null;
 }
-const { filas, hayFiltros = false } = Astro.props;
+const { filas, hayFiltros = false, monto = null } = Astro.props;
 
 const ETIQUETA_SEGURO: Record<string, string> = {
   SOBERANO: 'Soberano',
@@ -34,6 +36,29 @@ function coberturaCorta(fila: FilaComparador): string {
   if (cobertura.sin_cobertura) return 'Sin protección';
   const n = Number(cobertura.limite_mxn);
   return n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)} M` : `$${Math.round(n / 1_000)} mil`;
+}
+
+/**
+ * Con monto consultado, las cifras son las efectivas de ESE monto — un «13%
+ * hasta $30 mil» no puede presumirle 13% a quien invierte medio millón. Sin
+ * monto, las titulares (el primer tramo), con su marca de alcance al lado.
+ */
+function tasaMostrada(fila: FilaComparador): string {
+  return monto ? (fila.tasa_efectiva ?? fila.tasa_nominal) : fila.tasa_nominal;
+}
+function tenMostrada(fila: FilaComparador): string {
+  return monto ? (fila.ten_efectiva ?? fila.ten) : fila.ten;
+}
+function marcaTramo(fila: FilaComparador): string | null {
+  if (!fila.escalonada) return null;
+  if (monto) return `efectiva a ${montoCorto(monto)}`;
+  const primero = fila.tramos[0];
+  return primero?.hasta ? `hasta ${montoCorto(primero.hasta)}` : null;
+}
+function escaleraTexto(fila: FilaComparador): string {
+  return fila.tramos
+    .map((tramo) => `${porcentaje(tramo.tasa_nominal)} ${tramoEtiqueta(tramo.hasta)}`)
+    .join(' · ');
 }
 ---
 
@@ -81,15 +106,18 @@ function coberturaCorta(fila: FilaComparador): string {
           </a>
           <span class="producto tenue" role="cell">
             {fila.producto}
+            {fila.escalonada && <span class="escalera tenue-2">{escaleraTexto(fila)}</span>}
           </span>
           <span class="tenue" role="cell">
             {plazoCorto(fila.plazo_dias, fila.tipo)}
           </span>
           <span class="der num" role="cell">
-            {porcentaje(fila.tasa_nominal)}
+            {porcentaje(tasaMostrada(fila))}
+            {fila.escalonada && <span class="marca-tramo tenue-2">{marcaTramo(fila)}</span>}
           </span>
           <span class="der ten cifra" role="cell">
-            {porcentaje(fila.ten)}
+            {porcentaje(tenMostrada(fila))}
+            {fila.escalonada && <span class="marca-tramo tenue-2">{marcaTramo(fila)}</span>}
           </span>
           <span class="der num" role="cell">
             {porcentaje(fila.gat.nominal)}
@@ -164,11 +192,12 @@ function coberturaCorta(fila: FilaComparador): string {
         <div class="tarjeta-cifras">
           <div>
             <div class="etiqueta-cifra">TEN</div>
-            <div class="cifra grande ten">{porcentaje(fila.ten)}</div>
+            <div class="cifra grande ten">{porcentaje(tenMostrada(fila))}</div>
+            {fila.escalonada && <div class="marca-tramo tenue-2">{marcaTramo(fila)}</div>}
           </div>
           <div>
             <div class="etiqueta-cifra">Nominal</div>
-            <div class="cifra grande">{porcentaje(fila.tasa_nominal)}</div>
+            <div class="cifra grande">{porcentaje(tasaMostrada(fila))}</div>
           </div>
           <div>
             <div class="etiqueta-cifra">GAT</div>
@@ -178,6 +207,8 @@ function coberturaCorta(fila: FilaComparador): string {
             </div>
           </div>
         </div>
+
+        {fila.escalonada && <div class="escalera-tarjeta tenue-2">{escaleraTexto(fila)}</div>}
 
         <div class="tarjeta-pie">
           <span class="tenue">
@@ -275,6 +306,23 @@ function coberturaCorta(fila: FilaComparador): string {
   }
   .producto {
     font-size: 13px;
+  }
+  .escalera {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .marca-tramo {
+    display: block;
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+  .escalera-tarjeta {
+    margin-top: 10px;
+    font-size: 11px;
   }
   .der {
     text-align: right;
