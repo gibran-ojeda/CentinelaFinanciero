@@ -112,6 +112,12 @@ jobs:
           # nada, que es la peor forma de fallar: parece un secreto mal puesto.
           {
             echo "export API_READ_KEY='${{ secrets.API_READ_KEY }}'"
+            # Variables de repo, no secretos: señas del stack vecino para el
+            # gate de no-interferencia. Ausentes o vacías, el gate se omite
+            # con aviso — no se guardan en el repo porque describen un stack
+            # ajeno y este repositorio es público.
+            echo "export VECINO_URL='${{ vars.VECINO_URL }}'"
+            echo "export VECINO_FILTRO='${{ vars.VECINO_FILTRO }}'"
             echo 'cd ~/centinela-financiero && exec bash scripts/gates.sh'
           } | ssh -i ~/.ssh/id_deploy \
                 -o IdentitiesOnly=yes -o BatchMode=yes \

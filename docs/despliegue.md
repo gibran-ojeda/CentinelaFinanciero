@@ -49,10 +49,21 @@ git clone https://github.com/gibran-ojeda/brujula-financiera.git ~/centinela-fin
 | `BANXICO_TOKEN` | token del SIE ([solicitud](https://www.banxico.org.mx/SieAPIRest/service/v1/token)). Opcional: sin él, `banxico_sync_series` se marca OMITIDO y la UDI cae al valor de respaldo congelado |
 | `DEEPSEEK_API_KEY` | llave de DeepSeek. Opcional: sin ella, el fetch L2 de los lunes falla (FALLIDO en `job_runs`, no en silencio) |
 
-También existe la **variable** de repo `SCHEDULER_RESEARCH_ENABLED` (no
-secreto): el **apagado de emergencia** del researcher L3. Sin definirla queda
-encendido; fijarla en `false` lo apaga sin tocar código. Ojo: si existe con
-valor `false` de antes, anula el encendido por código — borrarla.
+También existen las **variables** de repo (Settings → Secrets and variables →
+Actions → pestaña *Variables* — no son secretos):
+
+| Variable | Qué es |
+|---|---|
+| `SCHEDULER_RESEARCH_ENABLED` | el **apagado de emergencia** del researcher L3. Sin definirla queda encendido; fijarla en `false` lo apaga sin tocar código. Ojo: si existe con valor `false` de antes, anula el encendido por código — borrarla |
+| `VECINO_URL` | dominio público del stack vecino, con esquema (`https://…`), para el gate de no-interferencia. Ausente o vacía ⇒ el gate omite el `curl` con aviso |
+| `VECINO_FILTRO` | prefijo del nombre de sus contenedores, para `docker ps --filter name=…`. Ausente o vacía ⇒ se omite esa comprobación con aviso |
+
+Las dos del vecino **no** siguen la regla de los tres sitios de abajo: no
+entran a ningún contenedor — solo las lee `gates.sh`, exportadas en el bloque
+stdin del paso Gates del workflow. Y no se guardan en el repo porque describen
+un stack ajeno y el repositorio es público; por lo mismo, `gates.sh` no imprime
+sus valores (las variables, a diferencia de los secretos, **no se enmascaran**
+en los logs de Actions).
 
 > **Ojo**: el compose no declara `env_file`, así que una variable sólo llega al
 > contenedor si está en el mapa `environment:` del servicio. Añadir una nueva
@@ -105,7 +116,7 @@ Qué hace, en orden:
 |---|---|
 | Deriva de esquema | `python -m core.schema_check`: la base está en el head **y** coincide con el ORM. Puede estar en el head y aun así diferir |
 | Humo HTTP | `/healthz`, `/meta/frescura`, y la portada **con filas** — un 200 con la tabla vacía es justo lo que hay que ver — y que la canónica apunte al dominio y no al loopback |
-| No interferencia | Los `narrativealpha-*` siguen `healthy` y su dominio responde 200 |
+| No interferencia | Los contenedores del vecino (`VECINO_FILTRO`) siguen `healthy` y su dominio (`VECINO_URL`) responde 200. Sin las variables, se omite con aviso |
 | TLS público | `https://centinelafinanciero.lat` responde 200 |
 
 Los gates corren desde el repo que el despliegue acaba de actualizar, así que las comprobaciones son siempre las del commit que se está verificando.

@@ -5,7 +5,11 @@
 # versión de estas comprobaciones es siempre la del commit que se acaba de
 # desplegar — no la de cuando se escribió el workflow.
 #
-#   { echo "API_READ_KEY=..."; cat scripts/gates.sh; } | ssh vps 'bash -s'
+#   { echo "API_READ_KEY=..."; echo "VECINO_URL=..."; echo "VECINO_FILTRO=..."; \
+#     cat scripts/gates.sh; } | ssh vps 'bash -s'
+#
+# Sin VECINO_URL / VECINO_FILTRO el gate de no-interferencia se omite con
+# aviso: son señas de otro stack y no viajan en el repo.
 #
 # Cuidado con `< /dev/null` más abajo: este script llega **por stdin**, y bash
 # lo lee a medida que lo ejecuta. Un `docker compose exec -T` sin redirigir se
@@ -17,7 +21,12 @@ set -euo pipefail
 
 DIRECTORIO=${DIRECTORIO:-$HOME/centinela-financiero}
 DOMINIO=${DOMINIO:-https://centinelafinanciero.lat}
-VECINO=${VECINO:-https://narrative-alpha.cloud}
+# Señas del stack vecino, sin default: llegan como variables de repo de GitHub
+# (deploy.yml las exporta). Son variables y no secretos, pero el gate no
+# imprime sus valores — los logs de Actions de un repo público son públicos y
+# las variables, a diferencia de los secretos, no se enmascaran.
+VECINO_URL=${VECINO_URL:-}
+VECINO_FILTRO=${VECINO_FILTRO:-}
 
 cd "$DIRECTORIO"
 
@@ -84,23 +93,37 @@ fi
 echo "  canónica            ok, ${DOMINIO}"
 
 echo
-echo "════════ no interferir con NarrativeAlpha ════════"
-# Compartimos máquina y Caddy. Un despliegue de Centinela que tumbe al vecino
-# es un fallo de Centinela, aunque Centinela funcione.
-docker ps --filter 'name=narrativealpha' --format '  {{.Names}}  {{.Status}}' < /dev/null
-enfermos=$(
-  docker ps --filter 'name=narrativealpha' --format '{{.Names}} {{.Status}}' < /dev/null |
-    grep -v '(healthy)' | grep -v 'caddy' || true
-)
-if [ -n "$enfermos" ]; then
-  echo "  ✗ contenedores del vecino fuera de healthy:"
-  echo "$enfermos"
-  exit 1
+echo "════════ no interferir con el vecino ════════"
+# Compartimos máquina y Caddy con otro stack. Un despliegue de Centinela que
+# lo tumbe es un fallo de Centinela, aunque Centinela funcione.
+if [ -z "$VECINO_FILTRO" ] && [ -z "$VECINO_URL" ]; then
+  echo "  ⚠ sin VECINO_FILTRO ni VECINO_URL: gate de no-interferencia omitido"
+else
+  if [ -n "$VECINO_FILTRO" ]; then
+    # Un conteo y no los nombres: no imprimir las señas del vecino en un log
+    # público, y un filtro con typo se delata como «0 contenedores».
+    total=$(docker ps --filter "name=$VECINO_FILTRO" --format '{{.Names}}' < /dev/null | wc -l)
+    echo "  contenedores del vecino en marcha: $total"
+    enfermos=$(
+      docker ps --filter "name=$VECINO_FILTRO" --format '{{.Names}} {{.Status}}' < /dev/null |
+        grep -v '(healthy)' | grep -v 'caddy' || true
+    )
+    if [ -n "$enfermos" ]; then
+      echo "  ✗ contenedores del vecino fuera de healthy:"
+      echo "$enfermos"
+      exit 1
+    fi
+  else
+    echo "  ⚠ sin VECINO_FILTRO: no se comprueba la salud de sus contenedores"
+  fi
+  if [ -n "$VECINO_URL" ]; then
+    codigo=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$VECINO_URL")
+    echo "  dominio del vecino → $codigo"
+    [ "$codigo" = 200 ] || { echo "  ✗ el dominio del vecino no responde 200"; exit 1; }
+  else
+    echo "  ⚠ sin VECINO_URL: no se comprueba su dominio"
+  fi
 fi
-
-codigo=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$VECINO")
-echo "  $VECINO → $codigo"
-[ "$codigo" = 200 ] || { echo "  ✗ el dominio del vecino no responde 200"; exit 1; }
 
 echo
 echo "════════ TLS público ════════"
