@@ -45,7 +45,7 @@ git clone https://github.com/gibran-ojeda/centinela-financiero.git ~/centinela-f
 | `API_READ_KEY`, `API_ADMIN_KEY` | `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `SITE_URL` | `https://centinelafinanciero.lat` |
 | `BANXICO_TOKEN` | token del SIE ([solicitud](https://www.banxico.org.mx/SieAPIRest/service/v1/token)). Opcional: sin él, `banxico_sync_series` se marca OMITIDO y la UDI cae al valor de respaldo congelado |
-| `DEEPSEEK_API_KEY` | llave de DeepSeek. Opcional: sin ella, el fetch L2 (cada 4 horas) falla (FALLIDO en `job_runs`, no en silencio) |
+| `DEEPSEEK_API_KEY` | llave de DeepSeek. Opcional: sin ella, el fetch L2 (cada 4 horas) falla (FALLIDO en `job_runs`, no en silencio). Si el secreto no está, el despliegue **conserva** la que haya en la máquina y el gate avisa |
 
 También existen las **variables** de repo (Settings → Secrets and variables →
 Actions → pestaña *Variables* — no son secretos):
@@ -65,8 +65,9 @@ en los logs de Actions).
 
 > **Ojo**: el compose no declara `env_file`, así que una variable sólo llega al
 > contenedor si está en el mapa `environment:` del servicio. Añadir una nueva
-> exige tocar tres sitios: el secreto/variable en GitHub, el heredoc de
-> `scripts/desplegar.sh` y el mapa del compose.
+> exige tocar tres sitios: el secreto/variable en GitHub, la plantilla de
+> [`scripts/lib/entorno.sh`](../scripts/lib/entorno.sh) —**con su clase**— y el
+> mapa del compose.
 
 **5. Levantar el stack sin tocar Caddy**, y comprobar por túnel:
 
@@ -104,7 +105,7 @@ Automático en push a `main`. Cada corrida queda registrada como *deployment* de
 Qué hace, en orden:
 
 1. `git fetch` + `reset --hard` al commit. No `pull`: el estado del VPS lo fija el commit, no lo que alguien dejara ahí arreglando algo.
-2. Regenera `.env` desde los secretos. Es la única copia y nadie la edita en la máquina.
+2. **Fusiona** `.env`: actualiza lo que gestiona y conserva el resto (ver «El `.env` de producción» más abajo). Ya no es la única copia — lo que sólo exista en la máquina sobrevive al despliegue.
 3. `build` + `up -d` con el overlay de producción.
 4. Espera a que la API esté `healthy` (o vuelca sus logs y aborta).
 5. `alembic upgrade head`.
@@ -114,10 +115,35 @@ Qué hace, en orden:
 |---|---|
 | Deriva de esquema | `python -m core.schema_check`: la base está en el head **y** coincide con el ORM. Puede estar en el head y aun así diferir |
 | Humo HTTP | `/healthz`, `/meta/frescura`, y la portada **con filas** — un 200 con la tabla vacía es justo lo que hay que ver — y que la canónica apunte al dominio y no al loopback |
+| Llaves opcionales | Que `BANXICO_TOKEN` y `DEEPSEEK_API_KEY` **llegaron al contenedor** del scheduler. Avisa (⚠) sin bloquear: sin ellas el sitio sirve igual |
 | No interferencia | Los contenedores del vecino (`VECINO_FILTRO`) siguen `healthy` y su dominio (`VECINO_URL`) responde 200. Sin las variables, se omite con aviso |
 | TLS público | `https://centinelafinanciero.lat` responde 200 |
 
 Los gates corren desde el repo que el despliegue acaba de actualizar, así que las comprobaciones son siempre las del commit que se está verificando.
+
+---
+
+## El `.env` de producción
+
+El despliegue **fusiona** el `.env` del VPS: actualiza lo que gestiona, añade lo que falta y **conserva lo demás**. Antes lo reescribía entero desde un heredoc, y eso costó un incidente — una `DEEPSEEK_API_KEY` que sólo existía en la máquina se borró sola, el researcher falló días (quince instituciones por corrida) y se descubrió leyendo logs por casualidad.
+
+La causa merece recordarse porque condiciona todo lo demás: `${{ secrets.X }}` de un secreto que no existe expande a **cadena vacía**, así que el workflow emite la línea igualmente y la variable llega al VPS *definida pero vacía*. Por eso lo que decide es que el valor **no esté vacío**, nunca que la variable esté definida.
+
+Qué gana cada choque lo dice la clase de cada variable, declarada a su lado en [`scripts/lib/entorno.sh`](../scripts/lib/entorno.sh):
+
+| Clase | Quién gana | Por qué |
+|---|---|---|
+| `fija` | El repo, siempre | `POSTGRES_HOST`, `LOG_LEVEL`… describen la topología de dentro del compose. Editarlas a mano es una avería, no una preferencia; si difieren se corrigen y el reporte lo dice con `(cambió)` |
+| `github` | GitHub, siempre | Los secretos obligatorios nunca caen al valor del archivo: uno borrado debe **abortar** el despliegue, no resucitar callado. Una rotación que «no tuvo efecto» es el peor fallo posible |
+| `opcional` | GitHub si trae valor; si no, se conserva | `BANXICO_TOKEN`, `DEEPSEEK_API_KEY`. Que el secreto no esté registrado significa «nunca lo puse», no «bórralo» |
+| `interruptor` | GitHub si trae valor; si no, el default del código | `SCHEDULER_RESEARCH_ENABLED`. **No se conserva**, al revés que las llaves: borrar la variable de repo significa «vuelve al default», y conservarla dejaría un `false` viejo apagando el researcher para siempre. En una frase: se conservan credenciales, no interruptores |
+| (lo demás) | El archivo, siempre | Claves ajenas, comentarios y líneas en blanco se copian **en su sitio**. Es lo que permite dejar una palanca puesta a mano sin que el despliegue se la lleve |
+
+Cada despliegue imprime un bloque `── .env ──` con la procedencia de las dieciséis variables — de GitHub, conservada, por defecto o ausente — **sin imprimir un solo valor**: los logs de Actions de un repositorio público son públicos.
+
+**Para retirar de verdad** una variable que ya no está en GitHub: Actions → deploy → *Run workflow* con `reescribir_env` marcado. Es un input del dispatch y no una variable de repo a propósito — una variable se quedaría encendida y arrasaría en el siguiente push. El archivo anterior queda en `.env.reemplazado`.
+
+> **El `.env` del VPS no es un almacén de registro.** Conservar es una red contra la pérdida silenciosa, no el sitio donde deben vivir las llaves: ese archivo no se respalda (`respaldar.sh` sólo vuelca Postgres), no existe en una máquina nueva, y nadie puede auditar qué llave usa producción mirando GitHub. Por eso el gate insiste con su ⚠ en cada despliegue.
 
 ### Rollback
 

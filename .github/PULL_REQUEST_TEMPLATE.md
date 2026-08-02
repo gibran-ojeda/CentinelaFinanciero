@@ -15,6 +15,6 @@ Motivación / problema que resuelve (no repitas el diff, explica el porqué).
 
 ## Checklist
 
-- [ ] Actualicé `.env.example` si agregué o renombré variables de entorno — y si la variable es de producción, los **tres sitios** (secreto/variable en GitHub → heredoc de `scripts/desplegar.sh` → mapa `environment:` del compose, ver [docs/despliegue.md](../docs/despliegue.md))
+- [ ] Actualicé `.env.example` si agregué o renombré variables de entorno — y si la variable es de producción, los **tres sitios** (secreto/variable en GitHub → plantilla de `scripts/lib/entorno.sh`, con su clase → mapa `environment:` del compose, ver [docs/despliegue.md](../docs/despliegue.md))
 - [ ] Actualicé la documentación relevante en `docs/` si cambié el comportamiento de un módulo
 - [ ] El PR es de un solo cambio lógico
