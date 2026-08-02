@@ -141,12 +141,66 @@ async def _producto_de(nombre: str, plazo: int) -> Producto:
 
 
 async def test_a_fresh_institution_is_not_investigated(catalogo_cargado: None) -> None:
-    """Si el fetch del lunes trajo la tasa, el miércoles no se busca."""
+    """Si el fetch dirigido ya trajo la tasa, aquí no se busca."""
     await _todas_frescas()
 
     candidatas = await investigacion._candidatas(HOY)
 
     assert candidatas == []
+
+
+async def test_an_institution_already_researched_today_is_skipped(
+    catalogo_cargado: None,
+) -> None:
+    """El guard que hace barata la rejilla de 4 horas.
+
+    Finsus es candidata por el motivo más fuerte —ninguna tasa VIGENTE— y lo
+    seguirá siendo hasta que una persona apruebe la revisión. Sin este corte,
+    las seis corridas del día repetirían su investigación entera; el reviewer
+    descartaría la escritura, pero sólo tras pagar el tool-loop.
+    """
+    antes = await investigacion._candidatas(HOY)
+    assert "Finsus" in {c.nombre for c in antes}
+
+    # La lectura del researcher de hoy: en revisión, como manda la doctrina.
+    producto = await _producto_de("Finsus", 91)
+    async with session_scope() as session:
+        session.add(
+            Tasa(
+                producto_id=producto.id,
+                tasa_nominal=Decimal("7.50"),
+                fecha_dato=HOY,
+                fuente=FuenteTasa.LLM_RESEARCH,
+                fuente_url="https://finsus.test/",
+                estado=EstadoTasa.PENDIENTE_REVISION,
+            )
+        )
+
+    despues = await investigacion._candidatas(HOY)
+
+    assert "Finsus" not in {c.nombre for c in despues}
+    # Y sólo sale ella: el guard es por institución, no un apagado global.
+    assert {c.nombre for c in antes} - {c.nombre for c in despues} == {"Finsus"}
+
+
+async def test_yesterdays_research_does_not_skip_today(catalogo_cargado: None) -> None:
+    """El corte es del día, no permanente: mañana vuelve a ser candidata."""
+    producto = await _producto_de("Finsus", 91)
+    async with session_scope() as session:
+        session.add(
+            Tasa(
+                producto_id=producto.id,
+                tasa_nominal=Decimal("7.50"),
+                fecha_dato=HOY - timedelta(days=1),
+                fuente=FuenteTasa.LLM_RESEARCH,
+                fuente_url="https://finsus.test/",
+                estado=EstadoTasa.PENDIENTE_REVISION,
+            )
+        )
+
+    candidatas = await investigacion._candidatas(HOY)
+
+    assert "Finsus" in {c.nombre for c in candidatas}
 
 
 async def test_a_stale_institution_is_a_candidate(catalogo_cargado: None) -> None:
@@ -408,6 +462,10 @@ def test_the_job_is_registered_and_starts_on(monkeypatch: pytest.MonkeyPatch) ->
     spec = next(j for j in build_registry() if j.id == JOB_ID)
     assert spec.enabled is True
     assert spec.lock_ttl_seconds == 3600
+    # Con la rejilla de 4 horas, el TTL tiene que caber entre dos disparos: si
+    # el lock sobreviviera al siguiente, una corrida lenta se comería el turno
+    # de la que viene en vez de dejarla empezar limpia.
+    assert spec.lock_ttl_seconds < 4 * 3600
 
     monkeypatch.setattr(settings, "scheduler_research_enabled", False)
     spec = next(j for j in build_registry() if j.id == JOB_ID)

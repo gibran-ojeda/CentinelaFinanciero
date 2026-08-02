@@ -8,7 +8,10 @@ nivel 2 ya resuelve más barato y mejor.
 
 **Sólo se investigan las que lo necesitan**: sin fuente activa para el fetch
 dirigido, o con la tasa vigente más vieja que el SLA de su fuente. Si el fetch
-dirigido ya trajo la tasa de Klar, el miércoles no se busca a Klar.
+dirigido ya trajo la tasa de Klar, aquí no se busca a Klar. Y **una vez al día
+por institución**: quien ya tiene lectura del researcher de hoy queda fuera de
+la selección, que es lo que permite compartir la rejilla de 4 horas del fetch
+sin multiplicar por seis el trabajo del modelo.
 
 Lo que encuentre pasa por el **mismo `reviewer`** que el nivel 2, con
 `fuente=LLM_RESEARCH`. La regla no cambia: la primera lectura de un producto
@@ -271,14 +274,19 @@ def _como_extraida(hallazgo: Hallazgo) -> TasaExtraida:
 
 
 async def _candidatas(hoy: date) -> list[Candidata]:
-    """Instituciones que el nivel 2 no está cubriendo.
+    """Instituciones que el nivel 2 no está cubriendo y nadie investigó hoy.
 
-    Dos motivos, y ninguno es «por si acaso»:
+    Dos motivos para entrar, y ninguno es «por si acaso»:
 
     - **Sin fuente activa**: no hay URL curada, así que el fetch dirigido ni
       siquiera la intenta. Descubrirla es justo para lo que sirve el nivel 3.
     - **Stale**: su tasa vigente más reciente pasó del SLA de su fuente. O el
       fetch está fallando en silencio, o la institución movió su página.
+
+    Y uno para salir: **ya se investigó hoy**. Los dos motivos de arriba son
+    de estado puro, y el estado no cambia hasta que una persona aprueba la
+    revisión — sin este corte, cada corrida del día repetiría la misma
+    investigación sobre las mismas instituciones.
     """
     async with session_scope() as session:
         instituciones = (
@@ -324,8 +332,28 @@ async def _candidatas(hoy: date) -> list[Candidata]:
             .all()
         )
 
+        # A quién ya se investigó hoy. Es el guard de coste de la cadencia
+        # corta: los motivos de arriba son de estado puro, y una institución
+        # cuya lectura espera aprobación humana sigue «stale» en cada corrida
+        # — sin esto, las seis del día la reinvestigarían entera. Y el ahorro
+        # tiene que decidirse AQUÍ: la idempotencia del reviewer descarta la
+        # escritura duplicada, pero sólo después de haber pagado el tool-loop.
+        investigadas_hoy = set(
+            (
+                await session.execute(
+                    select(Producto.institucion_id)
+                    .join(Tasa, Tasa.producto_id == Producto.id)
+                    .where(Tasa.fuente == FuenteTasa.LLM_RESEARCH, Tasa.fecha_dato == hoy)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
         candidatas: list[Candidata] = []
         for institucion in instituciones:
+            if institucion.id in investigadas_hoy:
+                continue
             ultima = ultimas.get(institucion.id)
             sla = SLA_POR_FUENTE[FuenteTasa.FETCH_DIRIGIDO]
             if ultima is None:

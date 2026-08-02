@@ -141,10 +141,18 @@ def build_registry() -> tuple[JobSpec, ...]:
         JobSpec(
             id=research.JOB_ID,
             func=research.tasas_research_abierta,
-            # Semanal: investiga lo que el fetch dirigido —que corre mucho más
-            # seguido— sigue sin poder traer, así que para el miércoles la
-            # lista de stale es real y no un accidente de calendario.
-            trigger=CronTrigger(day_of_week="wed", hour=6, minute=0),
+            # Media hora después de cada fetch dirigido (01:15, 05:15, …): la
+            # lista de stale que este job investiga es justo la que el nivel 2
+            # acaba de no poder cubrir. Correrlo antes sería buscar en abierto
+            # lo que el fetch iba a traer más barato.
+            #
+            # Que siga la rejilla de 4 horas no multiplica el gasto: quien ya
+            # tiene lectura del researcher hoy deja de ser candidata (ver
+            # `investigacion._candidatas`), así que en la práctica investiga
+            # una vez al día por institución y las otras cinco corridas sólo
+            # miran. Lo que se gana es reaccionar en horas, no en días, cuando
+            # el fetch pierde una fuente.
+            trigger=CronTrigger(hour="1-23/4", minute=15),
             name="Búsqueda abierta de tasas stale",
             enabled=settings.scheduler_research_enabled,
             # Un tool-loop por institución, con varias vueltas al modelo y una
