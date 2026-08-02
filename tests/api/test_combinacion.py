@@ -262,6 +262,42 @@ async def test_the_optimiser_leaves_out_uncovered_issuers(api_lectura: AsyncClie
     assert "mercado-pago-vista" not in {a["producto_slug"] for a in cuerpo["asignaciones"]}
 
 
+# ─── Tramos por saldo ─────────────────────────────────────────
+
+
+@pytest.mark.usefixtures("openbank_escalonado")
+async def test_a_tiered_allocation_carries_its_ladder_and_blends(
+    api_lectura: AsyncClient,
+) -> None:
+    """La asignación escalonada viaja con su escalera y calcula con la ponderada."""
+    openbank = await _producto_id(api_lectura, "openbank-vista")
+
+    cuerpo = (
+        await api_lectura.post(
+            COMBINACION,
+            json={
+                "monto_total": "50000",
+                "horizonte_dias": 364,
+                "items": [{"producto_id": openbank, "porcentaje": "100"}],
+            },
+        )
+    ).json()
+
+    asignacion = cuerpo["asignaciones"][0]
+    assert asignacion["escalonada"] is True
+    assert [(t["desde"], t["hasta"]) for t in asignacion["tramos"]] == [
+        ("0.00", "30000.00"),
+        ("30000.00", "1000000.00"),
+    ]
+    # (30,000 × 13 + 20,000 × 6.3) / 50,000 = 10.32; TEN = 10.32 − 0.90.
+    # El cruce de segmentos del optimizador se prueba en metrics; aquí basta
+    # con que la escalera atraviese `cargar_catalogo`, que es común a ambos
+    # endpoints — afirmar montos exactos del optimizador acoplaría el test al
+    # valor real de la UDI sembrada.
+    assert Decimal(asignacion["cascada"]["tasa_nominal"]) == Decimal("10.3200")
+    assert Decimal(asignacion["ten"]) == Decimal("9.4200")
+
+
 async def test_without_the_insurance_toggle_everything_goes_to_the_best_rate(
     api_lectura: AsyncClient,
 ) -> None:

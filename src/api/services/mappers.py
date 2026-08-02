@@ -16,12 +16,14 @@ from api.schemas import (
     GatSchema,
     InstitucionResumen,
     Procedencia,
+    TramoSchema,
 )
 from domain import orm
 from domain.enums import EstadoTasa
 from domain.models import Bandera
 from metrics.coverage import Cobertura, resolver_cobertura
 from metrics.gat import Gat
+from metrics.tramos import Tramo
 
 
 def institucion_resumen(institucion: orm.Institucion) -> InstitucionResumen:
@@ -45,6 +47,27 @@ def procedencia(tasa: orm.Tasa) -> Procedencia:
         # exactamente lo que significa el estado VIGENTE, y la UI no debería
         # tener que conocer la máquina de estados para saber si marcar la fila.
         verificada=tasa.estado is EstadoTasa.VIGENTE,
+    )
+
+
+def tramos_schema(tasa: orm.Tasa) -> list[TramoSchema]:
+    """La escalera de una observación para la respuesta; vacía si es plana.
+
+    Llega ya ordenada por piso: el `order_by` de la relación lo garantiza.
+    """
+    return [
+        TramoSchema(desde=t.desde, hasta=t.hasta, tasa_nominal=t.tasa_nominal) for t in tasa.tramos
+    ]
+
+
+def tramos_de(tasa: orm.Tasa) -> tuple[Tramo, ...]:
+    """La escalera de una observación como valores de `metrics`; `()` si es plana.
+
+    Es el único puente ORM→métricas de tramos: `metrics/` no puede importar el
+    ORM y cada consumidor repitiendo la conversión acabaría divergiendo.
+    """
+    return tuple(
+        Tramo(desde=t.desde, hasta=t.hasta, tasa_nominal=t.tasa_nominal) for t in tasa.tramos
     )
 
 
@@ -102,4 +125,6 @@ __all__ = [
     "gat_schema",
     "institucion_resumen",
     "procedencia",
+    "tramos_de",
+    "tramos_schema",
 ]

@@ -96,6 +96,14 @@ class BanderaSchema(Esquema):
     compuesta: bool
 
 
+class TramoSchema(Esquema):
+    """Un escalón de una tasa escalonada por saldo: `[desde, hasta)`."""
+
+    desde: Decimal
+    hasta: Decimal | None = Field(description="null = sin techo publicado (infinito)")
+    tasa_nominal: Decimal
+
+
 class InstitucionResumen(Esquema):
     id: int
     nombre: str
@@ -128,12 +136,30 @@ class FilaComparador(Esquema):
     monto_minimo: Decimal
     liquidez: Liquidez
 
-    tasa_nominal: Decimal
+    tasa_nominal: Decimal = Field(
+        description="En un producto escalonado, la tasa del primer tramo — la titular"
+    )
     ten: Decimal = Field(description="Tasa efectiva neta anual, después de ISR")
     gat: GatSchema
     cobertura: CoberturaSchema
     banderas: list[BanderaSchema]
     procedencia: Procedencia
+
+    escalonada: bool = False
+    tramos: list[TramoSchema] = Field(
+        default_factory=list,
+        description="Escalera por saldo; vacía = la tasa aplica a todo el saldo",
+    )
+    tasa_efectiva: Decimal | None = Field(
+        default=None,
+        description=(
+            "Nominal ponderada al monto consultado. Viaja en todas las filas cuando "
+            "hay monto (en las planas coincide con la titular); null sin monto."
+        ),
+    )
+    ten_efectiva: Decimal | None = Field(
+        default=None, description="TEN de la ponderada; null si no se consultó monto"
+    )
 
 
 class RespuestaComparador(Esquema):
@@ -144,6 +170,10 @@ class RespuestaComparador(Esquema):
     inflacion_anual: Decimal
     valor_udi: Decimal
     tasa_retencion_capital: Decimal
+    monto_consultado: Decimal | None = Field(
+        default=None,
+        description="El monto con el que se calcularon las tasas efectivas, si hubo",
+    )
     generado_en: datetime
     disclaimer: str = DISCLAIMER
 
@@ -201,6 +231,8 @@ class ProductoDetalle(Esquema):
     procedencia: Procedencia | None = Field(
         description="null si el producto no tiene todavía una tasa publicable"
     )
+    escalonada: bool = False
+    tramos: list[TramoSchema] = Field(default_factory=list)
 
 
 class DetalleInstitucion(Esquema):
@@ -243,7 +275,12 @@ class SolicitudCalculadora(Esquema):
 
 
 class CascadaSchema(Esquema):
-    """Los cinco conceptos de §6, en orden de presentación."""
+    """Los cinco conceptos de §6, en orden de presentación.
+
+    `tasa_nominal` es la tasa **aplicada** al monto: en un producto escalonado
+    es la ponderada de su escalera, no la titular. El nombre se conserva por
+    estabilidad del contrato.
+    """
 
     monto_invertido: Decimal
     rendimiento_bruto: Decimal
@@ -270,6 +307,8 @@ class ResultadoCalculadora(Esquema):
     )
     banderas: list[BanderaSchema]
     procedencia: Procedencia
+    escalonada: bool = False
+    tramos: list[TramoSchema] = Field(default_factory=list)
 
 
 class RespuestaCalculadora(Esquema):
@@ -283,8 +322,9 @@ class RespuestaCalculadora(Esquema):
 #: Se dice en la respuesta, no sólo en la página de metodología: quien consuma
 #: la API por su cuenta tiene que recibir la misma advertencia que el usuario.
 AVISO_OPTIMIZADOR = (
-    "El reparto propuesto es una heurística informativa: ordena por tasa efectiva "
-    "neta y llena cada institución hasta su límite de seguro de depósito. No es una "
+    "El reparto propuesto es una heurística informativa: cada peso va al tramo con "
+    "mejor tasa efectiva neta, hasta el límite de seguro de depósito de cada "
+    "institución y respetando el monto mínimo de cada producto. No es una "
     "recomendación de inversión ni considera tu situación fiscal, tu liquidez ni tu "
     "tolerancia al riesgo."
 )
@@ -329,8 +369,12 @@ class AsignacionSchema(Esquema):
     plazo_dias: int | None
     porcentaje: Decimal
     monto: Decimal
-    ten: Decimal
+    ten: Decimal = Field(
+        description="TEN efectiva del monto asignado: en un escalonado, la de la ponderada"
+    )
     cascada: CascadaSchema
+    escalonada: bool = False
+    tramos: list[TramoSchema] = Field(default_factory=list)
     cobertura: CoberturaSchema
     monto_cubierto: Decimal
     monto_expuesto: Decimal
@@ -416,6 +460,9 @@ class RespuestaFrescura(Esquema):
 
 
 class AltaTasa(Esquema):
+    """Alta manual por la API admin. No acepta tramos: la vía manual de las
+    escaleras es el CSV (`cli tasas import`), que pasa por el validador."""
+
     producto_id: int
     tasa_nominal: Decimal = Field(ge=0, le=100)
     gat_nominal: Decimal | None = Field(default=None, ge=0, le=100)
@@ -481,4 +528,5 @@ __all__ = [
     "SolicitudCombinacion",
     "SolicitudOptimizador",
     "TasaCreada",
+    "TramoSchema",
 ]

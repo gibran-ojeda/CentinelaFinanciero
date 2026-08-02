@@ -176,6 +176,66 @@ async def test_an_unverified_rate_never_supersedes_a_verified_one(
     assert cetes["procedencia"]["verificada"] is True
 
 
+# ─── Tramos y tasa efectiva ───────────────────────────────────
+
+
+@pytest.mark.usefixtures("openbank_escalonado")
+async def test_a_tiered_row_carries_its_ladder(api_lectura: AsyncClient) -> None:
+    cuerpo = (await api_lectura.get(RUTA)).json()
+    fila = next(f for f in cuerpo["filas"] if f["producto_slug"] == "openbank-vista")
+
+    assert fila["escalonada"] is True
+    assert [(t["desde"], t["hasta"]) for t in fila["tramos"]] == [
+        ("0.00", "30000.00"),
+        ("30000.00", "1000000.00"),
+    ]
+    # Sin monto no hay efectivas; la titular es la del primer tramo.
+    assert fila["tasa_efectiva"] is None
+    assert fila["ten_efectiva"] is None
+    assert Decimal(fila["tasa_nominal"]) == Decimal("13.00")
+    assert cuerpo["monto_consultado"] is None
+
+
+@pytest.mark.usefixtures("openbank_escalonado")
+async def test_an_amount_switches_every_row_to_its_effective_rate(
+    api_lectura: AsyncClient,
+) -> None:
+    cuerpo = (await api_lectura.get(RUTA, params={"monto": "50000"})).json()
+    por_slug = {f["producto_slug"]: f for f in cuerpo["filas"]}
+
+    assert Decimal(cuerpo["monto_consultado"]) == Decimal("50000")
+
+    # (30,000 × 13 + 20,000 × 6.3) / 50,000 y su TEN con retención de 0.90.
+    escalonada = por_slug["openbank-vista"]
+    assert Decimal(escalonada["tasa_efectiva"]) == Decimal("10.3200")
+    assert Decimal(escalonada["ten_efectiva"]) == Decimal("9.4200")
+    # La titular no cambia: sigue siendo la del primer tramo.
+    assert Decimal(escalonada["tasa_nominal"]) == Decimal("13.00")
+
+    # Las filas planas también llevan efectiva, igual a su titular: la
+    # uniformidad evita que el frontend mezcle columnas de dos semánticas.
+    plana = por_slug["cetes-91"]
+    assert Decimal(plana["tasa_efectiva"]) == Decimal(plana["tasa_nominal"])
+    assert Decimal(plana["ten_efectiva"]) == Decimal(plana["ten"])
+
+
+@pytest.mark.usefixtures("openbank_escalonado")
+async def test_the_order_follows_the_effective_rate_when_an_amount_is_given(
+    api_lectura: AsyncClient,
+) -> None:
+    """Un «13% hasta $30 mil» no puede ganarle a un 8.5% pleno a medio millón."""
+    sin_monto = [f["producto_slug"] for f in (await api_lectura.get(RUTA)).json()["filas"]]
+    con_monto = [
+        f["producto_slug"]
+        for f in (await api_lectura.get(RUTA, params={"monto": "500000"})).json()["filas"]
+    ]
+
+    # Sin monto manda la titular: openbank (13%) por encima de klar (8.5%).
+    assert sin_monto.index("openbank-vista") < sin_monto.index("klar-vista")
+    # A $500,000 su efectiva es 6.70%: cae por debajo.
+    assert con_monto.index("openbank-vista") > con_monto.index("klar-vista")
+
+
 async def test_every_row_carries_provenance(api_lectura: AsyncClient) -> None:
     """§11 y §19: ninguna tasa sin fecha ni fuente."""
     cuerpo = (await api_lectura.get(RUTA)).json()

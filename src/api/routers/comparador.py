@@ -49,7 +49,13 @@ async def comparador(
     ] = None,
     monto: Annotated[
         Decimal | None,
-        Query(gt=0, description="Excluye productos con monto mínimo mayor"),
+        Query(
+            gt=0,
+            description=(
+                "Excluye productos con monto mínimo mayor y añade a cada fila la "
+                "tasa efectiva ponderada de ese monto sobre su escalera"
+            ),
+        ),
     ] = None,
     seguro: Annotated[
         list[TipoSeguro] | None,
@@ -95,6 +101,7 @@ async def comparador(
         inflacion_anual=contexto.inflacion_anual,
         valor_udi=contexto.valor_udi,
         tasa_retencion_capital=contexto.params_fiscales.tasa_retencion_capital,
+        monto_consultado=filtros.monto,
         generado_en=datetime.now(UTC),
     )
 

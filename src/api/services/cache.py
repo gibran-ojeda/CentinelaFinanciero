@@ -38,7 +38,7 @@ log = get_logger(__name__)
 #: todo el cache de golpe cambiando este número cuando cambie la forma de la
 #: respuesta — un despliegue nuevo no puede servir respuestas con el esquema
 #: anterior.
-PREFIJO = "centinela:comparador:v1:"
+PREFIJO = "centinela:comparador:v2:"
 PATRON = f"{PREFIJO}*"
 
 
