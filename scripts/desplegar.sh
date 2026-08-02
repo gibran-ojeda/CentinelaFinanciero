@@ -14,6 +14,9 @@
 # SCHEDULER_RESEARCH_ENABLED, el gate frío del researcher L3 (vacía = true;
 # ponerla en false como variable de repo es el apagado de emergencia).
 #
+# Llega también `scripts/lib/entorno.sh`, concatenada por delante: es la que
+# decide cómo se fusiona el .env de la máquina con lo que llega de GitHub.
+#
 # Ojo con los `< /dev/null`: bash lee este archivo de stdin a medida que lo
 # ejecuta. Un comando que consuma stdin se traga lo que queda del script y la
 # ejecución termina ahí, en silencio y con salida 0.
@@ -36,27 +39,35 @@ git fetch origin --prune --tags < /dev/null
 git reset --hard "$REF" < /dev/null
 echo "desplegando $(git rev-parse --short HEAD) — $(git log -1 --pretty=%s)"
 
-# El .env se regenera desde los secretos en cada despliegue. Es la única copia
-# y nadie la edita en la máquina: si hay que cambiar algo, se cambia el secreto.
-umask 077
-cat > .env <<ENV
-ENVIRONMENT=prod
-POSTGRES_HOST=db
-POSTGRES_PORT=5432
-POSTGRES_DB=centinela
-POSTGRES_USER=centinela
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-REDIS_HOST=redis
-REDIS_PORT=6379
-API_READ_KEY=${API_READ_KEY}
-API_ADMIN_KEY=${API_ADMIN_KEY}
-SITE_URL=${SITE_URL}
-LOG_LEVEL=INFO
-LOG_FORMAT=json
-BANXICO_TOKEN=${BANXICO_TOKEN:-}
-DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-SCHEDULER_RESEARCH_ENABLED=${SCHEDULER_RESEARCH_ENABLED:-true}
-ENV
+# La librería del .env llega ya definida: el workflow la concatena delante de
+# este script, en la misma tubería. Este `source` es la red para cuando alguien
+# corre el despliegue a mano dentro de la máquina, y va después del
+# `reset --hard` a propósito — la librería que se use es la del commit que se
+# está desplegando, igual que pasa con los gates.
+if ! declare -F entorno_fusionar > /dev/null; then
+  . scripts/lib/entorno.sh 2> /dev/null || {
+    echo "falta scripts/lib/entorno.sh; ¿el árbol es de un commit anterior al cambio?" >&2
+    exit 1
+  }
+fi
+
+# El .env se **fusiona**, no se regenera. Aquí había un heredoc que reescribía
+# el archivo entero, y `deploy.yml` emite las opcionales aunque el secreto no
+# exista: la llave de DeepSeek puesta a mano en la máquina se borró sola y el
+# researcher falló días sin que el despliegue dijera una palabra. Quién gana
+# cada choque está en scripts/lib/entorno.sh, junto a cada variable.
+echo "── .env ──"
+if [ "${CONFIRMO_REESCRIBIR_ENV:-}" = si ]; then
+  # Para retirar de verdad una variable que ya no está en GitHub. Deliberado y
+  # de una sola corrida: llega por el input del dispatch, no por una variable
+  # de repo que se quedaría encendida y arrasaría en el siguiente push. La
+  # forma es la de restaurar.sh, por la misma razón que allí.
+  echo "  reescritura completa pedida; el .env anterior queda en .env.reemplazado"
+  entorno_apartar .env
+fi
+entorno_fusionar .env
+entorno_escribir .env
+entorno_reportar
 
 $COMPOSE build < /dev/null
 $COMPOSE up -d --remove-orphans < /dev/null
