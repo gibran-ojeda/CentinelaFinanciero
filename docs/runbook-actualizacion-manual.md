@@ -38,7 +38,7 @@ Va primero porque condiciona todo lo demás: si una fuente lleva días rota, los
 
 Lista tres cosas, y la tercera es la que nadie veía:
 
-- **Pausadas.** Tras seis descargas fallidas seguidas —un día entero de la rejilla de 4 horas— la fuente se apaga sola con su motivo. Reanudarla es un acto humano: `python -m cli fuentes reanudar <id>`.
+- **Pausadas.** Tras seis descargas fallidas seguidas —un día entero de la rejilla de 4 horas— la fuente se apaga sola con su motivo. Reanudarla es un acto humano: `python -m cli fuentes reanudar <id>`. Un deploy **no** la reanuda, aunque corra `cli seed`: el YAML declara la intención y que una fuente esté encendida hoy es estado del runtime. Lo que el YAML sí impone siempre es un `activa: false` explícito, que es como están Openbank y Supertasas.
 - **Con fallos acumulados**, camino de pausarse, con el último error.
 - **Las que nunca han producido una tasa** (`último dato: nunca`). Se descargan perfectamente y el extractor no encuentra nada: casi siempre la URL apunta a la portada y no a la página que publica las tasas. No dejan ningún error, y por eso eran invisibles.
 

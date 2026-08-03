@@ -106,6 +106,63 @@ async def test_a_source_dropped_from_the_yaml_is_switched_off() -> None:
     assert viva is not None and viva.activa is True
 
 
+async def test_seeding_does_not_resurrect_a_source_that_switched_itself_off() -> None:
+    """`desplegar.sh` corre el seed en cada push.
+
+    Si impusiera `activa: true` por defecto, la autopausa duraría hasta el
+    siguiente deploy y no serviría de nada: una fuente que se apagó por
+    acumular fallos volvería a intentarse seis veces al día hasta apagarse otra
+    vez. El YAML declara la intención; que esté encendida hoy es estado del
+    runtime, y reanudarla sigue siendo un acto humano.
+    """
+    await run_seed()
+    async with session_scope() as session:
+        fuente = await session.scalar(
+            select(FuenteTasas).where(FuenteTasas.url == "https://www.klar.mx/inversion")
+        )
+        assert fuente is not None
+        fuente.activa = False
+        fuente.pausada_motivo = "6 fallos seguidos: HTTP 500"
+
+    await run_seed()
+
+    async with session_scope() as session:
+        despues = await session.scalar(
+            select(FuenteTasas).where(FuenteTasas.url == "https://www.klar.mx/inversion")
+        )
+    assert despues is not None
+    assert despues.activa is False
+    assert despues.pausada_motivo is not None
+
+
+async def test_the_yaml_still_wins_when_it_says_so() -> None:
+    """La otra mitad: `activa: false` en el YAML sí se impone siempre.
+
+    Es lo que mantiene apagadas a Openbank —403 al bot— y a Supertasas, aunque
+    alguien las reanude a mano sin arreglar el motivo.
+    """
+    await run_seed()
+    async with session_scope() as session:
+        openbank = await session.scalar(
+            select(FuenteTasas).where(
+                FuenteTasas.url == "https://www.openbank.mx/cuenta-debito-open-plus"
+            )
+        )
+        assert openbank is not None
+        openbank.activa = True
+
+    await run_seed()
+
+    async with session_scope() as session:
+        despues = await session.scalar(
+            select(FuenteTasas).where(
+                FuenteTasas.url == "https://www.openbank.mx/cuenta-debito-open-plus"
+            )
+        )
+    assert despues is not None
+    assert despues.activa is False
+
+
 async def test_seed_is_idempotent() -> None:
     """Correrlo dos veces deja la base igual que correrlo una."""
     await run_seed()

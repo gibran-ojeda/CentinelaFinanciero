@@ -280,11 +280,19 @@ async def _seed_fuentes_tasas(
             )
         clave = (institucion.id, entrada["url"])
         declaradas.add(clave)
-        campos = {
+        campos: dict[str, Any] = {
             "nivel": int(entrada.get("nivel", 2)),
             "requiere_js": bool(entrada.get("requiere_js", False)),
-            "activa": entrada.get("activa", True),
         }
+        if "activa" in entrada:
+            # **Sólo si el YAML lo dice.** El despliegue corre este seed en cada
+            # push (`desplegar.sh`), así que imponer `activa: true` por defecto
+            # resucitaría en cada deploy a las fuentes que se apagaron solas por
+            # acumular fallos — la autopausa duraría hasta el siguiente push y
+            # no serviría para nada. El YAML declara la intención; que una
+            # fuente esté encendida hoy es estado del runtime. Reanudarla es
+            # `cli fuentes reanudar`, o ponerle un `activa: true` explícito.
+            campos["activa"] = bool(entrada["activa"])
         if (actual := existentes.get(clave)) is None:
             session.add(FuenteTasas(institucion_id=institucion.id, url=entrada["url"], **campos))
             report.registrar("fuentes_tasas", "creados")
