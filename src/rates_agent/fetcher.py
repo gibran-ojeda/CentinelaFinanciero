@@ -173,12 +173,17 @@ def _espera(intento: int, base: float, tope: float) -> float:
     return min(base * (2.0**intento), tope) * random.uniform(0.75, 1.25)  # noqa: S311
 
 
-def _texto_legible(html: str) -> str:
-    """Texto principal de la página. Cadena vacía si no hay nada que leer."""
+def _texto_legible(html: str, url: str | None = None) -> str:
+    """Texto principal de la página. Cadena vacía si no hay nada que leer.
+
+    La `url` no cambia la extracción: viaja para que el aviso que trafilatura
+    emite al descartar una página diga **cuál** era. Sin ella el log repetía
+    `discarding data: None`, que no sirve para nada.
+    """
     import trafilatura
 
     extraido = trafilatura.extract(
-        html, include_comments=False, include_tables=True, favor_recall=True
+        html, url=url, include_comments=False, include_tables=True, favor_recall=True
     )
     return (extraido or "").strip()
 
@@ -342,7 +347,7 @@ class Fetcher:
                 transitoria = transitoria or exc.transitorio
                 continue
 
-            texto = _texto_legible(html)
+            texto = _texto_legible(html, url)
             if len(texto) >= self._min_caracteres:
                 log.info(
                     "fetch_ok",

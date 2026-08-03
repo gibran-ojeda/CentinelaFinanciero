@@ -78,3 +78,62 @@ def test_json_renderer_in_production(capsys: Any) -> None:
 def test_get_logger_returns_usable_logger() -> None:
     logger = get_logger("centinela.test")
     logger.info("evento_de_prueba", detalle="ok")
+
+
+# ─── Lo que escriben las librerías ────────────────────────────
+
+
+def _en_produccion(cuerpo: Any) -> None:
+    """Corre `cuerpo()` con el logging de producción y lo deja como estaba."""
+    import core.logging as logging_module
+    from core.settings import Settings
+
+    original = logging_module.settings
+    logging_module.settings = Settings(environment="prod", log_level="INFO")  # type: ignore[misc]
+    try:
+        configure_logging(force=True)
+        cuerpo()
+    finally:
+        logging_module.settings = original  # type: ignore[misc]
+        configure_logging(force=True)
+
+
+def test_a_third_party_record_is_rendered_and_redacted_too(capsys: Any) -> None:
+    """El agujero que esto cierra no era de estética.
+
+    `redact_sensitive` es un processor de structlog, así que sólo veía lo que
+    pasaba por structlog. Un `LogRecord` de una librería salía por el mismo
+    stderr con `%(message)s` a secas: crudo, sin nivel ni logger, y **sin pasar
+    por la última red**. Ahora lo formatea el mismo `ProcessorFormatter`.
+    """
+    import logging as stdlib_logging
+
+    def cuerpo() -> None:
+        stdlib_logging.getLogger("libreria.ajena").warning(
+            "conectando", extra={"api_key": "sk-secreto"}
+        )
+
+    _en_produccion(cuerpo)
+
+    payload = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
+    assert payload["event"] == "conectando"
+    assert payload["level"] == "warning"
+    assert payload["logger"] == "libreria.ajena"
+    assert payload["api_key"] == REDACTED
+
+
+def test_the_chatty_libraries_are_quiet_at_info(capsys: Any) -> None:
+    """httpx emite una línea por petición: las de robots.txt, las del fetch y
+    todas las del LLM. En una corrida de dieciocho fuentes son cientos de
+    líneas que tapan los eventos propios."""
+    import logging as stdlib_logging
+
+    def cuerpo() -> None:
+        stdlib_logging.getLogger("httpx").info('HTTP Request: GET https://x.test "200 OK"')
+        # trafilatura avisa en WARNING cada vez que descarta una página, que es
+        # justo lo que `fetch_vacio` ya reporta con la URL.
+        stdlib_logging.getLogger("trafilatura.core").warning("discarding data: None")
+
+    _en_produccion(cuerpo)
+
+    assert capsys.readouterr().err.strip() == ""
