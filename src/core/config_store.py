@@ -208,6 +208,15 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         ),
     ),
     ConfigKeySpec(
+        "fetch_fallos_para_pausar",
+        "int",
+        "scheduler",
+        (
+            "Descargas fallidas seguidas antes de que una fuente se apague "
+            "sola (0 desactiva la autopausa); reanudarla es un acto humano"
+        ),
+    ),
+    ConfigKeySpec(
         "banxico_sync_enabled",
         "bool",
         "scheduler",

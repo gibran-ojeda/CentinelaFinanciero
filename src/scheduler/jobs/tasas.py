@@ -82,6 +82,14 @@ async def tasas_fetch_dirigido() -> None:
 
         corrida.metricas.update(reporte.como_metricas())
 
+        if reporte.fuentes == 0:
+            # Alcanzable desde que las fuentes se apagan solas al acumular
+            # fallos: si se pausaran todas, la corrida no tendría nada que
+            # hacer y saldría EXITOSA cada cuatro horas. No es un fallo de la
+            # corrida —es el catálogo vacío— y por eso avisa en vez de reventar:
+            # hacer FALLIDO algo que se apagó por diseño no arregla el catálogo.
+            log.error("tasas_sin_fuentes_activas")
+
         if reporte.fracaso_total:
             # Sin esto, una llave de DeepSeek vacía producía un EXITOSO con
             # dieciocho fallos idénticos y cero alarma — el peor estado es el

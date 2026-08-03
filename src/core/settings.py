@@ -206,6 +206,13 @@ class Settings(BaseSettings):
     #: Menos texto que esto es una página que no se pudo leer, no una sin tasas.
     fetch_min_caracteres: int = 200
     fetch_respetar_robots: bool = True
+    #: Descargas fallidas seguidas antes de que la fuente se apague sola. Seis
+    #: es un día entero de la rejilla de 4 horas: suficiente para que una caída
+    #: pasajera del sitio no requiera intervención, y poco para que un dominio
+    #: muerto deje de costar red y navegador seis veces al día. Reanudar es un
+    #: acto humano a propósito — apagarse solo es barato, volver a encenderse
+    #: solo esconde el problema que la pausa existe para enseñar.
+    fetch_fallos_para_pausar: int = 6
 
     # ─── Búsqueda abierta (fase 9, nivel 3) ───────────────────
     #: Cadena de motores, en orden. Se recorren hasta que uno devuelva algo.

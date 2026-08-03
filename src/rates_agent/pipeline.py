@@ -64,6 +64,12 @@ class ReporteCorrida:
     tasas_extraidas: int = 0
     hosts_en_circuito: list[str] = field(default_factory=list)
     huecos_catalogo: list[dict[str, Any]] = field(default_factory=list)
+    #: Se leyó la página y el extractor no encontró ni una tasa. No es un
+    #: error: es una URL que apunta a donde no hay nada que leer, y sin
+    #: nombrarla se confunde con una lectura buena que no se movió.
+    sin_tasas: list[str] = field(default_factory=list)
+    #: Fuentes que esta corrida apagó por acumular fallos.
+    fuentes_pausadas: list[str] = field(default_factory=list)
     presupuesto_agotado: bool = False
     cortada_por_tiempo: bool = False
     errores: list[str] = field(default_factory=list)
@@ -92,6 +98,8 @@ class ReporteCorrida:
             "tasas_extraidas": self.tasas_extraidas,
             "hosts_en_circuito": self.hosts_en_circuito,
             "huecos_catalogo": self.huecos_catalogo,
+            "sin_tasas": self.sin_tasas,
+            "fuentes_pausadas": self.fuentes_pausadas,
             "presupuesto_agotado": self.presupuesto_agotado,
             "cortada_por_tiempo": self.cortada_por_tiempo,
             "errores": self.errores[:20],
@@ -113,6 +121,10 @@ class ReporteCorrida:
             lineas.append(f"  hosts en circuito       {', '.join(self.hosts_en_circuito)}")
         if self.huecos_catalogo:
             lineas.append(f"  huecos de catálogo      {len(self.huecos_catalogo):>4}")
+        if self.sin_tasas:
+            lineas.append(f"  se leyeron sin tasas    {', '.join(self.sin_tasas)}")
+        for pausada in self.fuentes_pausadas:
+            lineas.append(f"  ⚠ fuente pausada: {pausada}")
         if self.presupuesto_agotado:
             lineas.append("  ⚠ el techo de gasto diario cortó la corrida")
         if self.cortada_por_tiempo:
@@ -239,19 +251,29 @@ async def _procesar(
     except CadenaAgotada as exc:
         reporte.fallidas += 1
         reporte.errores.append(f"{institucion}: {exc}")
+        await _anotar_fallo(reporte, fuente_id, institucion=institucion, error=str(exc))
         return
 
     if descarga is None:
-        # Sana y sin tasas visibles. No es un fallo y no cuesta nada.
+        # 200 sin texto legible. Como desenlace de una corrida no es un fallo
+        # —ni abre el circuito ni cuesta un token— pero repetido sí lo es: es
+        # el caso de cetesdirecto, que lleva meses así sin que nada lo diga.
         reporte.vacias += 1
+        await _anotar_fallo(
+            reporte, fuente_id, institucion=institucion, error="la página no trae texto legible"
+        )
         return
 
     reporte.leidas += 1
+    # La descarga funcionó: la salud vuelve a cero **aquí**, antes de saber si
+    # había tasas. `fallos_consecutivos` mide descargas, y ni un LLM caído ni
+    # una página sin tasas son motivo para apagar una URL que responde bien.
+    await _sanar(fuente_id)
 
     if hash_previo and hash_previo == descarga.hash_contenido:
         reporte.sin_cambios_en_la_pagina += 1
         log.info("pagina_sin_cambios", institucion=institucion, url=url)
-        await _sellar(fuente_id, descarga.hash_contenido)
+        await _sellar(fuente_id, descarga.hash_contenido, con_tasas=False)
         return
 
     try:
@@ -265,11 +287,19 @@ async def _procesar(
         reporte.errores.append(f"{institucion}: extracción fallida — {exc}")
         return
 
+    if not extraccion.tasas:
+        # Se descargó una página entera y no había ni una tasa. Seis fuentes
+        # del catálogo están así porque apuntan a la portada en vez de a la
+        # página de producto; sin nombrarlas aquí, la siguiente corrida las
+        # salta por hash igual y quedan congeladas en silencio.
+        reporte.sin_tasas.append(institucion)
+        log.info("extraccion_sin_tasas", institucion=institucion, url=url)
+
     reporte.tasas_extraidas += len(extraccion.tasas)
     await _decidir(reporte, extraccion.tasas, institucion=institucion, url=url)
     # El sello va al final: si la extracción reventó, la próxima corrida tiene
     # que volver a intentarlo en vez de creer que ya se procesó.
-    await _sellar(fuente_id, descarga.hash_contenido)
+    await _sellar(fuente_id, descarga.hash_contenido, con_tasas=bool(extraccion.tasas))
 
 
 async def _decidir(
@@ -383,12 +413,60 @@ def _clave(tipo: TipoProducto, plazo_dias: int | None) -> tuple[str, int | None]
     return (tipo.value, plazo_dias)
 
 
-async def _sellar(fuente_id: int, hash_contenido: str) -> None:
+async def _sellar(fuente_id: int, hash_contenido: str, *, con_tasas: bool) -> None:
+    """Marca la descarga, y el éxito **sólo** si de verdad salieron tasas.
+
+    `ultima_extraccion_at` dice «se descargó»; `ultimo_exito_at`, «sirvió de
+    algo». Confundirlas es lo que dejó seis portadas sin tasas indistinguibles
+    de seis lecturas buenas.
+    """
     async with session_scope() as session:
         fuente = await session.get(FuenteTasas, fuente_id)
         if fuente is not None:
             fuente.ultimo_hash = hash_contenido
             fuente.ultima_extraccion_at = datetime.now(UTC)
+            if con_tasas:
+                fuente.ultimo_exito_at = datetime.now(UTC)
+
+
+async def _sanar(fuente_id: int) -> None:
+    """La descarga funcionó: se olvidan los fallos y el último error."""
+    async with session_scope() as session:
+        fuente = await session.get(FuenteTasas, fuente_id)
+        if fuente is not None and (fuente.fallos_consecutivos or fuente.ultimo_error):
+            fuente.fallos_consecutivos = 0
+            fuente.ultimo_error = None
+
+
+async def _anotar_fallo(
+    reporte: ReporteCorrida, fuente_id: int, *, institucion: str, error: str
+) -> None:
+    """Suma un fallo a la fuente y la apaga si ya son demasiados.
+
+    Apagarla es lo que impide que un dominio muerto siga costando una cadena de
+    transportes entera —Chromium incluido— seis veces al día durante meses.
+    Volver a encenderla es humano a propósito: si se recuperara sola, el
+    problema volvería a ser invisible, que es exactamente de donde venimos.
+    """
+    umbral = int(effective.fetch_fallos_para_pausar)
+    async with session_scope() as session:
+        fuente = await session.get(FuenteTasas, fuente_id)
+        if fuente is None:
+            return
+        fuente.fallos_consecutivos += 1
+        fuente.ultimo_error = error[:500]
+        if not fuente.activa or umbral <= 0 or fuente.fallos_consecutivos < umbral:
+            return
+        fuente.activa = False
+        fuente.pausada_motivo = f"{fuente.fallos_consecutivos} fallos seguidos: {error[:200]}"
+        reporte.fuentes_pausadas.append(f"{institucion} — {fuente.url}")
+        log.warning(
+            "fuente_pausada",
+            institucion=institucion,
+            url=fuente.url,
+            fallos=fuente.fallos_consecutivos,
+            error=error[:200],
+        )
 
 
 __all__ = ["ReporteCorrida", "correr"]
