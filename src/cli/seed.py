@@ -268,6 +268,8 @@ async def _seed_fuentes_tasas(
         (row.institucion_id, row.url): row
         for row in (await session.execute(select(FuenteTasas))).scalars()
     }
+    #: Lo que el YAML declara, para poder apagar después lo que sobra.
+    declaradas: set[tuple[int, str]] = set()
 
     for entrada in entradas:
         institucion = instituciones.get(entrada["institucion"])
@@ -277,6 +279,7 @@ async def _seed_fuentes_tasas(
                 f"que no está en el catálogo: '{entrada['institucion']}'"
             )
         clave = (institucion.id, entrada["url"])
+        declaradas.add(clave)
         campos = {
             "nivel": int(entrada.get("nivel", 2)),
             "requiere_js": bool(entrada.get("requiere_js", False)),
@@ -287,6 +290,19 @@ async def _seed_fuentes_tasas(
             report.registrar("fuentes_tasas", "creados")
         else:
             _aplicar(actual, campos, report, "fuentes_tasas")
+
+    # La clave del upsert incluye la URL, así que **corregir una URL en el YAML
+    # inserta otra fila y deja la muerta activa**: la corrida seguiría
+    # golpeándola para siempre, y así es como DiDi lleva meses pidiendo una
+    # página que redirige a un 404. Se apagan, nunca se borran: la fila
+    # conserva su historial y `cli fuentes list` la sigue nombrando.
+    for clave, fuente in existentes.items():
+        if clave in declaradas or not fuente.activa:
+            continue
+        fuente.activa = False
+        fuente.pausada_motivo = "ya no está en seeds/fuentes_tasas.yaml"
+        report.registrar("fuentes_tasas", "actualizados")
+        log.info("fuente_retirada_del_yaml", fuente_id=fuente.id, url=fuente.url)
 
     await session.flush()
 

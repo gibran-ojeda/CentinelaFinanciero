@@ -69,6 +69,43 @@ async def test_no_institution_is_marked_as_demo() -> None:
     assert demo == []
 
 
+async def test_a_source_dropped_from_the_yaml_is_switched_off() -> None:
+    """Corregir una URL en el YAML dejaba viva la vieja.
+
+    La clave del upsert incluye la URL, así que cambiarla **inserta otra fila**
+    y la muerta se queda activa: la corrida seguiría pidiéndola cada cuatro
+    horas para siempre. Se apaga, no se borra — la fila conserva su historial y
+    `cli fuentes list` la sigue nombrando.
+    """
+    await run_seed()
+    async with session_scope() as session:
+        institucion = await session.scalar(select(Institucion).where(Institucion.slug == "klar"))
+        assert institucion is not None
+        session.add(
+            FuenteTasas(
+                institucion_id=institucion.id,
+                url="https://www.klar.mx/url-que-ya-no-esta-en-el-yaml",
+                nivel=2,
+            )
+        )
+
+    await run_seed()
+
+    async with session_scope() as session:
+        huerfana = await session.scalar(
+            select(FuenteTasas).where(
+                FuenteTasas.url == "https://www.klar.mx/url-que-ya-no-esta-en-el-yaml"
+            )
+        )
+        viva = await session.scalar(
+            select(FuenteTasas).where(FuenteTasas.url == "https://www.klar.mx/")
+        )
+    assert huerfana is not None  # sigue ahí, con su historial
+    assert huerfana.activa is False
+    assert huerfana.pausada_motivo is not None
+    assert viva is not None and viva.activa is True
+
+
 async def test_seed_is_idempotent() -> None:
     """Correrlo dos veces deja la base igual que correrlo una."""
     await run_seed()
