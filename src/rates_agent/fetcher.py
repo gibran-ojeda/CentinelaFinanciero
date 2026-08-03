@@ -120,7 +120,18 @@ class TransporteHttpx:
     async def obtener(self, url: str, *, timeout_s: float) -> str:
         try:
             resp = await self._http().get(url, timeout=timeout_s)
+        except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            # **No transitorio, y va antes que TimeoutException a propósito**
+            # (`ConnectTimeout` hereda de ambas). Un DNS que no resuelve o un
+            # puerto que rechaza no se cura esperando: Supertasas se pasó una
+            # corrida entera dando `ConnectError`, entró al backoff temporal
+            # por venir marcado transitorio, durmió 25 minutos con trece
+            # fuentes detrás y seguía caído al despertar. El circuito del host
+            # sí lo sigue contando; lo que se le niega es la espera larga.
+            raise ErrorDescarga(f"no conecta: {_detalle(exc)}", transitorio=False) from exc
         except httpx.TimeoutException as exc:
+            # Un read/write/pool timeout sí es congestión: la conexión se
+            # estableció y el servidor tardó.
             raise ErrorDescarga(f"timeout tras {timeout_s}s", transitorio=True) from exc
         except httpx.HTTPError as exc:
             # `str(exc)` viene vacío en varias excepciones de httpx —un

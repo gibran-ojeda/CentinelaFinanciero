@@ -17,17 +17,24 @@ El orden importa y ahorra dinero:
 Un plazo que el catálogo no conoce no se fuerza contra el producto más
 parecido: se reporta como hueco. Encajar 360 días en el producto de 364 porque
 «es casi lo mismo» es exactamente el error que trajo el dato del agregador.
+
+Dos techos cortan la corrida en seco y dejan lo que falte para la siguiente:
+el de gasto (`llm_cost_daily_limit_usd`) y el de duración
+(`tasas_fetch_minutos_max`). Ninguno es un fallo — con una corrida cada cuatro
+horas, media lectura hoy vale más que una corrida que no termina.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from time import monotonic
 from typing import Any
 
 from sqlalchemy import select
 
 from api.services.tasas_vigentes import tasas_vigentes_por_producto
+from core.config_store import effective
 from core.db import session_scope
 from core.logging import get_logger
 from domain.enums import EstadoTasa, TipoProducto
@@ -58,6 +65,7 @@ class ReporteCorrida:
     hosts_en_circuito: list[str] = field(default_factory=list)
     huecos_catalogo: list[dict[str, Any]] = field(default_factory=list)
     presupuesto_agotado: bool = False
+    cortada_por_tiempo: bool = False
     errores: list[str] = field(default_factory=list)
 
     @property
@@ -65,8 +73,9 @@ class ReporteCorrida:
         """Todas las fuentes fallaron: eso no es una corrida, es un fallo con bucle.
 
         Las vacías y las «sin cambios» cuentan como éxito — leer una página
-        que no trae tasas es un resultado. Y el presupuesto agotado deja
-        fuentes sin intentar, no fallidas, así que nunca dispara esto.
+        que no trae tasas es un resultado. Y los dos cortes —presupuesto y
+        tiempo— dejan fuentes sin intentar, no fallidas, así que nunca
+        disparan esto.
         """
         return self.fuentes > 0 and self.fallidas >= self.fuentes
 
@@ -84,6 +93,7 @@ class ReporteCorrida:
             "hosts_en_circuito": self.hosts_en_circuito,
             "huecos_catalogo": self.huecos_catalogo,
             "presupuesto_agotado": self.presupuesto_agotado,
+            "cortada_por_tiempo": self.cortada_por_tiempo,
             "errores": self.errores[:20],
         }
 
@@ -105,6 +115,8 @@ class ReporteCorrida:
             lineas.append(f"  huecos de catálogo      {len(self.huecos_catalogo):>4}")
         if self.presupuesto_agotado:
             lineas.append("  ⚠ el techo de gasto diario cortó la corrida")
+        if self.cortada_por_tiempo:
+            lineas.append("  ⚠ el techo de duración cortó la corrida")
         for error in self.errores[:10]:
             lineas.append(f"    - {error}")
         return "\n".join(lineas)
@@ -133,8 +145,27 @@ async def correr(
     try:
         fuentes = await _fuentes(solo_requieren_js)
         reporte.fuentes = len(fuentes)
+        # `monotonic` y no `now()`: un ajuste de reloj a mitad de corrida no
+        # puede cortarla ni dejarla correr para siempre. Importado por nombre
+        # para que el test lo pueda sustituir aquí y no en el `time` global,
+        # que comparten asyncio y media docena de librerías.
+        arranque = monotonic()
+        limite_s = float(effective.tasas_fetch_minutos_max) * 60.0
 
-        for fuente_id, url, institucion, hash_previo in fuentes:
+        for indice, (fuente_id, url, institucion, hash_previo) in enumerate(fuentes):
+            transcurrido = monotonic() - arranque
+            if limite_s > 0 and transcurrido >= limite_s:
+                # El techo se mira **antes** de empezar una fuente: cortar a
+                # media descarga no ahorra lo ya gastado. Lo que queda sin leer
+                # se lee en la corrida de dentro de 4 horas, que es justo lo
+                # que hace tolerable cortar.
+                reporte.cortada_por_tiempo = True
+                log.warning(
+                    "corrida_cortada_por_tiempo",
+                    minutos=round(transcurrido / 60.0, 1),
+                    sin_leer=len(fuentes) - indice,
+                )
+                break
             try:
                 await _procesar(
                     reporte,

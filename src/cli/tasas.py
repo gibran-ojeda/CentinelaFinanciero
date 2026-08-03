@@ -501,10 +501,10 @@ async def retirar_sustituidas(path: Path, *, dry_run: bool = False) -> ReporteRe
 # ─── Lectura automática ───────────────────────────────────────
 
 
-#: Backoff temporal para una corrida interactiva. Los 300 y 1200 segundos que
-#: usa el job están calibrados para algo desatendido y de rejilla; delante de
-#: una terminal son veinticinco minutos mirando un cursor. Se reintenta una
-#: vez, corto, y lo que no salga se reporta para la próxima.
+#: Backoff temporal para una corrida interactiva. El del job se acortó a 60 s
+#: —era de 300 y 1200, calibrado para una rejilla semanal— pero delante de una
+#: terminal hasta un minuto es un cursor parpadeando sin explicación. Se
+#: reintenta una vez, corto, y lo que no salga se reporta para la próxima.
 ESPERAS_INTERACTIVAS: tuple[float, ...] = (20.0,)
 
 

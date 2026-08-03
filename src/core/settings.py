@@ -187,10 +187,22 @@ class Settings(BaseSettings):
     fetch_max_reintentos: int = 1
     #: Errores duros por host antes de dejarlo para la siguiente corrida.
     fetch_umbral_circuito: int = 2
-    #: Backoff temporal ante una cadena degradada por algo transitorio. Los
-    #: valores vienen de NarrativeAlpha, donde están calibrados en producción:
-    #: cinco minutos y luego veinte. No reducir sin medir.
-    fetch_esperas_backoff_s: list[float] = [300.0, 1200.0]
+    #: Backoff temporal ante una cadena degradada por algo transitorio. Fue
+    #: `[300.0, 1200.0]`, heredado de NarrativeAlpha, donde la corrida es
+    #: espaciada y esperar veinticinco minutos para no perder el dato de la
+    #: semana sale a cuenta. **Aquí la cadencia cambió y el backoff no**: desde
+    #: que el job corre cada 4 horas, la siguiente oportunidad está a 4 horas,
+    #: no a siete días, y el pipeline es secuencial — dormir 25 minutos deja
+    #: trece fuentes esperando y Chromium vivo media hora en un contenedor de
+    #: 768 MB. Medido el 2026-08-02: una corrida de 27 minutos para 90 s de
+    #: trabajo. Una sola espera corta conserva lo único que el backoff compra
+    #: de verdad, recuperarse de un hipo de red, a 1/25 del coste.
+    fetch_esperas_backoff_s: list[float] = [60.0]
+    #: Techo de duración de la corrida de tasas. Sin él no hay ninguno: el lock
+    #: de Redis caduca a los 3600 s **sin cancelar nada**, así que una corrida
+    #: más larga que una hora permitiría que la siguiente arrancara encima. Lo
+    #: que queda sin leer se lee dentro de 4 horas.
+    tasas_fetch_minutos_max: int = 20
     #: Menos texto que esto es una página que no se pudo leer, no una sin tasas.
     fetch_min_caracteres: int = 200
     fetch_respetar_robots: bool = True

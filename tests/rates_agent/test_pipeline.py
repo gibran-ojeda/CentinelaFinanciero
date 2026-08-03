@@ -272,13 +272,50 @@ async def test_the_budget_ceiling_stops_the_run_without_failing_it() -> None:
     assert reporte.fallidas == 0
 
 
+async def test_the_time_ceiling_stops_the_run_without_failing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """El 2026-08-02 una corrida duró 27 minutos para 90 s de trabajo.
+
+    Un host que no conectaba metió a la corrida en el backoff temporal y el
+    pipeline es secuencial, así que trece fuentes esperaron con Chromium vivo.
+    Ahora hay un tope: lo que no dé tiempo se lee dentro de cuatro horas, y eso
+    no es un fallo — es lo que hace tolerable cortar.
+    """
+    await run_seed()
+    async with session_scope() as session:
+        fuentes = (await session.execute(select(FuenteTasas))).scalars().all()
+        activas = {"https://www.finsus.mx/inversion", "https://www.supertasas.com/"}
+        for fuente in fuentes:
+            fuente.activa = fuente.url in activas
+
+    # Arranque, primera fuente dentro del techo, y de ahí en adelante 21
+    # minutos: por encima del default de 20. Se sustituye el nombre importado
+    # en `pipeline`, no `time.monotonic`: parchear el módulo global se lo cambia
+    # también a asyncio, que lo llama tantas veces que agota el guion antes de
+    # que el bucle llegue a mirarlo.
+    guion = iter([0.0, 0.0])
+    monkeypatch.setattr(pipeline, "monotonic", lambda: next(guion, 21 * 60.0))
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA, PAGINA)),
+        cliente=ClienteLLM(ModeloFalso(tasas=[TASA_364])),
+    )
+
+    assert reporte.fuentes == 2
+    assert reporte.leidas == 1  # la segunda ni se intentó
+    assert reporte.cortada_por_tiempo is True
+    assert reporte.fallidas == 0
+
+
 def test_a_total_failure_is_distinguished_from_a_partial_one() -> None:
     """La tabla de verdad del fracaso total: todo falló, no hubo corrida."""
     assert pipeline.ReporteCorrida(fuentes=3, fallidas=3).fracaso_total is True
     assert pipeline.ReporteCorrida(fuentes=3, fallidas=2).fracaso_total is False
     assert pipeline.ReporteCorrida(fuentes=0).fracaso_total is False
-    # El presupuesto corta sin marcar fallidas: nunca dispara esto.
+    # Los dos cortes dejan fuentes sin intentar, no fallidas: ninguno dispara esto.
     assert pipeline.ReporteCorrida(fuentes=3, presupuesto_agotado=True).fracaso_total is False
+    assert pipeline.ReporteCorrida(fuentes=3, cortada_por_tiempo=True).fracaso_total is False
 
 
 # ─── El job ───────────────────────────────────────────────────
