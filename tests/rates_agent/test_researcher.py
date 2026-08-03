@@ -16,7 +16,7 @@ import pytest
 
 from llm.providers.base import LlamadaHerramienta, RespuestaLLM
 from rates_agent.researcher import investigar, normalizar_url
-from rates_agent.search import Resultado, SearchExecutor
+from rates_agent.search import ErrorBusqueda, Resultado, SaludMotores, SearchExecutor
 
 
 class MotorFalso:
@@ -27,6 +27,13 @@ class MotorFalso:
 
     async def buscar(self, consulta: str, *, maximo: int) -> list[Resultado]:
         return [Resultado(titulo="t", url=u, resumen="r", motor=self.nombre) for u in self._urls]
+
+
+class MotorCaido:
+    nombre = "caido"
+
+    async def buscar(self, consulta: str, *, maximo: int) -> list[Resultado]:
+        raise ErrorBusqueda("bloqueado")
 
 
 class ClienteFalso:
@@ -120,6 +127,33 @@ async def test_the_rounds_ceiling_is_read_hot_from_config() -> None:
     assert len(cliente.llamadas) == 1
     assert cliente.llamadas[0]["herramientas"] is None
     assert reporte.rondas == 1
+
+
+async def test_a_dead_search_chain_jumps_straight_to_the_delivery_round() -> None:
+    """Cuando no queda buscador, las rondas restantes son dinero tirado.
+
+    El modelo recibe `{"resultados": []}` y no puede distinguir «no hay nada
+    publicado» de «el buscador devolvió 403»: reformula y agota las cuatro
+    vueltas de tool-use. Con la cadena en circuito se salta a la entrega, que
+    sin URLs permitidas sólo puede decir «sin datos».
+    """
+    ejecutor = SearchExecutor(
+        [MotorCaido()],  # type: ignore[list-item]
+        salud=SaludMotores(umbral=1, pausa_s=0.0),
+        max_reintentos=0,
+    )
+    cliente = ClienteFalso(
+        _respuesta(tools=[_busqueda()]),
+        _respuesta(json.dumps({"hallazgos": [], "sin_datos": True})),
+    )
+
+    reporte = await _investigar(cliente, ejecutor, max_rondas=4)
+
+    # Dos llamadas en vez de cinco: la que buscó y la de entrega.
+    assert len(cliente.llamadas) == 2
+    assert cliente.llamadas[1]["herramientas"] is None
+    assert reporte.sin_datos is True
+    assert reporte.hallazgos == []
 
 
 async def test_a_finding_backed_by_a_real_search_result_survives() -> None:

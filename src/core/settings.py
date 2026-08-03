@@ -227,6 +227,11 @@ class Settings(BaseSettings):
     research_max_rondas: int = 4
     #: Resultados por búsqueda. Más contexto es más tokens por vuelta.
     research_resultados_por_busqueda: int = 6
+    #: Segundos mínimos entre dos consultas al **mismo** motor. No había
+    #: ninguna pausa, y el 2026-08-02 brave empezó a devolver 429 a partir de
+    #: la quinta consulta: parte del bloqueo lo provocaba el propio ritmo. Es
+    #: un piso, no un sleep fijo — sólo espera lo que falte desde la anterior.
+    research_pausa_entre_busquedas_s: float = 1.5
 
     @field_validator("log_format", mode="before")
     @classmethod

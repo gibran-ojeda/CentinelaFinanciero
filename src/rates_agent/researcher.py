@@ -171,10 +171,13 @@ async def investigar(
         },
     ]
 
+    #: Se adelanta la vuelta de entrega. Ver el corte de más abajo.
+    entregar_ya = False
+
     for ronda in range(rondas_max + 1):
         # En la última vuelta se retiran las herramientas: es lo que obliga al
         # modelo a entregar en vez de seguir buscando.
-        ultima = ronda == rondas_max
+        ultima = ronda == rondas_max or entregar_ya
         respuesta = await cliente.completar(
             sistema="",
             usuario="",
@@ -215,6 +218,20 @@ async def investigar(
                 }
             )
         reporte.busquedas = len(ejecutor.consultas)
+
+        if not ejecutor.urls_permitidas and ejecutor.sin_motores_sanos:
+            # Se buscó, no volvió ni una URL, y no queda un motor en pie. El
+            # modelo no puede distinguir «no hay nada publicado» de «el
+            # buscador está caído» —ve la misma lista vacía— así que reformula
+            # y se pagan las rondas restantes para nada. Se salta a la vuelta
+            # de entrega, que sin URLs permitidas sólo puede decir «sin datos».
+            entregar_ya = True
+            log.info(
+                "research_sin_buscadores",
+                institucion=institucion,
+                motores=ejecutor.motores_en_circuito,
+                rondas=reporte.rondas,
+            )
 
     reporte.busquedas = len(ejecutor.consultas)
     reporte.urls_vistas = len(ejecutor.urls_permitidas)
