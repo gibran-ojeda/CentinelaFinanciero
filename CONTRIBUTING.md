@@ -68,8 +68,9 @@ Un cambio lógico por commit.
 2. Un PR = un cambio lógico. Describe qué cambia y por qué.
 3. Si tocas variables de entorno, actualiza `.env.example` en el mismo PR — y
    si la variable es de producción, los **tres sitios**: el secreto/variable
-   en GitHub, el heredoc de `scripts/desplegar.sh` y el mapa `environment:`
-   del compose ([docs/despliegue.md](docs/despliegue.md) explica por qué).
+   en GitHub, la plantilla de `scripts/lib/entorno.sh` —eligiendo su clase— y
+   el mapa `environment:` del compose ([docs/despliegue.md](docs/despliegue.md)
+   explica por qué, y qué significa cada clase).
 4. Si cambias el comportamiento de un módulo, actualiza la documentación
    relevante en `docs/`.
 

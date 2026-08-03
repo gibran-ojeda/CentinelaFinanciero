@@ -93,6 +93,51 @@ fi
 echo "  canónica            ok, ${DOMINIO}"
 
 echo
+echo "════════ llaves opcionales ════════"
+# Cierra el silencio que costó el incidente: el despliegue borró la llave de
+# DeepSeek del .env, el nivel 2 y el researcher fallaron días —quince
+# instituciones por corrida— y no hubo una sola línea que lo dijera; se
+# descubrió leyendo los logs del contenedor por casualidad.
+#
+# Se le pregunta al CONTENEDOR y no al .env: el compose no declara `env_file`,
+# así que el archivo sólo sirve para interpolar, y una llave que esté en él
+# pero no en el mapa `environment:` del servicio no llega a ningún proceso.
+# Además .dockerignore excluye el .env, así que dentro del contenedor no hay
+# tal archivo. Mirar el .env mediría el primero de los tres sitios y daría
+# verde con el tercero roto.
+#
+# Avisa y no bloquea: sin estas llaves el sitio sirve igual —los defaults del
+# compose lo dicen—, y convertir «el researcher está parado» en «no se puede
+# desplegar» sería peor que el problema que arregla.
+#
+# El `< /dev/null` no es manía: este script llega por stdin y la sustitución de
+# comandos no lo redirige por sí sola; sin él, el `exec` se traga el resto del
+# archivo y los gates de abajo «pasan» porque nunca se leyeron.
+llave_definida() {  # <servicio> <clave> → si | no | ?
+  local respuesta
+  respuesta=$(
+    docker compose exec -T "$1" \
+      sh -c 'eval "valor=\${$1:-}"; if [ -n "$valor" ]; then echo si; else echo no; fi' \
+      sh "$2" < /dev/null 2> /dev/null
+  ) || respuesta="?"
+  case "$respuesta" in
+    si | no) echo "$respuesta" ;;
+    *) echo "?" ;;
+  esac
+}
+
+for par in \
+  "BANXICO_TOKEN|banxico_sync_series se marca OMITIDO y la UDI se queda en el valor de respaldo" \
+  "DEEPSEEK_API_KEY|el nivel 2 y el researcher fallan en cada corrida"; do
+  clave=${par%%|*}
+  case "$(llave_definida scheduler "$clave")" in
+    si) printf '  %-20s ok\n' "$clave" ;;
+    no) echo "  ⚠ sin $clave: ${par#*|}" ;;
+    *) echo "  ⚠ no se pudo preguntar al contenedor por $clave" ;;
+  esac
+done
+
+echo
 echo "════════ no interferir con el vecino ════════"
 # Compartimos máquina y Caddy con otro stack. Un despliegue de Centinela que
 # lo tumbe es un fallo de Centinela, aunque Centinela funcione.

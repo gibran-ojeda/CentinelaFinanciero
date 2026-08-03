@@ -21,6 +21,11 @@ on:
         description: "Commit o rama a desplegar (para rollback, el SHA anterior)"
         required: false
         default: ""
+      reescribir_env:
+        description: "Reescribir el .env del VPS desde cero (pierde lo que sólo exista en la máquina)"
+        type: boolean
+        required: false
+        default: false
 
 # Un despliegue a la vez, y sin cancelar el que esté corriendo: interrumpir a
 # medio `alembic upgrade` deja la base en un estado que nadie eligió.
@@ -99,6 +104,17 @@ jobs:
             # researcher L3. Sin definirla llega vacía y desplegar.sh la deja
             # en true; fijarla en false lo apaga sin tocar código.
             echo "SCHEDULER_RESEARCH_ENABLED='${{ vars.SCHEDULER_RESEARCH_ENABLED }}'"
+            # Vacío en un push: sólo un dispatch deliberado puede reescribir el
+            # .env desde cero. Una variable de repo se quedaría encendida y
+            # arrasaría en el siguiente push sin que nadie lo pidiera.
+            echo "CONFIRMO_REESCRIBIR_ENV='${{ inputs.reescribir_env && 'si' || '' }}'"
+            # La librería del .env viaja delante del script y por la misma
+            # tubería: así la lógica y su librería son siempre del mismo
+            # commit. Sacarla del árbol del VPS con un `source` las
+            # desincronizaría justo en el rollback, que es cuando el árbol es
+            # de un commit y este script de otro — y abortaría todo rollback a
+            # un commit anterior a este cambio.
+            cat scripts/lib/entorno.sh
             cat scripts/desplegar.sh
           } | ssh -i ~/.ssh/id_deploy \
                 -o IdentitiesOnly=yes -o BatchMode=yes \

@@ -50,12 +50,14 @@ Tres consecuencias de diseño:
 - [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — CD en push a `main`, con directorio propio en el VPS (`~/centinela-financiero`, **nunca** el de NarrativeAlpha). La lógica vive en [`scripts/desplegar.sh`](../scripts/desplegar.sh) y [`scripts/gates.sh`](../scripts/gates.sh) y viaja por stdin, no en el YAML: así se lee y se corre fuera de un workflow, y los secretos no acaban en la línea de comandos del proceso remoto.
   1. `git fetch && git reset --hard <ref>` (determinista).
   2. Regenerar `.env` desde GitHub Secrets.
+  > **Nota (2026-08-02):** el paso 2 dejó de regenerar el `.env` y pasó a **fusionarlo**. Regenerarlo entero borró en silencio una `DEEPSEEK_API_KEY` que sólo existía en la máquina —el secreto no estaba en GitHub, y `${{ secrets.X }}` ausente expande a cadena vacía—, y el researcher falló días sin que nada lo dijera. Ahora cada variable tiene una clase que decide quién gana el choque, el despliegue reporta la procedencia de las dieciséis y un gate avisa si una llave opcional no llegó al contenedor. Ver `docs/despliegue.md` §«El `.env` de producción».
   3. `build` + `up -d` con el overlay de producción.
   4. Esperar a que la API esté `healthy`; si no llega, volcar sus logs y abortar.
   5. `alembic upgrade head`.
   6. **Gates duros** (abortan el deploy si fallan):
      - Deriva de esquema: `python -m core.schema_check` deriva el contrato desde el metadata del ORM (no de una lista a mano) y lo compara contra la BD real, además de comprobar que esté en el head.
      - Humo HTTP: `/healthz`, `GET /api/v1/meta/frescura`, y la portada **con filas** — un 200 con la tabla vacía es justo el fallo que hay que ver — más que la canónica apunte al dominio y no al loopback.
+     - **Llaves opcionales** (avisa, no aborta): que `BANXICO_TOKEN` y `DEEPSEEK_API_KEY` llegaron al contenedor del scheduler.
      - **No-interferencia**: los contenedores del vecino siguen `healthy` y su dominio responde 200 después del deploy (señas por variables de repo, ver docs/despliegue.md).
      - TLS público: `https://centinelafinanciero.lat` responde 200.
   7. Rollback: `workflow_dispatch` con el SHA anterior en `ref`, más `alembic downgrade -1` a mano si la migración fue el problema.
