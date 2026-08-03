@@ -349,8 +349,9 @@ async def test_status_codes_are_classified_by_whether_time_cures_them(
 
 
 @respx.mock
-async def test_a_network_timeout_is_transient() -> None:
-    respx.get(URL).mock(side_effect=httpx.ConnectTimeout("agotado"))
+async def test_a_slow_server_is_transient() -> None:
+    """La conexión se estableció y el servidor tardó: eso sí es congestión."""
+    respx.get(URL).mock(side_effect=httpx.ReadTimeout("agotado"))
     t = TransporteHttpx(user_agent="prueba")
 
     with pytest.raises(ErrorDescarga) as exc:
@@ -358,6 +359,54 @@ async def test_a_network_timeout_is_transient() -> None:
 
     assert exc.value.transitorio is True
     await t.cerrar()
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "error",
+    [
+        httpx.ConnectError("[Errno -2] Name or service not known"),
+        httpx.ConnectTimeout("agotado"),
+    ],
+)
+async def test_a_host_that_never_answers_is_not_transient(error: Exception) -> None:
+    """El caso Supertasas del 2026-08-02.
+
+    Un DNS que no resuelve o un puerto que rechaza venía marcado transitorio,
+    así que entraba al backoff temporal: la corrida durmió veinticinco minutos
+    con trece fuentes detrás y el host seguía caído al despertar. Esperar no
+    arregla un host que no está.
+
+    `ConnectTimeout` hereda de `TimeoutException` **y** de `TransportError`, así
+    que este caso depende del orden de los `except`: si alguien reordena, este
+    test es el que lo dice.
+    """
+    respx.get(URL).mock(side_effect=error)
+    t = TransporteHttpx(user_agent="prueba")
+
+    with pytest.raises(ErrorDescarga) as exc:
+        await t.obtener(URL, timeout_s=1.0)
+
+    assert exc.value.transitorio is False
+    await t.cerrar()
+
+
+async def test_a_host_that_never_answers_still_opens_its_circuit() -> None:
+    """Lo que se le niega es la espera larga, no el circuito.
+
+    Si dejara de contar para el circuito, cada URL del mismo host muerto
+    volvería a recorrer la cadena entera de transportes —incluido arrancar
+    Chromium— en vez de fallar de inmediato.
+    """
+    muerto = ErrorDescarga("no conecta: ConnectError", transitorio=False)
+    f = _fetcher(TransporteFalso("httpx", muerto, muerto), esperas_backoff_s=(60.0,))
+
+    for _ in range(2):
+        with pytest.raises(CadenaAgotada) as exc:
+            await f.descargar(URL)
+
+    assert f.hosts_en_circuito == ["institucion.test"]
+    assert "backoff" not in str(exc.value)
 
 
 @respx.mock

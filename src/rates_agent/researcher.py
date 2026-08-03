@@ -171,10 +171,13 @@ async def investigar(
         },
     ]
 
+    #: Se adelanta la vuelta de entrega. Ver el corte de más abajo.
+    entregar_ya = False
+
     for ronda in range(rondas_max + 1):
         # En la última vuelta se retiran las herramientas: es lo que obliga al
         # modelo a entregar en vez de seguir buscando.
-        ultima = ronda == rondas_max
+        ultima = ronda == rondas_max or entregar_ya
         respuesta = await cliente.completar(
             sistema="",
             usuario="",
@@ -185,9 +188,27 @@ async def investigar(
         reporte.tokens += respuesta.tokens_totales
         reporte.costo_usd += respuesta.costo_usd
 
-        if not respuesta.herramientas or ultima:
+        if ultima:
             _leer_final(reporte, respuesta.contenido, ejecutor)
             break
+
+        if not respuesta.herramientas:
+            # El modelo dejó de pedir herramientas antes de tiempo. Si lo que
+            # trae ya es el JSON pedido, perfecto y se acabó.
+            if _leer_final(reporte, respuesta.contenido, ejecutor, exigir=False):
+                break
+            # Si no, es prosa — y lo es porque **el proveedor no manda
+            # `response_format` mientras haya herramientas**: no se llevan con
+            # `tools`, así que nada obligaba a este turno a ser JSON. Pasársela
+            # al parser producía `research_json_invalido`, seis de quince el
+            # 2026-08-02. Se le pide la entrega en una vuelta sin herramientas,
+            # que sí lo lleva.
+            if respuesta.contenido:
+                conversacion.append({"role": "assistant", "content": respuesta.contenido})
+            conversacion.append({"role": "user", "content": prompts.plantilla("research_entrega")})
+            entregar_ya = True
+            log.info("research_entrega_forzada", institucion=institucion, ronda=reporte.rondas)
+            continue
 
         conversacion.append(
             {
@@ -216,6 +237,20 @@ async def investigar(
             )
         reporte.busquedas = len(ejecutor.consultas)
 
+        if not ejecutor.urls_permitidas and ejecutor.sin_motores_sanos:
+            # Se buscó, no volvió ni una URL, y no queda un motor en pie. El
+            # modelo no puede distinguir «no hay nada publicado» de «el
+            # buscador está caído» —ve la misma lista vacía— así que reformula
+            # y se pagan las rondas restantes para nada. Se salta a la vuelta
+            # de entrega, que sin URLs permitidas sólo puede decir «sin datos».
+            entregar_ya = True
+            log.info(
+                "research_sin_buscadores",
+                institucion=institucion,
+                motores=ejecutor.motores_en_circuito,
+                rondas=reporte.rondas,
+            )
+
     reporte.busquedas = len(ejecutor.consultas)
     reporte.urls_vistas = len(ejecutor.urls_permitidas)
     log.info("research_terminado", **reporte.como_metricas())
@@ -242,24 +277,38 @@ async def _ejecutar(nombre: str, argumentos: dict[str, Any], ejecutor: SearchExe
     )
 
 
-def _leer_final(reporte: ReporteResearch, contenido: str, ejecutor: SearchExecutor) -> None:
-    """Valida el JSON final y **aplica la invariante**."""
+def _leer_final(
+    reporte: ReporteResearch,
+    contenido: str,
+    ejecutor: SearchExecutor,
+    *,
+    exigir: bool = True,
+) -> bool:
+    """Valida el JSON final y **aplica la invariante**.
+
+    Devuelve si el contenido era un JSON usable. Con `exigir=False` un fallo no
+    deja rastro —ni warning, ni `sin_datos`, ni `notas`—: se está comprobando
+    si el modelo entregó por su cuenta antes de tiempo, y todavía le queda la
+    vuelta de entrega para hacerlo bien.
+    """
     from llm import parsers
 
     try:
         datos = parsers.parsear_json(contenido, claves_requeridas=("hallazgos",))
     except Exception as exc:  # noqa: BLE001 — el parser lanza su propio tipo
+        if not exigir:
+            return False
         log.warning("research_json_invalido", error=str(exc)[:200])
         reporte.sin_datos = True
         reporte.notas = f"el modelo no devolvió un JSON usable: {str(exc)[:160]}"
-        return
+        return False
 
     reporte.notas = str(datos.get("notas") or "") or None
     permitidas = {normalizar_url(u) for u in ejecutor.urls_permitidas}
     crudos = datos.get("hallazgos")
     if not isinstance(crudos, list) or not crudos:
         reporte.sin_datos = True
-        return
+        return True
 
     for crudo in crudos:
         try:
@@ -287,6 +336,7 @@ def _leer_final(reporte: ReporteResearch, contenido: str, ejecutor: SearchExecut
         reporte.hallazgos.append(hallazgo)
 
     reporte.sin_datos = not reporte.hallazgos
+    return True
 
 
 __all__ = [

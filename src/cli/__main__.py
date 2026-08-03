@@ -139,6 +139,35 @@ def build_parser() -> argparse.ArgumentParser:
         )
         parser_accion.add_argument("--comentario", default=None)
 
+    fuentes = sub.add_parser("fuentes", help="salud y reparación del catálogo de fuentes")
+    fuentes_sub = fuentes.add_subparsers(dest="subcomando", required=True)
+
+    listar_fuentes = fuentes_sub.add_parser(
+        "list", help="cada fuente con su estado, su último dato y su último error"
+    )
+    listar_fuentes.add_argument(
+        "--rotas",
+        action="store_true",
+        help="sólo las pausadas, las que acumulan fallos y las que nunca dieron una tasa",
+    )
+
+    pausar_fuente = fuentes_sub.add_parser("pausar", help="deja de intentarla en cada corrida")
+    pausar_fuente.add_argument("fuente_id", type=int)
+    # Igual que en `config set`: sin motivo, dentro de un mes nadie sabrá si la
+    # apagó una persona por algo o el contador de fallos.
+    pausar_fuente.add_argument("--motivo", required=True, help="por qué se pausa")
+
+    reanudar_fuente = fuentes_sub.add_parser(
+        "reanudar", help="vuelve a intentarla y olvida los fallos acumulados"
+    )
+    reanudar_fuente.add_argument("fuente_id", type=int)
+
+    url_fuente = fuentes_sub.add_parser(
+        "url", help="corrige la URL en su sitio (provisional hasta llevarlo al YAML)"
+    )
+    url_fuente.add_argument("fuente_id", type=int)
+    url_fuente.add_argument("url")
+
     config = sub.add_parser("config", help="inspección y ajuste del ConfigStore")
     config_sub = config.add_subparsers(dest="subcomando", required=True)
 
@@ -247,6 +276,20 @@ async def _run(args: argparse.Namespace) -> int:
                     comentario=args.comentario,
                 )
             )
+            return 0
+        case "fuentes":
+            from cli import fuentes as fuentes_module
+
+            match args.subcomando:
+                case "list":
+                    print("Catálogo de fuentes:")
+                    print(await fuentes_module.listar(solo_rotas=args.rotas))
+                case "pausar":
+                    print(await fuentes_module.pausar(args.fuente_id, motivo=args.motivo))
+                case "reanudar":
+                    print(await fuentes_module.reanudar(args.fuente_id))
+                case "url":
+                    print(await fuentes_module.cambiar_url(args.fuente_id, args.url))
             return 0
         case "config":
             match args.subcomando:

@@ -1,4 +1,4 @@
-# Runbook: actualización manual de tasas
+﻿# Runbook: actualización manual de tasas
 
 > El ciclo de revisión humana que mantiene vivo el catálogo. La lectura automática corre cada 4 horas; tu sesión sigue siendo semanal — diez o quince minutos, la mayor parte resolver la cola de revisión.
 
@@ -20,14 +20,37 @@ A partir de la segunda lectura, un movimiento pequeño de una tasa ya aprobada s
 
 > **Nota (2026-08-01):** la pasada semanal de las páginas con JavaScript
 > desde la laptop **ya no existe como paso**: Chromium vive en la imagen del
-> VPS y el job de tasas lee las dieciocho fuentes en cada corrida — ver
+> VPS y el job de tasas lee todas las fuentes activas de nivel 2 en cada
+> corrida — ver
 > [despliegue.md](despliegue.md#navegador-en-el-vps--decisión-aplicada). Una
 > corrida a mano (`python -m cli tasas fetch`, con `--solo-navegador` /
 > `--sin-navegador` como filtros de depuración) sigue siendo posible: queda
 > registrada bajo su propio id `tasas_fetch_manual` y `cli revisiones list`
 > agrega sus huecos de catálogo junto a los del job y a los del researcher.
 
-### 1. Qué falta
+### 1. Qué se rompió
+
+```bash
+python -m cli fuentes list --rotas
+```
+
+Va primero porque condiciona todo lo demás: si una fuente lleva días rota, los productos de esa institución van a salir en la lista del paso siguiente y no hay nada que revisar — hay que arreglar la URL.
+
+Lista tres cosas, y la tercera es la que nadie veía:
+
+- **Pausadas.** Tras seis descargas fallidas seguidas —un día entero de la rejilla de 4 horas— la fuente se apaga sola con su motivo. Reanudarla es un acto humano: `python -m cli fuentes reanudar <id>`. Un deploy **no** la reanuda, aunque corra `cli seed`: el YAML declara la intención y que una fuente esté encendida hoy es estado del runtime. Lo que el YAML sí impone siempre es un `activa: false` explícito, que es como están Openbank y Supertasas.
+- **Con fallos acumulados**, camino de pausarse, con el último error.
+- **Las que nunca han producido una tasa** (`último dato: nunca`). Se descargan perfectamente y el extractor no encuentra nada: casi siempre la URL apunta a la portada y no a la página que publica las tasas. No dejan ningún error, y por eso eran invisibles.
+
+La reparación urgente no necesita deploy:
+
+```bash
+python -m cli fuentes url <id> https://institucion.mx/la-pagina-buena
+```
+
+Cambia la URL en su sitio y olvida el hash, para que la próxima corrida vuelva a leerla entera. **Es provisional**: el YAML sigue siendo la fuente de verdad y el siguiente `cli seed` impone lo que diga el repo, así que el cambio hay que llevarlo a `seeds/fuentes_tasas.yaml` en el mismo día. Lo que el seed sí hace bien ahora es apagar las fuentes que ya no están en el YAML — antes, corregir una URL ahí insertaba una fila nueva y dejaba la muerta viva.
+
+### 2. Qué falta
 
 ```bash
 python -m cli tasas pendientes
@@ -37,7 +60,7 @@ Imprime, agrupado por institución, lo que **no puede salir al sitio público**:
 
 La URL sale de `seeds/fuentes_tasas.yaml`, no de la tasa guardada: esa última dice de dónde salió el dato la vez anterior, que es justo lo que se está corrigiendo.
 
-### 2. Resolver la cola de revisión
+### 3. Resolver la cola de revisión
 
 ```bash
 python -m cli revisiones list
@@ -48,7 +71,7 @@ Lo que las corridas encolaron, agrupado por institución, con la diferencia en p
 
 Al final de esa salida aparecen los **huecos de catálogo**: plazos que una institución publica y el catálogo no tiene. Ésos no se aprueban — se cierran dando de alta el producto en `seeds/productos.yaml` y corriendo `python -m cli seed`.
 
-### 3. Lo que la lectura automática no consiguió
+### 4. Lo que la lectura automática no consiguió
 
 De cada producto que quede pendiente hace falta: **tasa nominal anual**, **plazo en días**, **GAT nominal y real si la institución las publica**, y la **fecha** que aparezca en la página (fecha de cálculo de la GAT, o la del día si no hay otra).
 
@@ -58,7 +81,7 @@ Tres cosas que se ven seguido y hay que resistir:
 - **Los plazos son los de la institución**, no los de CETES. Si Finsus publica 30/90/180/360, el producto es de 30 días — no de 28 porque CETES lo sea.
 - **Una GAT que no cuadra con la nominal** no se corrige a ojo: se captura tal como la publica la institución. Si es inconsistente, la bandera 🟡 de §5.2 está para decirlo.
 
-### 4. Actualizar el CSV
+### 5. Actualizar el CSV
 
 Cada fila de `seeds/tasas.csv` es una **observación nueva**, no una edición. La tabla es append-only: la vigente de un producto es la más reciente en estado `VIGENTE`.
 
@@ -73,7 +96,7 @@ openbank-vista,13.00,,,2026-08-01,MANUAL,https://www.openbank.mx/,VIGENTE,Escale
 - Lo que no se pudo verificar **se deja como está**. Una tasa vieja marcada es mejor que una inventada.
 - `tramos` (opcional) captura tasas **escalonadas por saldo**: segmentos `desde-hasta:tasa` separados por `;`, con `hasta` vacío para el tramo sin techo (`30000-:6.30`). La escalera debe empezar en 0 y ser contigua, la `tasa_nominal` de la fila es la del primer tramo, y lo que quede por encima del último techo publicado se calcula a 0 — no se le regala la última tasa a dinero del que la institución no dijo nada.
 
-### 5. Importar
+### 6. Importar
 
 ```bash
 python -m cli tasas import seeds/tasas.csv --dry-run   # primero en seco
@@ -89,7 +112,7 @@ docker compose exec -T api python -m cli tasas import seeds/tasas.csv
 
 La clave natural es `(producto, fecha_dato, fuente)`: reimportar el mismo CSV no duplica nada.
 
-### 6. Comprobar en el sitio
+### 7. Comprobar en el sitio
 
 ```bash
 curl -s https://centinelafinanciero.lat/ | grep -o 'Datos al [^<]*'
@@ -97,7 +120,7 @@ curl -s https://centinelafinanciero.lat/ | grep -o 'Datos al [^<]*'
 
 Y a ojo: que la fila esté, que la fecha haya cambiado y que el enlace de la fuente lleve a donde debe.
 
-### 7. Revisar el scheduler
+### 8. Revisar el scheduler
 
 ```bash
 docker compose exec -T api python -m cli config list --grupo scheduler
@@ -120,7 +143,7 @@ Las cadencias, para saber qué esperar en esa lista:
 
 El nivel 3 aparecerá casi siempre como `OMITIDO` con el motivo «ninguna institución quedó stale» — eso es lo bueno: significa que el fetch dirigido está cubriendo el catálogo. Y **el agregador no tiene job**: las filas `AGREGADOR` del CSV son una captura manual congelada, sólo sirven de contraste y se van retirando con `cli tasas retirar` conforme llegan las lecturas oficiales.
 
-### 8. Copia del respaldo fuera del VPS
+### 9. Copia del respaldo fuera del VPS
 
 ```bash
 scp <usuario>@<vps>:~/centinela-financiero/backups/centinela-*.sql.gz ~/respaldos-centinela/
@@ -148,7 +171,9 @@ Si una institución desaparece del mercado, `activa: false` en `instituciones.ya
 
 ## Cambiar una URL sin cambiar la tasa
 
-No hay camino directo, y es deliberado: `tasas` es append-only y la clave natural incluye la fecha, así que corregir sólo `fuente_url` de una observación ya cargada exige un `UPDATE` a mano.
+Ojo con cuál de las dos URLs es: la del **catálogo de fuentes** —de dónde se lee— se corrige con `cli fuentes url` (paso 1). Ésta es la otra: `tasas.fuente_url`, de dónde salió una observación concreta que ya está guardada.
+
+Ahí no hay camino directo, y es deliberado: `tasas` es append-only y la clave natural incluye la fecha, así que corregir sólo `fuente_url` de una observación ya cargada exige un `UPDATE` a mano.
 
 ```bash
 docker compose exec -T db psql -U centinela -d centinela \

@@ -268,6 +268,8 @@ async def _seed_fuentes_tasas(
         (row.institucion_id, row.url): row
         for row in (await session.execute(select(FuenteTasas))).scalars()
     }
+    #: Lo que el YAML declara, para poder apagar después lo que sobra.
+    declaradas: set[tuple[int, str]] = set()
 
     for entrada in entradas:
         institucion = instituciones.get(entrada["institucion"])
@@ -277,16 +279,38 @@ async def _seed_fuentes_tasas(
                 f"que no está en el catálogo: '{entrada['institucion']}'"
             )
         clave = (institucion.id, entrada["url"])
-        campos = {
+        declaradas.add(clave)
+        campos: dict[str, Any] = {
             "nivel": int(entrada.get("nivel", 2)),
             "requiere_js": bool(entrada.get("requiere_js", False)),
-            "activa": entrada.get("activa", True),
         }
+        if "activa" in entrada:
+            # **Sólo si el YAML lo dice.** El despliegue corre este seed en cada
+            # push (`desplegar.sh`), así que imponer `activa: true` por defecto
+            # resucitaría en cada deploy a las fuentes que se apagaron solas por
+            # acumular fallos — la autopausa duraría hasta el siguiente push y
+            # no serviría para nada. El YAML declara la intención; que una
+            # fuente esté encendida hoy es estado del runtime. Reanudarla es
+            # `cli fuentes reanudar`, o ponerle un `activa: true` explícito.
+            campos["activa"] = bool(entrada["activa"])
         if (actual := existentes.get(clave)) is None:
             session.add(FuenteTasas(institucion_id=institucion.id, url=entrada["url"], **campos))
             report.registrar("fuentes_tasas", "creados")
         else:
             _aplicar(actual, campos, report, "fuentes_tasas")
+
+    # La clave del upsert incluye la URL, así que **corregir una URL en el YAML
+    # inserta otra fila y deja la muerta activa**: la corrida seguiría
+    # golpeándola para siempre, y así es como DiDi lleva meses pidiendo una
+    # página que redirige a un 404. Se apagan, nunca se borran: la fila
+    # conserva su historial y `cli fuentes list` la sigue nombrando.
+    for clave, fuente in existentes.items():
+        if clave in declaradas or not fuente.activa:
+            continue
+        fuente.activa = False
+        fuente.pausada_motivo = "ya no está en seeds/fuentes_tasas.yaml"
+        report.registrar("fuentes_tasas", "actualizados")
+        log.info("fuente_retirada_del_yaml", fuente_id=fuente.id, url=fuente.url)
 
     await session.flush()
 

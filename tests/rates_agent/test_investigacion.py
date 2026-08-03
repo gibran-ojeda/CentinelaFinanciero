@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -11,11 +11,11 @@ import pytest
 from sqlalchemy import select
 
 from core.db import session_scope
-from domain.enums import EstadoTasa, FuenteTasa
-from domain.orm import FuenteTasas, Institucion, Producto, RevisionTasa, Tasa
+from domain.enums import EstadoJob, EstadoTasa, FuenteTasa
+from domain.orm import FuenteTasas, Institucion, JobRun, Producto, RevisionTasa, Tasa
 from llm.providers.base import LlamadaHerramienta, RespuestaLLM
 from rates_agent import investigacion
-from rates_agent.search import Resultado, SearchExecutor
+from rates_agent.search import ErrorBusqueda, Resultado, SaludMotores, SearchExecutor
 
 pytestmark = pytest.mark.requires_docker
 
@@ -32,6 +32,16 @@ class MotorFalso:
         return [Resultado(titulo="t", url=u, resumen="r", motor=self.nombre) for u in self._urls]
 
 
+class MotorCaido:
+    """Falla siempre. Sirve para dejar la cadena entera en circuito."""
+
+    def __init__(self, nombre: str) -> None:
+        self.nombre = nombre
+
+    async def buscar(self, consulta: str, *, maximo: int) -> list[Resultado]:
+        raise ErrorBusqueda("bloqueado")
+
+
 class ClienteFalso:
     """Contesta siempre lo mismo: una búsqueda y luego el hallazgo."""
 
@@ -40,9 +50,11 @@ class ClienteFalso:
         self._tasa = tasa
         self._plazo = plazo
         self._turno = 0
+        self.llamadas = 0
 
     async def completar(self, **kwargs: Any) -> RespuestaLLM:
         self._turno += 1
+        self.llamadas += 1
         base = dict(
             modelo="deepseek-v4-flash",
             tokens_entrada=100,
@@ -181,6 +193,56 @@ async def test_an_institution_already_researched_today_is_skipped(
     assert "Finsus" not in {c.nombre for c in despues}
     # Y sólo sale ella: el guard es por institución, no un apagado global.
     assert {c.nombre for c in antes} - {c.nombre for c in despues} == {"Finsus"}
+
+
+async def test_an_institution_tried_today_is_skipped_even_if_it_found_nothing(
+    catalogo_cargado: None,
+) -> None:
+    """La mitad del guard que faltaba, y la que más costaba.
+
+    El corte se apoyaba en filas `Tasa` escritas, así que sólo cubría el caso
+    exitoso. El 2026-08-02 catorce de las quince candidatas terminaron sin
+    datos —los buscadores estaban caídos—, ninguna escribió una fila, y las
+    catorce volvían a la cola en las cinco corridas restantes del día: unas
+    ochenta investigaciones inútiles contra los mismos motores bloqueados.
+    """
+    antes = await investigacion._candidatas(HOY)
+    assert "Finsus" in {c.nombre for c in antes}
+
+    async with session_scope() as session:
+        session.add(
+            JobRun(
+                job_id="tasas_research_abierta",
+                inicio=datetime.combine(HOY, time(hour=1), tzinfo=UTC),
+                estado=EstadoJob.EXITOSO,
+                # Se intentó y no salió nada: ni una `Tasa`, sólo el rastro.
+                metricas={"instituciones": ["Finsus"], "sin_datos": 1},
+            )
+        )
+
+    despues = await investigacion._candidatas(HOY)
+
+    assert "Finsus" not in {c.nombre for c in despues}
+    assert {c.nombre for c in antes} - {c.nombre for c in despues} == {"Finsus"}
+
+
+async def test_a_failed_attempt_yesterday_does_not_skip_today(
+    catalogo_cargado: None,
+) -> None:
+    """El rastro también caduca con el día: mañana se vuelve a intentar."""
+    async with session_scope() as session:
+        session.add(
+            JobRun(
+                job_id="tasas_research_abierta",
+                inicio=datetime.combine(HOY - timedelta(days=1), time(hour=1), tzinfo=UTC),
+                estado=EstadoJob.EXITOSO,
+                metricas={"instituciones": ["Finsus"]},
+            )
+        )
+
+    candidatas = await investigacion._candidatas(HOY)
+
+    assert "Finsus" in {c.nombre for c in candidatas}
 
 
 async def test_yesterdays_research_does_not_skip_today(catalogo_cargado: None) -> None:
@@ -428,6 +490,42 @@ async def test_all_engines_down_marks_the_run_degraded(catalogo_cargado: None) -
 
     assert reporte.degradada is True
     assert reporte.publicadas == 0
+
+
+async def test_a_dead_search_chain_stops_the_run_instead_of_paying_for_it(
+    catalogo_cargado: None,
+) -> None:
+    """Con los tres buscadores caídos, seguir cuesta cinco llamadas por cabeza.
+
+    El modelo ve la misma lista vacía tanto si no hay nada publicado como si el
+    buscador devolvió 403, así que reformula y agota las rondas. El
+    2026-08-02 fueron catorce instituciones y 116 búsquedas para un hallazgo.
+    """
+    await _todas_frescas()
+    async with session_scope() as session:
+        filas = (await session.execute(select(Tasa))).scalars().all()
+        for fila in filas:
+            fila.fecha_dato = HOY - timedelta(days=60)
+
+    caido = MotorCaido("uno")
+    salud = SaludMotores(umbral=1, pausa_s=0.0)
+    cliente = ClienteFalso("https://x.test/")
+    ejecutor = SearchExecutor([caido], salud=salud)  # type: ignore[list-item]
+    # La primera institución encuentra el motor sano y lo tumba; a partir de
+    # ahí el corte tiene que actuar antes de llamar al modelo otra vez.
+    await ejecutor.buscar("lo que sea")
+    assert ejecutor.sin_motores_sanos is True
+
+    reporte = await investigacion.correr(
+        cliente=cliente,  # type: ignore[arg-type]
+        ejecutor=ejecutor,
+        hoy=HOY,
+    )
+
+    assert reporte.candidatas > 1
+    assert reporte.investigadas == 0
+    assert reporte.degradada is True
+    assert cliente.llamadas == 0  # ni una vuelta pagada
 
 
 async def test_the_run_reports_its_cost(catalogo_cargado: None) -> None:

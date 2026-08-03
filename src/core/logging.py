@@ -5,6 +5,13 @@ sustituye el valor de cualquier clave que coincida con los patrones de
 `settings.log_sensitive_patterns`. Es la última red: los secretos ya son
 `SecretStr` en la configuración, pero un dict de headers o un payload de error
 puede traer un token que nadie envolvió.
+
+Y esa red cubre también lo que escriben las librerías. El renderizado vive en
+un `ProcessorFormatter` del handler raíz, con la misma cadena de processors
+como `foreign_pre_chain`, de modo que un `LogRecord` de httpx o de trafilatura
+sale en el mismo JSON y pasa por la misma redacción. Antes no: el handler
+formateaba con `%(message)s` a secas y todo lo ajeno salía crudo por el mismo
+stderr, esquivando la última red — un agujero, no sólo un problema de estética.
 """
 
 from __future__ import annotations
@@ -93,15 +100,49 @@ def configure_logging(*, force: bool = False) -> None:
     # librerías —uvicorn, sqlalchemy, apscheduler— compartan destino y nivel,
     # y para que `add_logger_name` tenga de dónde sacar el nombre.
     structlog.configure(
-        processors=[*shared, renderer],
+        processors=[*shared, structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
         wrapper_class=structlog.stdlib.BoundLogger,
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
 
-    logging.basicConfig(format="%(message)s", stream=sys.stderr, level=level, force=True)
-    for noisy in ("uvicorn.access", "sqlalchemy.engine", "apscheduler.executors.default"):
-        logging.getLogger(noisy).setLevel(max(level, logging.WARNING))
+    # **El renderizado ocurre en el handler, no dentro de structlog.** Con
+    # `format="%(message)s"` a secas, un `LogRecord` de httpx o de trafilatura
+    # salía crudo por el mismo stderr: sin timestamp, sin nivel, sin nombre de
+    # logger, y —lo que importa— **sin pasar por `redact_sensitive`**, que es
+    # un processor de structlog y no tocaba nada ajeno. `foreign_pre_chain` les
+    # aplica la misma cadena, así que la última red cubre también lo que
+    # escriben las librerías.
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(
+        structlog.stdlib.ProcessorFormatter(
+            processor=renderer,
+            # `ExtraAdder` va **antes** que la cadena, y por tanto antes que
+            # `redact_sensitive`: lo que una librería mande por `extra=` son
+            # atributos del `LogRecord` que sin esto no se verían siquiera, y
+            # con esto se ven ya redactados. Ése es el orden que importa.
+            foreign_pre_chain=[structlog.stdlib.ExtraAdder(), *shared],
+        )
+    )
+    logging.basicConfig(handlers=[handler], level=level, force=True)
+
+    # Y aun con formato decente, estas hablan demasiado para un job que lee
+    # dieciocho páginas: httpx emite una línea INFO por petición —incluidas las
+    # de robots.txt y todas las del LLM— y trafilatura avisa en WARNING cada vez
+    # que descarta una página, que es justo lo que `fetch_vacio` ya reporta.
+    silenciar = {
+        "uvicorn.access": logging.WARNING,
+        "sqlalchemy.engine": logging.WARNING,
+        "apscheduler.executors.default": logging.WARNING,
+        "httpx": logging.WARNING,
+        "httpcore": logging.WARNING,
+        "urllib3": logging.WARNING,
+        "playwright": logging.WARNING,
+        "ddgs": logging.WARNING,
+        "trafilatura": logging.ERROR,
+    }
+    for nombre, minimo in silenciar.items():
+        logging.getLogger(nombre).setLevel(max(level, minimo))
 
     _configured = True
 

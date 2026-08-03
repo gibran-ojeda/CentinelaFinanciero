@@ -199,6 +199,24 @@ CONFIG_REGISTRY: tuple[ConfigKeySpec, ...] = (
         ),
     ),
     ConfigKeySpec(
+        "tasas_fetch_minutos_max",
+        "int",
+        "scheduler",
+        (
+            "Techo de duración de la corrida de tasas en minutos: al superarlo "
+            "se corta y lo que falte se lee en la corrida siguiente"
+        ),
+    ),
+    ConfigKeySpec(
+        "fetch_fallos_para_pausar",
+        "int",
+        "scheduler",
+        (
+            "Descargas fallidas seguidas antes de que una fuente se apague "
+            "sola (0 desactiva la autopausa); reanudarla es un acto humano"
+        ),
+    ),
+    ConfigKeySpec(
         "banxico_sync_enabled",
         "bool",
         "scheduler",

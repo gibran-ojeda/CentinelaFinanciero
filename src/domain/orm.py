@@ -432,7 +432,15 @@ class ParametroFiscal(TimestampMixin, Base):
 
 
 class FuenteTasas(TimestampMixin, Base):
-    """URL curada por institución para el fetch dirigido de la fase 9."""
+    """URL curada por institución para el fetch dirigido de la fase 9.
+
+    Las cuatro columnas de salud existen porque el 2026-08-02 cinco de catorce
+    fuentes estaban rotas —dos dominios muertos, un 403 permanente, un host sin
+    DNS y una página que responde 200 sin texto— y la corrida se marcó EXITOSO.
+    El circuito del fetcher muere con el proceso y la única alarma exigía que
+    fallaran las dieciocho a la vez, así que entre corrida y corrida no quedaba
+    ni un rastro de qué había dejado de funcionar.
+    """
 
     __tablename__ = "fuentes_tasas"
 
@@ -444,14 +452,32 @@ class FuenteTasas(TimestampMixin, Base):
     nivel: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     requiere_js: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     activa: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: Cuándo se **descargó** por última vez, con tasas o sin ellas. No dice si
+    #: sirvió de algo: para eso está `ultimo_exito_at`.
     ultima_extraccion_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     #: Hash del contenido de la última descarga: si no cambió, no se paga LLM.
     ultimo_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: Fallos duros y páginas vacías seguidos. Vuelve a cero en cuanto una
+    #: descarga trae texto legible.
+    fallos_consecutivos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: El último error, truncado. Hasta ahora sólo vivía en el log y en
+    #: `job_runs.metricas["errores"]`, que nadie lee.
+    ultimo_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Cuándo produjo **tasas de verdad** (≥1), no cuándo se descargó. `NULL`
+    #: con la fuente activa desde hace días es una URL que apunta a una portada
+    #: sin tasas: se lee, no cuesta un error, y no sirve para nada.
+    ultimo_exito_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    #: Por qué se apagó. Distingue la pausa automática de una decisión humana,
+    #: que es lo que decide si reanudar es seguro.
+    pausada_motivo: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         CheckConstraint("nivel IN (2, 3)", name="ck_nivel_de_fuente"),
+        CheckConstraint("fallos_consecutivos >= 0", name="ck_fallos_no_negativos"),
         UniqueConstraint("institucion_id", "url", name="uq_fuente_url"),
     )
 

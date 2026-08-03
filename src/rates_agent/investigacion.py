@@ -29,7 +29,7 @@ researcher cuando el nivel 2 haya rodado.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -40,15 +40,21 @@ from core.db import session_scope
 from core.frescura import SLA_POR_FUENTE
 from core.logging import get_logger
 from domain.enums import EstadoTasa, FuenteTasa, TipoProducto
-from domain.orm import FuenteTasas, Institucion, Producto, Tasa
+from domain.orm import FuenteTasas, Institucion, JobRun, Producto, Tasa
 from llm.client import ClienteLLM
 from llm.providers.base import ErrorPresupuestoAgotado, ErrorProveedor
 from rates_agent.extractor import TasaExtraida
 from rates_agent.researcher import Hallazgo, investigar
 from rates_agent.reviewer import Decision, HuecoCatalogo, revisar
-from rates_agent.search import SearchExecutor
+from rates_agent.search import SaludMotores, SearchExecutor
 
 log = get_logger(__name__)
+
+#: Corridas que escriben `instituciones` en sus métricas. Literal, y no
+#: importado de `scheduler.jobs.research`, para no invertir la dependencia:
+#: `rates_agent` es el motor y el scheduler lo llama, no al revés. Mismo patrón
+#: que `cli/revisiones.py` y `cli/research.py`.
+JOBS_DE_RESEARCH = ("tasas_research_abierta",)
 
 
 @dataclass(slots=True)
@@ -72,12 +78,17 @@ class ReporteInvestigacion:
     #: `cli revisiones list` los agrega junto a los del fetch sin distinguir
     #: de qué nivel vinieron.
     huecos_catalogo: list[dict[str, Any]] = field(default_factory=list)
+    #: A quién se **intentó** investigar, con o sin suerte. Es lo que lee el
+    #: guard del día de la corrida siguiente: sin esta lista, una institución
+    #: que terminó sin datos no dejaba rastro y volvía a la cola cada 4 horas.
+    instituciones: list[str] = field(default_factory=list)
     errores: list[str] = field(default_factory=list)
 
     def como_metricas(self) -> dict[str, Any]:
         return {
             "candidatas": self.candidatas,
             "investigadas": self.investigadas,
+            "instituciones": self.instituciones,
             "hallazgos": self.hallazgos,
             "publicadas": self.publicadas,
             "en_revision": self.en_revision,
@@ -148,11 +159,31 @@ async def correr(
     try:
         candidatas = await _candidatas(hoy)
         reporte.candidatas = len(candidatas)
+        # El circuito de los buscadores es de la corrida entera; las URLs
+        # vistas, de cada institución. Antes viajaban juntas dentro del
+        # ejecutor y por eso las quince empezaban de cero contra unos motores
+        # que ya habían dicho 403 y 429.
+        salud = SaludMotores()
         for candidata in candidatas[: limite or len(candidatas)]:
-            # Un ejecutor por institución: el circuito y las URLs vistas son de
-            # esa investigación y no deben cruzarse entre instituciones — una
-            # URL que salió buscando Klar no autoriza un hallazgo de Stori.
-            suyo = ejecutor or SearchExecutor()
+            # Un ejecutor por institución: una URL que salió buscando Klar no
+            # autoriza un hallazgo de Stori.
+            suyo = ejecutor or SearchExecutor(salud=salud)
+            if suyo.sin_motores_sanos:
+                # Sin un solo buscador en pie, las candidatas que quedan darían
+                # cinco llamadas al modelo cada una para reformular consultas
+                # que nadie va a atender. El 2026-08-02 fueron catorce.
+                reporte.degradada = True
+                log.warning(
+                    "research_cortado_sin_buscadores",
+                    motores=suyo.motores_en_circuito,
+                    pendientes=len(candidatas) - reporte.investigadas,
+                )
+                break
+            # Se anota **antes** de investigar. El guard del día se apoyaba en
+            # filas `Tasa` escritas, así que sólo cubría el caso exitoso: las
+            # catorce que fallaron volvían a ser candidatas en las cinco
+            # corridas restantes del día, contra los mismos motores caídos.
+            reporte.instituciones.append(candidata.nombre)
             try:
                 await _investigar_una(reporte, cliente, suyo, candidata, hoy)
             except ErrorPresupuestoAgotado:
@@ -338,7 +369,7 @@ async def _candidatas(hoy: date) -> list[Candidata]:
         # — sin esto, las seis del día la reinvestigarían entera. Y el ahorro
         # tiene que decidirse AQUÍ: la idempotencia del reviewer descarta la
         # escritura duplicada, pero sólo después de haber pagado el tool-loop.
-        investigadas_hoy = set(
+        con_dato_hoy = set(
             (
                 await session.execute(
                     select(Producto.institucion_id)
@@ -349,10 +380,11 @@ async def _candidatas(hoy: date) -> list[Candidata]:
             .scalars()
             .all()
         )
+        intentadas_hoy = await _intentadas_hoy(session, hoy)
 
         candidatas: list[Candidata] = []
         for institucion in instituciones:
-            if institucion.id in investigadas_hoy:
+            if institucion.id in con_dato_hoy or institucion.nombre in intentadas_hoy:
                 continue
             ultima = ultimas.get(institucion.id)
             sla = SLA_POR_FUENTE[FuenteTasa.FETCH_DIRIGIDO]
@@ -377,6 +409,40 @@ async def _candidatas(hoy: date) -> list[Candidata]:
     for candidata in candidatas:
         log.info("research_candidata", institucion=candidata.nombre, motivo=candidata.motivo)
     return candidatas
+
+
+async def _intentadas_hoy(session: Any, hoy: date) -> set[str]:
+    """A quién se intentó investigar hoy, con o sin resultado.
+
+    La otra mitad del guard, y la que faltaba. La de arriba mira filas `Tasa`
+    escritas, así que sólo cubre el caso exitoso: el 2026-08-02 catorce de las
+    quince instituciones terminaron sin datos —los buscadores estaban caídos—,
+    ninguna escribió una fila, y las catorce seguían siendo candidatas en las
+    cinco corridas restantes del día.
+
+    Se lee de `job_runs.metricas` y no de una tabla nueva porque el precedente
+    ya existe: `cli revisiones list` agrega así los huecos de catálogo de las
+    corridas recientes.
+    """
+    filas = (
+        (
+            await session.execute(
+                select(JobRun.metricas).where(
+                    JobRun.job_id.in_(JOBS_DE_RESEARCH),
+                    JobRun.inicio >= datetime.combine(hoy, time.min, tzinfo=UTC),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    intentadas: set[str] = set()
+    for metricas in filas:
+        if isinstance(metricas, dict):
+            nombres = metricas.get("instituciones")
+            if isinstance(nombres, list):
+                intentadas.update(str(n) for n in nombres)
+    return intentadas
 
 
 async def _productos_de(session: AsyncSession, institucion_id: int) -> list[Producto]:

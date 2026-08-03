@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from time import monotonic
+
 from rates_agent.search import (
     ErrorBusqueda,
     ReporteBusqueda,
     Resultado,
+    SaludMotores,
     SearchExecutor,
 )
 
@@ -35,9 +38,19 @@ class MotorFalso:
         ]
 
 
-def _ejecutor(*motores: MotorFalso, **extra: int) -> SearchExecutor:
+def _salud(umbral: int | None = None) -> SaludMotores:
+    # Sin pausa: el ritmo entre consultas protege a los buscadores del mundo
+    # real, no a `MotorFalso`, y aquí sólo serviría para alargar la suite.
+    return SaludMotores(umbral=umbral, pausa_s=0.0)
+
+
+def _ejecutor(
+    *motores: MotorFalso, salud: SaludMotores | None = None, **extra: int
+) -> SearchExecutor:
+    umbral = extra.pop("umbral_circuito", None)
     return SearchExecutor(
         list(motores),  # type: ignore[arg-type]
+        salud=salud or _salud(umbral),
         espera_base_s=0.001,
         espera_tope_s=0.002,
         **extra,  # type: ignore[arg-type]
@@ -119,6 +132,82 @@ async def test_two_failures_open_the_circuit_for_the_run() -> None:
 
     assert ejecutor.motores_en_circuito == ["uno"]
     assert motor.llamadas == llamadas_antes
+
+
+async def test_the_circuit_survives_between_institutions() -> None:
+    """El arreglo de las 116 búsquedas para un hallazgo.
+
+    El circuito viajaba dentro del ejecutor, y hay un ejecutor por institución:
+    las quince del 2026-08-02 empezaron de cero contra unos buscadores que ya
+    habían devuelto 403 y 429. Ahora la salud se comparte y el segundo ejecutor
+    hereda lo que aprendió el primero.
+    """
+    salud = _salud(umbral=2)
+    primera = MotorFalso("uno", error=ErrorBusqueda("429"))
+    ejecutor = _ejecutor(primera, salud=salud, max_reintentos=0)
+    await ejecutor.buscar("una")
+    await ejecutor.buscar("otra")
+    assert ejecutor.motores_en_circuito == ["uno"]
+
+    segunda = MotorFalso("uno", error=ErrorBusqueda("429"))
+    siguiente = _ejecutor(segunda, salud=salud, max_reintentos=0)
+
+    assert siguiente.sin_motores_sanos is True
+    assert await siguiente.buscar("de otra institución") == []
+    assert segunda.llamadas == 0  # ni se le pregunta
+
+
+async def test_sharing_the_circuit_does_not_share_the_allowed_urls() -> None:
+    """La invariante anti-alucinación no se toca.
+
+    Es la mitad que **sí** debe reiniciarse: una URL que salió buscando Klar no
+    autoriza un hallazgo de Stori. Compartir el circuito y compartir las URLs
+    vistas son cosas distintas, y hasta ahora viajaban juntas por accidente.
+    """
+    salud = _salud()
+    primera = _ejecutor(MotorFalso("uno", urls=["https://klar.test/1"]), salud=salud)
+    await primera.buscar("klar")
+
+    segunda = _ejecutor(MotorFalso("uno", urls=["https://stori.test/1"]), salud=salud)
+    await segunda.buscar("stori")
+
+    assert segunda.urls_permitidas == frozenset({"https://stori.test/1"})
+
+
+async def test_a_success_forgives_the_earlier_failures() -> None:
+    """Con el circuito de corrida entera, un contador que sólo sube apagaría
+    un motor sano por tres tropiezos sueltos repartidos entre quince
+    instituciones."""
+    salud = _salud(umbral=2)
+    inestable = MotorFalso("uno", error=ErrorBusqueda("hipo"))
+    await _ejecutor(inestable, salud=salud, max_reintentos=0).buscar("una")
+
+    sano = MotorFalso("uno", urls=["https://a.test/1"])
+    await _ejecutor(sano, salud=salud, max_reintentos=0).buscar("otra")
+
+    otra_vez = MotorFalso("uno", error=ErrorBusqueda("hipo"))
+    ejecutor = _ejecutor(otra_vez, salud=salud, max_reintentos=0)
+    await ejecutor.buscar("tercera")
+
+    assert ejecutor.motores_en_circuito == []
+
+
+async def test_consecutive_queries_to_one_engine_are_spaced_out() -> None:
+    """Parte del 429 de brave lo provocaba el ritmo de las propias consultas.
+
+    No había ninguna pausa: el tool-loop dispara las búsquedas una detrás de
+    otra tan rápido como el modelo las pida.
+    """
+    motor = MotorFalso("uno", urls=["https://a.test/1"])
+    ejecutor = _ejecutor(motor, salud=SaludMotores(pausa_s=0.05), max_reintentos=0)
+
+    inicio = monotonic()
+    await ejecutor.buscar("una")
+    await ejecutor.buscar("otra")
+    transcurrido = monotonic() - inicio
+
+    assert motor.llamadas == 2
+    assert transcurrido >= 0.05
 
 
 # ─── Las URLs vistas ──────────────────────────────────────────

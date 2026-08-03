@@ -14,6 +14,10 @@ funcionando en NarrativeAlpha contra esta misma clase de problema.
    Se avanza tanto si el motor falla como si devuelve vacío.
 3. **Circuit breaker por motor y por corrida**: dos fallos duros y ese motor se
    deja para la próxima. No tiene sentido martillar a uno que está bloqueando.
+   El estado vive en `SaludMotores`, **compartido por toda la corrida**: hasta
+   el 2026-08-02 viajaba dentro del ejecutor, que es por institución, así que
+   las quince empezaban de cero contra unos buscadores que ya habían dicho que
+   no. Ciento dieciséis búsquedas para un hallazgo.
 4. **La corrida degrada, no revienta.** Si todos los motores caen, `buscar`
    devuelve lista vacía y el researcher termina sin publicar nada.
 
@@ -29,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import random
 from dataclasses import dataclass, field
+from time import monotonic
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
@@ -133,6 +138,67 @@ def _espera(intento: int, base: float, tope: float) -> float:
 class _EstadoMotor:
     fallos: int = 0
     abierto: bool = False
+    ultima_consulta: float = 0.0
+
+
+class SaludMotores:
+    """El circuito de cada motor, compartido por toda la corrida.
+
+    Vive fuera de `SearchExecutor` porque las dos cosas que ese objeto guardaba
+    juntas tienen ámbitos distintos, y confundirlos costaba dinero. Las URLs
+    vistas son **de la institución** —una que salió buscando Klar no autoriza
+    un hallazgo de Stori, y ésa es la invariante anti-alucinación— pero el
+    circuito es del motor, que es el mismo para las quince. Como había un
+    ejecutor por institución, el 2026-08-02 duckduckgo y google abrieron
+    circuito quince veces: cada institución empezaba de cero contra unos
+    buscadores que ya habían dicho 403 y 429.
+
+    La pausa entre consultas al mismo motor va aquí por lo mismo. No había
+    ninguna, y brave empezó a devolver 429 a partir de la quinta: parte del
+    bloqueo lo estaba provocando el propio ritmo de las consultas.
+    """
+
+    def __init__(self, *, umbral: int | None = None, pausa_s: float | None = None) -> None:
+        self._umbral = umbral if umbral is not None else settings.fetch_umbral_circuito
+        self._pausa_s = (
+            pausa_s if pausa_s is not None else settings.research_pausa_entre_busquedas_s
+        )
+        self._estado: dict[str, _EstadoMotor] = {}
+
+    def _de(self, motor: str) -> _EstadoMotor:
+        return self._estado.setdefault(motor, _EstadoMotor())
+
+    def abierto(self, motor: str) -> bool:
+        return self._de(motor).abierto
+
+    def anotar_fallo(self, motor: str) -> None:
+        estado = self._de(motor)
+        estado.fallos += 1
+        if estado.fallos >= self._umbral and not estado.abierto:
+            estado.abierto = True
+            log.warning("busqueda_circuito_abierto", motor=motor, fallos=estado.fallos)
+
+    def anotar_exito(self, motor: str) -> None:
+        """Un acierto borra los fallos previos.
+
+        Con el circuito de corrida entera, sin esto tres tropiezos sueltos
+        repartidos entre quince instituciones acabarían apagando un motor que
+        funciona perfectamente.
+        """
+        self._de(motor).fallos = 0
+
+    async def esperar_turno(self, motor: str) -> None:
+        """Deja pasar `pausa_s` entre dos consultas al mismo motor."""
+        estado = self._de(motor)
+        if self._pausa_s > 0 and estado.ultima_consulta:
+            resto = self._pausa_s - (monotonic() - estado.ultima_consulta)
+            if resto > 0:
+                await asyncio.sleep(resto)
+        estado.ultima_consulta = monotonic()
+
+    @property
+    def en_circuito(self) -> list[str]:
+        return sorted(n for n, e in self._estado.items() if e.abierto)
 
 
 def motores_por_defecto() -> list[Motor]:
@@ -147,16 +213,20 @@ def motores_por_defecto() -> list[Motor]:
 
 
 class SearchExecutor:
-    """Busca por la cadena de motores. Una instancia por corrida.
+    """Busca por la cadena de motores. Una instancia por **institución**.
 
-    El estado del circuito y el conjunto de URLs vistas viven en la instancia,
-    así que se reinician solos en cada corrida — igual que hace el `Fetcher`.
+    Lo que vive aquí es lo que debe reiniciarse con cada institución: el
+    conjunto de URLs vistas, que es la invariante anti-alucinación. El circuito
+    de los motores vive en `SaludMotores`, que se comparte con el resto de la
+    corrida — sin eso, cada institución vuelve a martillar a un buscador que ya
+    había dicho que no.
     """
 
     def __init__(
         self,
         motores: list[Motor] | None = None,
         *,
+        salud: SaludMotores | None = None,
         max_reintentos: int | None = None,
         umbral_circuito: int | None = None,
         espera_base_s: float = 2.0,
@@ -166,12 +236,9 @@ class SearchExecutor:
         self._max_reintentos = (
             max_reintentos if max_reintentos is not None else settings.research_max_reintentos
         )
-        self._umbral = (
-            umbral_circuito if umbral_circuito is not None else settings.fetch_umbral_circuito
-        )
+        self._salud = salud if salud is not None else SaludMotores(umbral=umbral_circuito)
         self._base = espera_base_s
         self._tope = espera_tope_s
-        self._estado: dict[str, _EstadoMotor] = {}
         self._urls: set[str] = set()
         self.consultas: list[str] = []
 
@@ -186,7 +253,16 @@ class SearchExecutor:
 
     @property
     def motores_en_circuito(self) -> list[str]:
-        return sorted(n for n, e in self._estado.items() if e.abierto)
+        return self._salud.en_circuito
+
+    @property
+    def sin_motores_sanos(self) -> bool:
+        """No queda ni un motor que pueda contestar.
+
+        Seguir desde aquí es pagarle al modelo cinco rondas de tool-use para
+        que reformule consultas que nadie va a atender.
+        """
+        return all(self._salud.abierto(m.nombre) for m in self._motores)
 
     async def buscar(self, consulta: str, *, maximo: int = 8) -> list[Resultado]:
         """Recorre la cadena hasta que un motor devuelva algo.
@@ -200,22 +276,18 @@ class SearchExecutor:
         self.consultas.append(consulta)
 
         for motor in self._motores:
-            estado = self._estado.setdefault(motor.nombre, _EstadoMotor())
-            if estado.abierto:
+            if self._salud.abierto(motor.nombre):
                 continue
+            await self._salud.esperar_turno(motor.nombre)
             try:
                 resultados = await self._con_reintentos(motor, consulta, maximo)
             except ErrorBusqueda as exc:
-                estado.fallos += 1
-                if estado.fallos >= self._umbral and not estado.abierto:
-                    estado.abierto = True
-                    log.warning(
-                        "busqueda_circuito_abierto", motor=motor.nombre, fallos=estado.fallos
-                    )
+                self._salud.anotar_fallo(motor.nombre)
                 log.warning("busqueda_fallida", motor=motor.nombre, error=str(exc)[:160])
                 continue
 
             if resultados:
+                self._salud.anotar_exito(motor.nombre)
                 self._urls.update(r.url for r in resultados)
                 log.info(
                     "busqueda_ok",

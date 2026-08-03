@@ -211,6 +211,157 @@ async def test_a_page_with_no_rates_is_neither_read_nor_failed() -> None:
     assert modelo.llamadas == 0
 
 
+# ─── Salud persistente de la fuente ───────────────────────────
+
+
+async def _fuente() -> FuenteTasas:
+    async with session_scope() as session:
+        fuente = await session.scalar(
+            select(FuenteTasas).where(FuenteTasas.url == "https://www.finsus.mx/inversion")
+        )
+        assert fuente is not None
+        session.expunge(fuente)
+        return fuente
+
+
+async def test_only_a_reading_with_rates_counts_as_a_success() -> None:
+    """`ultima_extraccion_at` dice «se descargó»; `ultimo_exito_at`, «sirvió».
+
+    Seis fuentes del catálogo apuntan a portadas que se descargan perfectamente
+    y no publican una sola tasa. Con una única columna eran indistinguibles de
+    seis lecturas buenas que no se movieron.
+    """
+    await _solo_una_fuente()
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)),
+        cliente=ClienteLLM(ModeloFalso(tasas=[])),
+    )
+
+    assert reporte.sin_tasas == ["Finsus"]
+    fuente = await _fuente()
+    assert fuente.ultima_extraccion_at is not None  # sí se descargó
+    assert fuente.ultimo_exito_at is None  # y no sirvió de nada
+
+
+async def test_a_reading_with_rates_stamps_the_success() -> None:
+    await _solo_una_fuente()
+
+    await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)),
+        cliente=ClienteLLM(ModeloFalso(tasas=[TASA_364])),
+    )
+
+    fuente = await _fuente()
+    assert fuente.ultimo_exito_at is not None
+    assert fuente.fallos_consecutivos == 0
+
+
+async def test_failures_accumulate_and_a_good_read_forgets_them() -> None:
+    """El contador mide **descargas**, y la memoria es corta a propósito.
+
+    Un sitio que se cae una tarde y vuelve no tiene por qué acercarse a la
+    pausa por lo que le pasó la semana pasada.
+    """
+    await _solo_una_fuente()
+    caida = ErrorDescarga("HTTP 500", transitorio=False)
+
+    for _ in range(2):
+        await pipeline.correr(
+            fetcher=_fetcher(TransporteFalso("httpx", caida)),
+            cliente=ClienteLLM(ModeloFalso()),
+        )
+    fuente = await _fuente()
+    assert fuente.fallos_consecutivos == 2
+    assert fuente.ultimo_error is not None
+    assert fuente.activa is True  # dos no bastan
+
+    await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)),
+        cliente=ClienteLLM(ModeloFalso(tasas=[TASA_364])),
+    )
+    fuente = await _fuente()
+    assert fuente.fallos_consecutivos == 0
+    assert fuente.ultimo_error is None
+
+
+async def test_a_source_that_keeps_failing_pauses_itself(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hey Banco lleva meses devolviendo «Domain Not Found» seis veces al día.
+
+    Cada intento arrastra la cadena de transportes entera, Chromium incluido.
+    Apagarla es barato; que se volviera a encender sola devolvería el problema
+    a donde estaba, invisible.
+    """
+    await _solo_una_fuente()
+    monkeypatch.setattr(pipeline.effective, "fetch_fallos_para_pausar", 2, raising=False)
+    caida = ErrorDescarga("HTTP 500 Domain Not Found", transitorio=False)
+
+    for _ in range(2):
+        reporte = await pipeline.correr(
+            fetcher=_fetcher(TransporteFalso("httpx", caida)),
+            cliente=ClienteLLM(ModeloFalso()),
+        )
+
+    assert reporte.fuentes_pausadas == ["Finsus — https://www.finsus.mx/inversion"]
+    fuente = await _fuente()
+    assert fuente.activa is False
+    assert fuente.pausada_motivo is not None
+    assert "2 fallos seguidos" in fuente.pausada_motivo
+
+    # Y la corrida siguiente ya no la intenta: eso es todo el ahorro.
+    transporte = TransporteFalso("httpx", caida)
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(transporte), cliente=ClienteLLM(ModeloFalso())
+    )
+    assert reporte.fuentes == 0
+    assert transporte.llamadas == 0
+
+
+async def test_an_empty_page_repeated_also_pauses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """El caso cetesdirecto, que hasta ahora era invisible del todo.
+
+    Un 200 sin texto legible no es un fallo en una corrida —no abre circuito ni
+    cuesta un token— pero repetido es una URL rota que nadie iba a ver, porque
+    se contaba como «vacía» y ahí moría.
+    """
+    await _solo_una_fuente()
+    monkeypatch.setattr(pipeline.effective, "fetch_fallos_para_pausar", 2, raising=False)
+    vacia = "<html><body><div id='root'></div></body></html>"
+
+    for _ in range(2):
+        await pipeline.correr(
+            fetcher=_fetcher(TransporteFalso("httpx", vacia)),
+            cliente=ClienteLLM(ModeloFalso()),
+        )
+
+    fuente = await _fuente()
+    assert fuente.activa is False
+    assert fuente.pausada_motivo is not None
+    assert "texto legible" in fuente.pausada_motivo
+
+
+async def test_a_broken_model_does_not_pause_a_healthy_source() -> None:
+    """La salud es de la fuente, no del proveedor de LLM.
+
+    Cuando la `DEEPSEEK_API_KEY` se perdió en el despliegue, todas las
+    extracciones fallaron durante días. Si eso contara como fallo de fuente,
+    una llave mal puesta habría apagado el catálogo entero.
+    """
+    await _solo_una_fuente()
+
+    for _ in range(6):
+        await pipeline.correr(
+            fetcher=_fetcher(TransporteFalso("httpx", PAGINA)),
+            cliente=ClienteLLM(ModeloFalso(sin_presupuesto=True)),
+        )
+
+    fuente = await _fuente()
+    assert fuente.activa is True
+    assert fuente.fallos_consecutivos == 0
+
+
 async def test_an_unknown_tenor_is_a_catalogue_gap() -> None:
     """360 no se encaja en el producto de 364 porque «es casi lo mismo».
 
@@ -272,13 +423,50 @@ async def test_the_budget_ceiling_stops_the_run_without_failing_it() -> None:
     assert reporte.fallidas == 0
 
 
+async def test_the_time_ceiling_stops_the_run_without_failing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """El 2026-08-02 una corrida duró 27 minutos para 90 s de trabajo.
+
+    Un host que no conectaba metió a la corrida en el backoff temporal y el
+    pipeline es secuencial, así que trece fuentes esperaron con Chromium vivo.
+    Ahora hay un tope: lo que no dé tiempo se lee dentro de cuatro horas, y eso
+    no es un fallo — es lo que hace tolerable cortar.
+    """
+    await run_seed()
+    async with session_scope() as session:
+        fuentes = (await session.execute(select(FuenteTasas))).scalars().all()
+        activas = {"https://www.finsus.mx/inversion", "https://www.supertasas.com/"}
+        for fuente in fuentes:
+            fuente.activa = fuente.url in activas
+
+    # Arranque, primera fuente dentro del techo, y de ahí en adelante 21
+    # minutos: por encima del default de 20. Se sustituye el nombre importado
+    # en `pipeline`, no `time.monotonic`: parchear el módulo global se lo cambia
+    # también a asyncio, que lo llama tantas veces que agota el guion antes de
+    # que el bucle llegue a mirarlo.
+    guion = iter([0.0, 0.0])
+    monkeypatch.setattr(pipeline, "monotonic", lambda: next(guion, 21 * 60.0))
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA, PAGINA)),
+        cliente=ClienteLLM(ModeloFalso(tasas=[TASA_364])),
+    )
+
+    assert reporte.fuentes == 2
+    assert reporte.leidas == 1  # la segunda ni se intentó
+    assert reporte.cortada_por_tiempo is True
+    assert reporte.fallidas == 0
+
+
 def test_a_total_failure_is_distinguished_from_a_partial_one() -> None:
     """La tabla de verdad del fracaso total: todo falló, no hubo corrida."""
     assert pipeline.ReporteCorrida(fuentes=3, fallidas=3).fracaso_total is True
     assert pipeline.ReporteCorrida(fuentes=3, fallidas=2).fracaso_total is False
     assert pipeline.ReporteCorrida(fuentes=0).fracaso_total is False
-    # El presupuesto corta sin marcar fallidas: nunca dispara esto.
+    # Los dos cortes dejan fuentes sin intentar, no fallidas: ninguno dispara esto.
     assert pipeline.ReporteCorrida(fuentes=3, presupuesto_agotado=True).fracaso_total is False
+    assert pipeline.ReporteCorrida(fuentes=3, cortada_por_tiempo=True).fracaso_total is False
 
 
 # ─── El job ───────────────────────────────────────────────────
