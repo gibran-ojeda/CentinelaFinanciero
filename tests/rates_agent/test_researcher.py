@@ -156,6 +156,63 @@ async def test_a_dead_search_chain_jumps_straight_to_the_delivery_round() -> Non
     assert reporte.hallazgos == []
 
 
+async def test_prose_in_a_middle_round_gets_a_delivery_round_not_a_parse_error() -> None:
+    """Seis de quince murieron así el 2026-08-02.
+
+    El modelo deja de pedir herramientas antes de tiempo y contesta en prosa
+    —«no encontré nada, voy a intentar otra cosa»—. Y contesta en prosa porque
+    nada le obliga a lo contrario: el proveedor suprime `response_format`
+    mientras hay `tools`, ya que las dos cosas no se llevan. Pasarle esa prosa
+    al parser de JSON daba `research_json_invalido` y ahí moría la institución.
+    """
+    ejecutor = SearchExecutor([MotorFalso(["https://www.klar.mx/inversion"])])  # type: ignore[list-item]
+    cliente = ClienteFalso(
+        _respuesta(tools=[_busqueda()]),
+        _respuesta("Busqué en varios sitios y no encontré la página de tasas de Klar."),
+        _respuesta(_final("https://www.klar.mx/inversion")),
+    )
+
+    reporte = await _investigar(cliente, ejecutor, max_rondas=4)
+
+    # La vuelta de entrega va sin herramientas: es lo que hace que el proveedor
+    # sí mande `response_format`.
+    assert cliente.llamadas[-1]["herramientas"] is None
+    assert reporte.sin_datos is False
+    assert len(reporte.hallazgos) == 1
+    assert reporte.notas != "" and "no devolvió un JSON usable" not in (reporte.notas or "")
+
+
+async def test_an_early_json_is_taken_as_the_answer() -> None:
+    """Si entrega bien antes de tiempo, no se le cobra una vuelta de más."""
+    ejecutor = SearchExecutor([MotorFalso(["https://www.klar.mx/inversion"])])  # type: ignore[list-item]
+    cliente = ClienteFalso(
+        _respuesta(tools=[_busqueda()]),
+        _respuesta(_final("https://www.klar.mx/inversion")),
+    )
+
+    reporte = await _investigar(cliente, ejecutor, max_rondas=4)
+
+    assert len(cliente.llamadas) == 2
+    assert len(reporte.hallazgos) == 1
+
+
+async def test_prose_on_the_last_round_is_still_reported_as_unusable() -> None:
+    """La vuelta de entrega es la última oportunidad, no un bucle.
+
+    Si el modelo tampoco entrega JSON ahí, se acabó: `sin_datos` con el motivo
+    en `notas`. Insistir sería el bucle que el techo de rondas existe para
+    impedir.
+    """
+    ejecutor = SearchExecutor([MotorFalso(["https://a.test/1"])])  # type: ignore[list-item]
+    cliente = ClienteFalso(_respuesta("sigo sin encontrar nada"))
+
+    reporte = await _investigar(cliente, ejecutor, max_rondas=0)
+
+    assert len(cliente.llamadas) == 1
+    assert reporte.sin_datos is True
+    assert reporte.notas is not None and "no devolvió un JSON usable" in reporte.notas
+
+
 async def test_a_finding_backed_by_a_real_search_result_survives() -> None:
     ejecutor = SearchExecutor([MotorFalso(["https://www.klar.mx/inversion"])])  # type: ignore[list-item]
     cliente = ClienteFalso(
@@ -302,10 +359,13 @@ async def test_no_data_is_a_valid_answer() -> None:
 
 
 async def test_a_final_answer_that_is_not_json_does_not_raise() -> None:
+    """Ni siquiera cuando la prosa se repite en la vuelta de entrega."""
     ejecutor = SearchExecutor([MotorFalso(["https://a.test/1"])])  # type: ignore[list-item]
     cliente = ClienteFalso(
         _respuesta(tools=[_busqueda()]),
         _respuesta("no encontré nada, lo siento"),
+        # La entrega que se le pide tras la prosa, y que tampoco entrega.
+        _respuesta("de verdad que no encontré nada"),
     )
 
     reporte = await _investigar(cliente, ejecutor)
