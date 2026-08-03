@@ -20,7 +20,8 @@ A partir de la segunda lectura, un movimiento pequeño de una tasa ya aprobada s
 
 > **Nota (2026-08-01):** la pasada semanal de las páginas con JavaScript
 > desde la laptop **ya no existe como paso**: Chromium vive en la imagen del
-> VPS y el job de tasas lee las dieciocho fuentes en cada corrida — ver
+> VPS y el job de tasas lee todas las fuentes activas de nivel 2 en cada
+> corrida — ver
 > [despliegue.md](despliegue.md#navegador-en-el-vps--decisión-aplicada). Una
 > corrida a mano (`python -m cli tasas fetch`, con `--solo-navegador` /
 > `--sin-navegador` como filtros de depuración) sigue siendo posible: queda

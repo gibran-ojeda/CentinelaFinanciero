@@ -20,7 +20,7 @@ from domain.orm import FuenteTasas
 
 pytestmark = [pytest.mark.requires_docker, pytest.mark.usefixtures("real_db")]
 
-KLAR = "https://www.klar.mx/"
+KLAR = "https://www.klar.mx/inversion"
 
 
 async def _klar() -> FuenteTasas:
@@ -32,10 +32,16 @@ async def _klar() -> FuenteTasas:
 
 
 async def _todas_sanas() -> None:
-    """Deja el catálogo entero como si acabara de producir tasas."""
+    """Deja el catálogo entero como si acabara de producir tasas.
+
+    Incluye reactivar: el seed trae dos fuentes apagadas a propósito y este
+    helper existe para partir de un catálogo sin nada que mirar.
+    """
     async with session_scope() as session:
         for fuente in (await session.execute(select(FuenteTasas))).scalars():
             fuente.ultimo_exito_at = datetime.now(UTC)
+            fuente.activa = True
+            fuente.pausada_motivo = None
 
 
 async def test_a_source_that_never_produced_a_rate_is_listed_as_broken() -> None:
@@ -57,6 +63,34 @@ async def test_a_source_that_never_produced_a_rate_is_listed_as_broken() -> None
     assert KLAR in salida
     assert "nunca" in salida
     assert "nunca han producido una tasa" in salida
+
+
+async def test_the_seed_ships_two_sources_switched_off_on_purpose() -> None:
+    """Openbank y Supertasas, y las dos por un motivo que no se arregla solo.
+
+    Openbank contesta 403 al bot identificado en los dos transportes, y la
+    doctrina es no imitar un navegador para esquivar un WAF: esa fuente pasa a
+    lectura manual. Supertasas dejó de existir como marca — su dominio redirige
+    a Crediclub— y apuntarla a la página de Crediclub le atribuiría tasas de
+    otra institución.
+    """
+    await run_seed()
+
+    async with session_scope() as session:
+        apagadas = (
+            (await session.execute(select(FuenteTasas).where(FuenteTasas.activa.is_(False))))
+            .scalars()
+            .all()
+        )
+
+    assert {f.url for f in apagadas} == {
+        "https://www.openbank.mx/cuenta-debito-open-plus",
+        "https://www.supertasas.com/",
+    }
+    # Y salen nombradas, que es lo que impide que se olviden.
+    salida = await fuentes.listar(solo_rotas=True)
+    assert "PAUSADA" in salida
+    assert "Openbank" in salida
 
 
 async def test_a_failing_source_shows_its_last_error() -> None:

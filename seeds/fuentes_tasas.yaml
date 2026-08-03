@@ -10,6 +10,43 @@
 # fetch + LLM. La marca alimenta el filtro `solo_requieren_js` (depuración y
 # repliegue) y la pista «requiere JS» de `cli tasas pendientes`; la cadena
 # del job lleva navegador de serie desde que Chromium vive en la imagen.
+#
+# **Revisión del 2026-08-02**, tras encontrar en los logs que cinco fuentes
+# fallaban y seis se leían sin producir una sola tasa. Se abrió cada sitio en
+# un navegador y se comprobó qué publica cada página. Lo que cambió, y por qué:
+#
+# - Seis apuntaban a la **portada** en vez de a la página del producto: Klar,
+#   Stori, Ualá, Mercado Pago, kubo y Openbank. Se descargaban perfectamente y
+#   no traían ninguna tasa que extraer.
+# - **DiDi** y **Hey Banco** habían movido su sitio. `www.hey.inc` ni siquiera
+#   resuelve (Fastly contesta «unknown domain»); el bueno es `banco.hey.inc`.
+# - **Supertasas** ya no existe como marca: su dominio redirige a Crediclub, y
+#   la tabla que ahí se publica se titula «Nuestras SUPER tasas». Queda
+#   inactiva hasta que se decida qué hacer con las dos instituciones del
+#   catálogo, que hoy son una sola.
+# - **Crediclub** sube de nivel 3 a nivel 2: esa misma página publica sus seis
+#   tasas con plazo, que es justo lo que el fetch dirigido sabe leer.
+# - **Openbank** queda inactiva: devuelve 403 al bot identificado en los dos
+#   transportes. §Settings lo dice — no se imita un navegador para esquivar un
+#   WAF; esa fuente pasa a lectura manual. Su URL se corrige igual, para que
+#   reanudarla el día que abran sea un `cli fuentes reanudar` y no una
+#   investigación otra vez.
+#
+# Dos que **no** eran problema de URL, y conviene no volver a tocarlas:
+#
+# - **Finsus** apunta bien. Su tabla completa está ahí (7 a 1800 días, con GAT
+#   nominal y real), pero se pinta después de los 2500 ms que el navegador
+#   espera tras `domcontentloaded`.
+# - **cetesdirecto/cetes.html** apunta bien y trae los datos del día. Son 311
+#   caracteres de texto: por debajo de lo que trafilatura conserva, así que
+#   sale como «vacía». Es un widget de tabla, y es la forma correcta de
+#   publicarlo. Su hermana `bonddia.html` pasa por poco (243 caracteres tras
+#   la extracción) y por eso ésa sí se lee.
+#
+# `requiere_js` no se tocó en ninguna: no se volvió a medir con un cliente
+# plano y adivinarlo sería peor que la marca vieja. Las nuevas de nivel 2 van
+# marcadas `true` por prudencia — httpx se intenta igual, la marca sólo decide
+# qué se lee en el repliegue sin navegador.
 
 fuentes_tasas:
   - institucion: Gobierno Federal
@@ -22,8 +59,9 @@ fuentes_tasas:
     nivel: 2
     requiere_js: false
 
+  # `www.didiglobal.com/mx/finance` redirige a un 404 desde hace meses.
   - institucion: DiDi
-    url: https://www.didiglobal.com/mx/finance
+    url: https://web.didiglobal.com/mx/jpsofiexpress/didi-cuenta/
     nivel: 2
     requiere_js: true
 
@@ -32,25 +70,33 @@ fuentes_tasas:
     nivel: 2
     requiere_js: true
 
+  # La portada no publica tasas; `/inversion` trae la tabla por plazo y por
+  # membresía.
   - institucion: Klar
-    url: https://www.klar.mx/
+    url: https://www.klar.mx/inversion
     nivel: 2
     requiere_js: true
 
+  # `/invertir` redirige a la portada; el contenido está en `/inversiones`.
   - institucion: kubo.financiero
-    url: https://www.kubofinanciero.com/invertir
+    url: https://www.kubofinanciero.com/inversiones
     nivel: 2
     requiere_js: true
 
   - institucion: Stori
-    url: https://www.storicard.com/
+    url: https://www.storicard.com/stori-cuentamas
     nivel: 2
     requiere_js: true
 
+  # Marca absorbida: supertasas.com redirige a crediclub.com/inversiones. Hasta
+  # que se resuelva si las dos instituciones del catálogo son una, esta fuente
+  # no se intenta — apuntarla a la página de Crediclub haría que el extractor
+  # atribuyera a Supertasas unas tasas que son de otra institución.
   - institucion: Supertasas
     url: https://www.supertasas.com/
     nivel: 2
     requiere_js: false
+    activa: false
 
   - institucion: Libertad Servicios Financieros
     url: https://www.libertad.mx/
@@ -67,10 +113,11 @@ fuentes_tasas:
     nivel: 3
     requiere_js: false
 
+  # De nivel 3 a nivel 2: publica seis tasas con su plazo y su metodología.
   - institucion: Crediclub
-    url: https://www.crediclub.com/
-    nivel: 3
-    requiere_js: false
+    url: https://crediclub.com/inversiones
+    nivel: 2
+    requiere_js: true
 
   - institucion: Nu México
     url: https://nu.com.mx/cuenta/
@@ -83,21 +130,25 @@ fuentes_tasas:
     requiere_js: true
 
   - institucion: Ualá
-    url: https://www.uala.mx/
+    url: https://www.uala.mx/cuenta-con-rendimiento
     nivel: 2
     requiere_js: true
 
+  # 403 al bot identificado, en httpx y en navegador. Inactiva hasta que
+  # cambien de política; la URL ya es la buena para ese día.
   - institucion: Openbank
-    url: https://www.openbank.mx/
+    url: https://www.openbank.mx/cuenta-debito-open-plus
     nivel: 2
     requiere_js: true
+    activa: false
 
+  # `www.hey.inc` no resuelve: Fastly contesta «unknown domain».
   - institucion: Hey Banco
-    url: https://www.hey.inc/
+    url: https://banco.hey.inc/universo-hey/ahorra-e-invierte/inversion-hey.html
     nivel: 2
     requiere_js: true
 
   - institucion: Mercado Pago
-    url: https://www.mercadopago.com.mx/
+    url: https://www.mercadopago.com.mx/cuenta
     nivel: 2
     requiere_js: true

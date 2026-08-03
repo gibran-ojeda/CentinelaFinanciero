@@ -98,7 +98,7 @@ async def test_a_source_dropped_from_the_yaml_is_switched_off() -> None:
             )
         )
         viva = await session.scalar(
-            select(FuenteTasas).where(FuenteTasas.url == "https://www.klar.mx/")
+            select(FuenteTasas).where(FuenteTasas.url == "https://www.klar.mx/inversion")
         )
     assert huerfana is not None  # sigue ahí, con su historial
     assert huerfana.activa is False

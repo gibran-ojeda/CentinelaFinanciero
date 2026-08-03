@@ -14,7 +14,8 @@ Doble gate como el resto: `SCHEDULER_TASAS_ENABLED` decide si se registra, y
 `tasas_fetch_enabled` del ConfigStore lo apaga en caliente sin reiniciar nada.
 
 Chromium vive en la imagen: la cadena del job lleva httpx y el navegador, y
-la corrida cubre las dieciocho fuentes. El repliegue es la llave caliente
+la corrida cubre todas las fuentes activas de nivel 2 —las de nivel 3 son
+portadas del researcher y no entran aquí—. El repliegue es la llave caliente
 `tasas_fetch_solo_sin_js`, que devuelve el job a solo-httpx sin deploy — ver
 `docs/despliegue.md`, «Navegador en el VPS».
 """
