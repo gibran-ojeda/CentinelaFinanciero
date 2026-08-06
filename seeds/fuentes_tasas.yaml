@@ -3,13 +3,15 @@
 # Nivel 2 = fetch determinista (httpx + trafilatura) y extracción con LLM.
 # Nivel 3 = sólo descubrimiento y verificación con búsqueda abierta.
 #
-# `requiere_js: true` marca las páginas que no rinden contenido sin ejecutar
-# JavaScript. Se sabe porque al construir este catálogo (2026-07-25)
-# devolvieron 403 o una página vacía a un cliente HTTP plano — exactamente el
-# motivo por el que §15 descarta el scraping por selectores CSS y opta por
-# fetch + LLM. La marca alimenta el filtro `solo_requieren_js` (depuración y
-# repliegue) y la pista «requiere JS» de `cli tasas pendientes`; la cadena
-# del job lleva navegador de serie desde que Chromium vive en la imagen.
+# `requiere_js: true` significa **usa el navegador para esta fuente**. Ya no es
+# sólo un filtro: desde el 2026-08-06 la marca elige el transporte, porque
+# httpx resolvía páginas que necesitaban renderizado devolviendo el envoltorio
+# de la SPA, y Chromium no llegaba a abrirse nunca.
+#
+# También decide **de qué corrida cuelga cada fuente**: las de `false` van en la
+# pasada barata de cada media hora; las de `true`, en la del navegador cada 8
+# horas. Poner `true` de más no es gratis — retrasa esa fuente ocho horas y
+# arranca Chromium por ella.
 #
 # **Revisión del 2026-08-02**, tras encontrar en los logs que cinco fuentes
 # fallaban y seis se leían sin producir una sola tasa. Se abrió cada sitio en
@@ -34,25 +36,40 @@
 #
 # Dos que **no** eran problema de URL, y conviene no volver a tocarlas:
 #
-# - **Finsus** apunta bien. Su tabla completa está ahí (7 a 1800 días, con GAT
-#   nominal y real), pero se pinta después de los 2500 ms que el navegador
-#   espera tras `domcontentloaded`.
-# - **cetesdirecto/cetes.html** apunta bien y trae los datos del día. Son 311
-#   caracteres de texto: por debajo de lo que trafilatura conserva, así que
-#   sale como «vacía». Es un widget de tabla, y es la forma correcta de
-#   publicarlo. Su hermana `bonddia.html` pasa por poco (243 caracteres tras
-#   la extracción) y por eso ésa sí se lee.
+# - **Finsus** apunta bien: su tabla completa está ahí (7 a 1800 días, con GAT
+#   nominal y real). Devuelve 403 al cliente plano, así que va por navegador.
+# - **cetesdirecto/cetes.html** apunta bien y publica los datos del día. Es la
+#   única cuyas cifras no están **ni en el DOM renderizado** tras los 2500 ms de
+#   espera: las carga por XHR más tarde. Va marcada para navegador y aun así
+#   puede seguir saliendo vacía; el arreglo de fondo es esperar a la petición,
+#   no cambiar la URL.
 #
-# `requiere_js` no se tocó en ninguna: no se volvió a medir con un cliente
-# plano y adivinarlo sería peor que la marca vieja. Las nuevas de nivel 2 van
-# marcadas `true` por prudencia — httpx se intenta igual, la marca sólo decide
-# qué se lee en el repliegue sin navegador.
+# ── Medición del 2026-08-06 ──────────────────────────────────────────────────
+#
+# Hasta esta fecha la marca era una suposición: decía, literalmente, «true por
+# prudencia». Se midió fuente por fuente descargando con cada transporte y
+# comprobando si las cifras publicadas llegan al texto que ve el extractor.
+#
+# El resultado sorprendió: **ocho de doce rinden con httpx puro** — DiDi, Klar,
+# Stori, Crediclub, Nu, Ualá, Hey y Mercado Pago. Lo que las tenía sin producir
+# tasas no era el renderizado sino el filtro de contenido, que se llevaba la
+# tabla junto con el menú; eso se arregló en `_texto_legible` con una segunda
+# pasada sin filtrar.
+#
+# Las cuatro que sí necesitan navegador, cada una por lo suyo:
+#
+# - **Finsus** y **Revolut**: 403 al bot identificado.
+# - **kubo**: httpx recibe 111 caracteres; el navegador sí trae la tabla.
+# - **cetesdirecto/cetes.html**: ver arriba.
+#
+# Para volver a medir cuando una página se rediseñe:
+# `python -m cli fuentes probar --extraer`
 
 fuentes_tasas:
   - institucion: Gobierno Federal
     url: https://www.cetesdirecto.com/tablas/valores_gubernamentales/cetes.html
     nivel: 2
-    requiere_js: false
+    requiere_js: true
 
   - institucion: Gobierno Federal
     url: https://www.cetesdirecto.com/tablas/valores_gubernamentales/bonddia.html
@@ -63,7 +80,7 @@ fuentes_tasas:
   - institucion: DiDi
     url: https://web.didiglobal.com/mx/jpsofiexpress/didi-cuenta/
     nivel: 2
-    requiere_js: true
+    requiere_js: false
 
   - institucion: Finsus
     url: https://www.finsus.mx/inversion
@@ -75,7 +92,7 @@ fuentes_tasas:
   - institucion: Klar
     url: https://www.klar.mx/inversion
     nivel: 2
-    requiere_js: true
+    requiere_js: false
 
   # `/invertir` redirige a la portada; el contenido está en `/inversiones`.
   - institucion: kubo.financiero
@@ -86,7 +103,7 @@ fuentes_tasas:
   - institucion: Stori
     url: https://www.storicard.com/stori-cuentamas
     nivel: 2
-    requiere_js: true
+    requiere_js: false
 
   # Marca absorbida: supertasas.com redirige a crediclub.com/inversiones. Hasta
   # que se resuelva si las dos instituciones del catálogo son una, esta fuente
@@ -117,12 +134,12 @@ fuentes_tasas:
   - institucion: Crediclub
     url: https://crediclub.com/inversiones
     nivel: 2
-    requiere_js: true
+    requiere_js: false
 
   - institucion: Nu México
     url: https://nu.com.mx/cuenta/
     nivel: 2
-    requiere_js: true
+    requiere_js: false
 
   - institucion: Revolut
     url: https://www.revolut.com/es-MX/
@@ -132,7 +149,7 @@ fuentes_tasas:
   - institucion: Ualá
     url: https://www.uala.mx/cuenta-con-rendimiento
     nivel: 2
-    requiere_js: true
+    requiere_js: false
 
   # 403 al bot identificado, en httpx y en navegador. Inactiva hasta que
   # cambien de política; la URL ya es la buena para ese día.
@@ -146,9 +163,9 @@ fuentes_tasas:
   - institucion: Hey Banco
     url: https://banco.hey.inc/universo-hey/ahorra-e-invierte/inversion-hey.html
     nivel: 2
-    requiere_js: true
+    requiere_js: false
 
   - institucion: Mercado Pago
     url: https://www.mercadopago.com.mx/cuenta
     nivel: 2
-    requiere_js: true
+    requiere_js: false
