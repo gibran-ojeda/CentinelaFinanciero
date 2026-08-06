@@ -29,11 +29,27 @@ from core.settings import settings
 REDACTED = "***"
 _MAX_REDACTION_DEPTH = 6
 
+#: Claves que caen bajo un patrón sensible sin ser un secreto. El patrón está
+#: en la lista por `BANXICO_TOKEN`, y la coincidencia es por subcadena, así que
+#: se llevaba por delante el **conteo de tokens** del LLM — que es justo la
+#: métrica con la que se calibra el gasto. Todo el log de producción decía
+#: `"tokens": "***"`, y con eso no hay forma de saber por qué una llamada costó
+#: cuatro veces más que la siguiente.
+#:
+#: Es una lista explícita y no una regla nueva: aflojar la coincidencia por
+#: subcadena para arreglar un caso concreto es cómo se escapa un secreto de
+#: verdad. Añadir aquí exige mirar la clave y decidir que no lo es.
+EXENTAS: frozenset[str] = frozenset(
+    {"tokens", "tokens_entrada", "tokens_salida", "tokens_totales"}
+)
+
 _configured = False
 
 
 def _is_sensitive(key: str, patterns: tuple[str, ...]) -> bool:
     lowered = key.lower()
+    if lowered in EXENTAS:
+        return False
     return any(pattern in lowered for pattern in patterns)
 
 
@@ -154,4 +170,4 @@ def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     return logger
 
 
-__all__ = ["REDACTED", "configure_logging", "get_logger", "redact_sensitive"]
+__all__ = ["EXENTAS", "REDACTED", "configure_logging", "get_logger", "redact_sensitive"]
