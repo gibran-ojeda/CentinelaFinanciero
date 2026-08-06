@@ -8,6 +8,7 @@ la que nadie podía ver.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 import pytest
@@ -17,6 +18,8 @@ from cli import fuentes
 from cli.seed import run_seed
 from core.db import session_scope
 from domain.orm import FuenteTasas
+from llm.client import ClienteLLM
+from llm.providers.base import ProveedorLLM, RespuestaLLM
 
 pytestmark = [pytest.mark.requires_docker, pytest.mark.usefixtures("real_db")]
 
@@ -200,6 +203,156 @@ async def test_a_value_that_is_not_a_url_is_refused() -> None:
 
     with pytest.raises(SystemExit, match="no parece una URL"):
         await fuentes.cambiar_url(fuente.id, "klar.mx/inversiones")
+
+
+class TransporteFalso:
+    """Un transporte con guion, para medir sin salir a internet."""
+
+    def __init__(self, nombre: str, *, texto: str, renderiza_js: bool) -> None:
+        self.nombre = nombre
+        self.renderiza_js = renderiza_js
+        self._texto = texto
+
+    async def obtener(self, url: str, *, timeout_s: float) -> str:
+        return self._texto
+
+    async def cerrar(self) -> None:
+        return None
+
+
+# Suficiente para pasar el umbral de caracteres: es el shell de marketing que
+# httpx saca de una SPA, sin ninguna tasa dentro.
+SHELL = (
+    "<html><body><article><h1>Invierte con nosotros</h1>"
+    "<p>Somos una institución regulada por la CNBV y tu dinero está protegido "
+    "por el fondo de protección al ahorro. Abre tu cuenta desde la app en "
+    "minutos, sin comisiones por manejo de cuenta ni saldo mínimo.</p>"
+    "</article></body></html>"
+)
+CON_TABLA = SHELL.replace(
+    "</article>", "<table><tr><td>364 días</td><td>8.80%</td></tr></table></article>"
+)
+
+
+def _sin_red(monkeypatch: pytest.MonkeyPatch, *, plano: str, renderizado: str) -> None:
+    """Sustituye los dos transportes en su módulo de origen.
+
+    `probar()` los importa **dentro** de la función, así que el nombre no
+    existe en `cli.fuentes` y parchearlo ahí no haría nada: el `from … import`
+    se resuelve en cada llamada contra el módulo original.
+    """
+    from rates_agent import fetcher as mod_fetcher
+    from rates_agent import navegador as mod_navegador
+
+    monkeypatch.setattr(
+        mod_fetcher,
+        "TransporteHttpx",
+        lambda **_: TransporteFalso("httpx", texto=plano, renderiza_js=False),
+    )
+    monkeypatch.setattr(
+        mod_navegador,
+        "TransporteNavegador",
+        lambda **_: TransporteFalso("navegador", texto=renderizado, renderiza_js=True),
+    )
+
+
+class ModeloFalso(ProveedorLLM):
+    """Devuelve tasas sólo si el texto trae una tabla."""
+
+    def __init__(self) -> None:
+        self.nombre = "doble"
+        self.modelo = "doble"
+
+    async def completar(self, **kwargs: object) -> RespuestaLLM:
+        usuario = str(kwargs.get("usuario", ""))
+        tasas = [TASA] if "8.80" in usuario else []
+        return RespuestaLLM(
+            contenido=json.dumps({"tasas": tasas}),
+            modelo="doble",
+            tokens_entrada=100,
+            tokens_salida=10,
+            costo_usd=0.0001,
+            latencia_ms=1,
+        )
+
+    async def ping(self) -> bool:
+        return True
+
+
+TASA = {"producto": "Plazo", "tipo": "PLAZO", "plazo_dias": 364, "tasa_nominal": "8.80"}
+
+
+async def test_the_probe_reports_each_transport_separately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """La medición que decide de qué job cuelga cada fuente.
+
+    Hasta ahora `requiere_js` se ponía «por prudencia» —lo dice el propio YAML—
+    y de esa marca depende qué cadencia lee cada página. Medirla es lo que
+    convierte el reparto en un dato en vez de una suposición.
+    """
+    await run_seed()
+    fuente = await _klar()
+    _sin_red(monkeypatch, plano=SHELL, renderizado=CON_TABLA)
+    monkeypatch.setattr(fuentes, "ClienteLLM", lambda: ClienteLLM(ModeloFalso()))
+
+    salida = await fuentes.probar(fuente.id, extraer_tasas=True)
+
+    assert "httpx      " in salida and "navegador  " in salida
+    assert "0 tasas" in salida and "1 tasas" in salida
+    assert "requiere_js: True" in salida
+
+
+async def test_the_probe_says_no_when_the_plain_client_is_enough(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Si httpx ya trae la tabla, el navegador sobra."""
+    await run_seed()
+    fuente = await _klar()
+    _sin_red(monkeypatch, plano=CON_TABLA, renderizado=CON_TABLA)
+    monkeypatch.setattr(fuentes, "ClienteLLM", lambda: ClienteLLM(ModeloFalso()))
+
+    salida = await fuentes.probar(fuente.id, extraer_tasas=True)
+
+    assert "requiere_js: False" in salida
+
+
+async def test_without_extracting_the_probe_refuses_to_guess(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Los caracteres solos no deciden, y la sonda no finge que sí.
+
+    Una tabla de tasas añade decenas de caracteres a una página que ya tiene
+    cientos de marketing: cualquier umbral sobre el tamaño sería inventarse el
+    criterio. Mejor decir que no se sabe.
+    """
+    await run_seed()
+    fuente = await _klar()
+    _sin_red(monkeypatch, plano=SHELL, renderizado=CON_TABLA)
+
+    salida = await fuentes.probar(fuente.id)
+
+    assert "sin veredicto" in salida
+    assert "requiere_js: True" not in salida
+    assert "no basta para decidir" in salida
+
+
+async def test_the_probe_leaves_the_source_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Se puede correr contra producción: no sella hash ni cuenta fallos."""
+    await run_seed()
+    fuente = await _klar()
+    async with session_scope() as session:
+        suya = await session.get(FuenteTasas, fuente.id)
+        assert suya is not None
+        suya.ultimo_hash = "b" * 64
+        suya.fallos_consecutivos = 3
+    _sin_red(monkeypatch, plano=SHELL, renderizado=CON_TABLA)
+
+    await fuentes.probar(fuente.id)
+
+    despues = await _klar()
+    assert despues.ultimo_hash == "b" * 64
+    assert despues.fallos_consecutivos == 3
 
 
 async def test_an_unknown_source_says_so_instead_of_failing_silently() -> None:
