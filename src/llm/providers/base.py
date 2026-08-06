@@ -33,6 +33,10 @@ class ErrorTiempoAgotado(ErrorProveedor):
     """El proveedor no contestó dentro del timeout. Transitorio."""
 
 
+class ErrorPresupuestoAgotado(ErrorProveedor):
+    """El techo de gasto diario ya se alcanzó. No es un fallo: es el límite."""
+
+
 class ErrorDeParseo(ErrorProveedor):
     """El modelo contestó algo que no se pudo convertir en lo que se esperaba.
 
@@ -45,8 +49,16 @@ class ErrorDeParseo(ErrorProveedor):
         self.contenido_crudo = contenido_crudo
 
 
-class ErrorPresupuestoAgotado(ErrorProveedor):
-    """El techo de gasto diario ya se alcanzó. No es un fallo: es el límite."""
+class RespuestaTruncada(ErrorDeParseo):
+    """El modelo llegó al techo de tokens a media respuesta.
+
+    Hereda de `ErrorDeParseo` porque el efecto es el mismo —lo que llega no se
+    puede parsear— pero es una causa distinta y accionable: la página trae más
+    de lo que cabe en el techo, no el modelo alucinó. Sin separarlas, el
+    mensaje mandaba a buscar una alucinación inexistente, y como el reintento
+    del extractor sólo cubría errores de validación, la fuente se truncaba
+    igual en cada corrida indefinidamente.
+    """
 
 
 # ─── Respuesta ────────────────────────────────────────────────
@@ -150,7 +162,12 @@ class ProveedorLLM(ABC):
         await self.cerrar()
 
 
+#: Lo que devuelve el proveedor en `finish_reason` cuando cortó por longitud.
+FIN_POR_LONGITUD = "length"
+
 __all__ = [
+    "FIN_POR_LONGITUD",
+    "RespuestaTruncada",
     "ErrorDeParseo",
     "ErrorLimiteDePeticiones",
     "ErrorPresupuestoAgotado",

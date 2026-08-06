@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from core.logging import get_logger
 from domain.enums import TipoProducto
 from llm.client import ClienteLLM
-from llm.providers.base import ErrorDeParseo
+from llm.providers.base import ErrorDeParseo, RespuestaTruncada
 from rates_agent import prompts
 
 log = get_logger(__name__)
@@ -33,6 +33,12 @@ log = get_logger(__name__)
 #: Por encima de esto es un error de captura o de lectura, no una oferta. El
 #: mismo umbral que usa el alta manual en `cli.tasas`.
 TASA_MAXIMA_PLAUSIBLE = Decimal("100")
+
+#: Techo de salida para la extracción. Se declara aquí y no se hereda del
+#: default del proveedor porque es una decisión de **esta** tarea: una tabla
+#: con quince plazos, su GAT nominal y su GAT real ocupa bastante más JSON que
+#: una respuesta cualquiera. Si aun así se corta, se reintenta con el doble.
+MAX_TOKENS = 6000
 
 
 class TasaExtraida(BaseModel):
@@ -112,9 +118,23 @@ async def extraer(
         contenido=contenido[:max_caracteres],
     )
 
-    datos, respuesta = await cliente.completar_json(
-        sistema=sistema, usuario=usuario, claves_requeridas=("tasas",)
-    )
+    try:
+        datos, respuesta = await cliente.completar_json(
+            sistema=sistema, usuario=usuario, claves_requeridas=("tasas",), max_tokens=MAX_TOKENS
+        )
+    except RespuestaTruncada:
+        # Una página con muchas tasas no cabe en el techo, y hasta ahora eso
+        # era indistinguible de una alucinación: el JSON cortado no cierra sus
+        # llaves y el parser decía «no se encontró un objeto JSON». Klar caía
+        # aquí en cada corrida, sin sellar el hash, así que volvía a truncarse
+        # igual la siguiente. Un reintento con el doble de techo.
+        log.warning("extraccion_truncada", url=url, max_tokens=MAX_TOKENS)
+        datos, respuesta = await cliente.completar_json(
+            sistema=sistema,
+            usuario=usuario,
+            claves_requeridas=("tasas",),
+            max_tokens=MAX_TOKENS * 2,
+        )
 
     try:
         extraccion = _validar(datos)
@@ -128,6 +148,7 @@ async def extraer(
             usuario=f"{usuario}\n\nTu respuesta anterior no fue válida: {exc}\n"
             f"Corrígela respetando el formato pedido.",
             claves_requeridas=("tasas",),
+            max_tokens=MAX_TOKENS,
         )
         try:
             extraccion = _validar(datos)
