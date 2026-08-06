@@ -100,6 +100,8 @@ export interface FilaComparador {
   cobertura: Cobertura;
   banderas: Bandera[];
   procedencia: Procedencia;
+  /** La letra pequeña: promociones, membresías, requisitos de uso. */
+  condiciones: string | null;
   escalonada: boolean;
   /** Escalera por saldo; vacía = la tasa aplica a todo el saldo. */
   tramos: TramoTasa[];

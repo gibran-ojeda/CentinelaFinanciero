@@ -198,6 +198,18 @@ async def test_a_tiered_row_carries_its_ladder(api_lectura: AsyncClient) -> None
     assert cuerpo["monto_consultado"] is None
 
 
+async def test_a_row_carries_the_small_print_of_its_rate(api_lectura: AsyncClient) -> None:
+    """`Tasa.notas` guardaba la letra pequeña y no salía por ninguna parte: la
+    fila del comparador no tenía ese campo. Una tasa condicionada sin su
+    condición al lado se lee como incondicional."""
+    cuerpo = (await api_lectura.get(RUTA)).json()
+    por_slug = {f["producto_slug"]: f for f in cuerpo["filas"]}
+
+    assert "por encima no se publica rendimiento" in por_slug["openbank-vista"]["condiciones"]
+    # Y una tasa sin letra pequeña no inventa ninguna.
+    assert por_slug["finsus-plazo-91"]["condiciones"] is None
+
+
 async def test_an_amount_switches_every_row_to_its_effective_rate(
     api_lectura: AsyncClient,
 ) -> None:

@@ -259,6 +259,7 @@ async def construir_comparador(
             cobertura=cobertura_de(c.producto.institucion, contexto.valor_udi),
             banderas=[bandera_desde_orm(b) for b in c.banderas],
             procedencia=procedencia(c.tasa),
+            condiciones=c.tasa.notas,
             escalonada=bool(c.tasa.tramos),
             tramos=tramos_schema(c.tasa),
             tasa_efectiva=c.tasa_efectiva,

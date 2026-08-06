@@ -145,6 +145,15 @@ class FilaComparador(Esquema):
     banderas: list[BanderaSchema]
     procedencia: Procedencia
 
+    condiciones: str | None = Field(
+        default=None,
+        description=(
+            "La letra pequeña de esta observación: promociones, membresías, "
+            "requisitos de uso. Va en la fila porque una tasa condicionada sin "
+            "su condición al lado se lee como incondicional."
+        ),
+    )
+
     escalonada: bool = False
     tramos: list[TramoSchema] = Field(
         default_factory=list,
