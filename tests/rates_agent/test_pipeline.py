@@ -36,6 +36,11 @@ cambio sin previo aviso. El monto mínimo de inversión es de cien pesos.</p>
 
 
 class TransporteFalso:
+    # Representa la cadena entera, no un eslabón: estos tests van sobre el
+    # pipeline y casi todas las fuentes del seed piden renderizado. Qué
+    # transporte resuelve cada fuente lo prueba `test_fetcher`.
+    renderiza_js = True
+
     def __init__(self, nombre: str, *guion: str | ErrorDescarga) -> None:
         self.nombre = nombre
         self._guion = list(guion)
@@ -120,7 +125,7 @@ async def test_level3_sources_are_not_fed_to_the_extractor() -> None:
         )
     assert nivel3  # el seed trae las cuatro portadas de nivel 3
 
-    urls = {url for _, url, _, _ in await pipeline._fuentes(None)}
+    urls = {fila[1] for fila in await pipeline._fuentes(None)}
 
     assert not urls & nivel3
     assert urls  # y las de nivel 2 siguen entrando
@@ -472,34 +477,22 @@ def test_a_total_failure_is_distinguished_from_a_partial_one() -> None:
 # ─── El job ───────────────────────────────────────────────────
 
 
-def test_the_job_chain_includes_the_browser_when_the_gate_allows_js() -> None:
-    """El hueco silencioso que este ensamblaje existe para cerrar.
+def test_each_pass_carries_exactly_one_transport() -> None:
+    """Un transporte por pasada, no una cadena.
 
-    Ensanchar la consulta a las fuentes JS sin darle un navegador a la cadena
-    haría que las once devolvieran HTML sin renderizar, contadas como «vacías»
-    con corrida EXITOSA — cada lunes, sin alarma. Construir el transporte no
-    lanza Chromium (el arranque es perezoso), así que esto corre sin browser.
+    Encadenarlos era el fallo silencioso: httpx contestaba primero con el
+    envoltorio de la SPA, la descarga se daba por buena y Chromium no llegaba a
+    abrirse. Con el reparto por `requiere_js` no hay nada que encadenar — cada
+    fuente ya sabe con qué se lee. Construir el transporte no lanza Chromium
+    (el arranque es perezoso), así que esto corre sin browser.
     """
-    import time
-
-    import core.config_store as cs
     from scheduler.jobs.tasas import _armar_fetcher
 
-    previo = cs._snapshot
-    try:
-        cs._snapshot = cs.ConfigSnapshot(
-            values={"tasas_fetch_solo_sin_js": False}, loaded_at=time.monotonic()
-        )
-        con_navegador = [t.nombre for t in _armar_fetcher()._transportes]
-        cs._snapshot = cs.ConfigSnapshot(
-            values={"tasas_fetch_solo_sin_js": True}, loaded_at=time.monotonic()
-        )
-        solo_http = [t.nombre for t in _armar_fetcher()._transportes]
-    finally:
-        cs._snapshot = previo
+    barata = [t.nombre for t in _armar_fetcher(con_navegador=False)._transportes]
+    lenta = [t.nombre for t in _armar_fetcher(con_navegador=True)._transportes]
 
-    assert con_navegador == ["httpx", "navegador"]
-    assert solo_http == ["httpx"]
+    assert barata == ["httpx"]
+    assert lenta == ["navegador"]
 
 
 async def test_the_job_hands_its_own_fetcher_to_the_pipeline(
@@ -517,12 +510,81 @@ async def test_the_job_hands_its_own_fetcher_to_the_pipeline(
 
     monkeypatch.setattr(jobs_tasas.pipeline, "correr", _captura)
 
-    await jobs_tasas.tasas_fetch_dirigido()
+    await jobs_tasas.tasas_fetch_rapido()
 
     assert capturado["fetcher"] is not None
     # `cliente` no viaja: con las dos piezas puestas, `propios` sería False y
     # el pipeline dejaría Chromium vivo entre corridas.
     assert "cliente" not in capturado
+
+
+async def test_the_two_passes_split_the_catalogue_without_overlapping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cada fuente cae en una sola de las dos corridas.
+
+    Si se solaparan, las dos escribirían `ultimo_hash` sobre las mismas filas y
+    la barata dejaría a la del navegador viendo «sin cambios» sobre un texto
+    que ella nunca renderizó.
+    """
+    from scheduler.jobs import tasas as jobs_tasas
+
+    await run_seed()
+    vistas: dict[str, object] = {}
+
+    async def _captura(**kwargs: object) -> pipeline.ReporteCorrida:
+        vistas[str(kwargs["solo_requieren_js"])] = kwargs["solo_requieren_js"]
+        return pipeline.ReporteCorrida()
+
+    monkeypatch.setattr(jobs_tasas.pipeline, "correr", _captura)
+
+    await jobs_tasas.tasas_fetch_rapido()
+    await jobs_tasas.tasas_fetch_navegador()
+
+    # `None` sería «todas», y las dos pasadas pisándose.
+    assert set(vistas.values()) == {False, True}
+
+    rapidas = {f[1] for f in await pipeline._fuentes(False)}
+    lentas = {f[1] for f in await pipeline._fuentes(True)}
+    assert rapidas and lentas
+    assert not (rapidas & lentas)
+    # Y juntas siguen siendo el catálogo entero de nivel 2.
+    assert rapidas | lentas == {f[1] for f in await pipeline._fuentes(None)}
+
+
+async def test_the_browser_pass_stands_down_instead_of_reading_blind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """El repliegue `tasas_fetch_solo_sin_js` omite la pasada, no la degrada.
+
+    Armarle una cadena sin navegador la haría leer el envoltorio de cada SPA y
+    contar sus fuentes como vacías: una corrida EXITOSA que no leyó nada.
+    """
+    from core.config_store import effective, set_value
+    from scheduler.jobs import tasas as jobs_tasas
+
+    await run_seed()
+
+    async def _no_deberia(**kwargs: object) -> pipeline.ReporteCorrida:
+        raise AssertionError("la pasada del navegador no debía correr")
+
+    monkeypatch.setattr(jobs_tasas.pipeline, "correr", _no_deberia)
+    await set_value("tasas_fetch_solo_sin_js", "true", actor="test")
+    await effective.refresh()
+    try:
+        await jobs_tasas.tasas_fetch_navegador()
+    finally:
+        await set_value("tasas_fetch_solo_sin_js", "false", actor="test")
+        await effective.refresh()
+
+    async with session_scope() as session:
+        corrida = await session.scalar(
+            select(JobRun)
+            .where(JobRun.job_id == jobs_tasas.JOB_ID_NAVEGADOR)
+            .order_by(JobRun.id.desc())
+        )
+    assert corrida is not None
+    assert corrida.estado is EstadoJob.OMITIDO
 
 
 async def test_the_job_fails_when_every_source_fails(
@@ -546,7 +608,7 @@ async def test_the_job_fails_when_every_source_fails(
     monkeypatch.setattr(jobs_tasas.pipeline, "correr", _todo_fallo)
 
     with pytest.raises(RuntimeError, match="3 fuentes fallaron"):
-        await jobs_tasas.tasas_fetch_dirigido()
+        await jobs_tasas.tasas_fetch_rapido()
 
     async with session_scope() as session:
         corrida = await session.scalar(
@@ -586,13 +648,13 @@ async def test_a_total_failure_marks_the_cli_run_as_failed_without_raising(
 
 async def test_the_hot_kill_switch_skips_the_job() -> None:
     from core.config_store import effective, set_value
-    from scheduler.jobs.tasas import JOB_ID, tasas_fetch_dirigido
+    from scheduler.jobs.tasas import JOB_ID, tasas_fetch_rapido
 
     await run_seed()
     await set_value("tasas_fetch_enabled", "false", actor="test")
     await effective.refresh()
     try:
-        await tasas_fetch_dirigido()
+        await tasas_fetch_rapido()
     finally:
         await set_value("tasas_fetch_enabled", "true", actor="test")
         await effective.refresh()

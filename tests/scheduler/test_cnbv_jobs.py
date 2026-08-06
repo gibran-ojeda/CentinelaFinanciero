@@ -91,9 +91,18 @@ def _instalar(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, doble: Descargado
 
 
 async def _ultima(job_id: str) -> JobRun:
+    """La corrida más reciente, desempatada por `id`.
+
+    Por `id` y no por `inicio`: ese campo lo pone `now()` de Postgres, que
+    devuelve el instante en que **empezó la transacción** — dos corridas
+    seguidas pueden empatar, y entonces `LIMIT 1` elige una arbitraria. En un
+    test que corre el job dos veces para comprobar que la segunda se omite,
+    empatar significa leer el estado de la primera. `id` es la secuencia:
+    monótona y única. Mismo criterio que `cli/revisiones.py`.
+    """
     async with session_scope() as session:
         fila = await session.scalar(
-            select(JobRun).where(JobRun.job_id == job_id).order_by(desc(JobRun.inicio)).limit(1)
+            select(JobRun).where(JobRun.job_id == job_id).order_by(desc(JobRun.id)).limit(1)
         )
     assert fila is not None
     return fila

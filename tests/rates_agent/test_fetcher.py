@@ -20,7 +20,10 @@ from rates_agent.fetcher import (
     Descarga,
     ErrorDescarga,
     Fetcher,
+    SinTransporteCapaz,
     TransporteHttpx,
+    _texto_legible,
+    una_linea,
 )
 
 PAGINA = """
@@ -42,8 +45,13 @@ VACIA = "<html><body><div id='root'></div><script src='app.js'></script></body><
 class TransporteFalso:
     """Devuelve lo que se le ponga en el guion, en orden."""
 
-    def __init__(self, nombre: str, *guion: str | ErrorDescarga) -> None:
+    def __init__(
+        self, nombre: str, *guion: str | ErrorDescarga, renderiza_js: bool | None = None
+    ) -> None:
         self.nombre = nombre
+        # Por defecto renderiza el que se llama «navegador», que es como se
+        # nombra en el resto de los tests.
+        self.renderiza_js = nombre == "navegador" if renderiza_js is None else renderiza_js
         self._guion = list(guion)
         self.llamadas = 0
 
@@ -123,6 +131,105 @@ async def test_a_chain_that_is_empty_everywhere_returns_none() -> None:
     f = _fetcher(TransporteFalso("httpx", VACIA), TransporteFalso("navegador", VACIA))
 
     assert await f.descargar(URL) is None
+
+
+# ─── La segunda pasada de extracción ──────────────────────────
+
+#: Una tabla montada con divs de maquetación, que es como la publican
+#: Crediclub, kubo y Finsus. `trafilatura.extract` la descarta entera junto con
+#: el menú: la cifra está en el HTML y no llega al texto.
+TABLA_EN_DIVS = """
+<html><body>
+<nav><a href="/">Inicio</a><a href="/creditos">Créditos</a></nav>
+<div class="hero"><h1>Invierte con nosotros</h1>
+<p>Somos una institución regulada por la CNBV y tu dinero está protegido por el
+fondo de protección al ahorro. Abre tu cuenta desde la app en minutos, sin
+comisiones por manejo de cuenta ni saldo mínimo, y empieza a ver crecer tus
+ahorros desde el primer peso que deposites con nosotros hoy mismo.</p></div>
+<div class="tasas"><div class="fila"><span>364 días</span><span>8.80%</span></div>
+<div class="fila"><span>A la vista</span><span>6.30%</span></div></div>
+<footer>Aviso de privacidad</footer>
+</body></html>
+"""
+
+
+def test_a_rate_table_the_filter_discards_is_rescued() -> None:
+    """Medido el 2026-08-06 en Crediclub, kubo y Finsus.
+
+    Las cifras estaban en el HTML —y también en el DOM renderizado, así que no
+    era cosa del navegador— y ninguna llegaba al texto: `extract` se lleva por
+    delante lo que no reconoce como cuerpo del artículo.
+    """
+    texto = _texto_legible(TABLA_EN_DIVS)
+
+    assert "8.80%" in texto
+    assert "6.30%" in texto
+
+
+def test_the_clean_reading_wins_when_it_already_has_the_rates() -> None:
+    """La segunda pasada arrastra menú y pie: sólo entra si hace falta."""
+    texto = _texto_legible(PAGINA)
+
+    assert "8.69" in texto
+    # `PAGINA` es un artículo con su tabla dentro, que `extract` sí conserva:
+    # el rescate no debería haberse disparado y con él no vendría el `<nav>`.
+    assert "Inicio" not in texto
+
+
+def test_a_page_with_no_rates_anywhere_stays_empty() -> None:
+    """Sin porcentajes en ninguna de las dos pasadas, no hay nada que rescatar."""
+    assert _texto_legible(VACIA).strip() == ""
+
+
+# ─── La marca `requiere_js` manda sobre el transporte ─────────
+
+
+async def test_a_js_source_is_not_resolved_by_the_plain_client() -> None:
+    """El caso Crediclub, y la razón de que el comparador siguiera vacío.
+
+    httpx devuelve el shell de la SPA —nav, pie, aviso legal, copy de
+    marketing— que pasa de sobra el umbral de caracteres. La cadena daba la
+    descarga por buena, Chromium no llegaba a abrirse, y el extractor leía una
+    página perfectamente legible que no contenía ninguna tabla de tasas.
+    """
+    plano = TransporteFalso("httpx", PAGINA)  # texto de sobra, y aun así no gana
+    navegador = TransporteFalso("navegador", PAGINA.replace("8.69", "9.99"))
+
+    resultado = await _fetcher(plano, navegador).descargar(URL, requiere_js=True)
+
+    assert isinstance(resultado, Descarga)
+    assert resultado.transporte == "navegador"
+    assert plano.llamadas == 0
+    assert "9.99" in resultado.texto
+
+
+async def test_a_source_without_the_mark_still_prefers_the_cheap_client() -> None:
+    """Lo barato primero sigue siendo la regla para todo lo demás."""
+    plano = TransporteFalso("httpx", PAGINA)
+    navegador = TransporteFalso("navegador", PAGINA)
+
+    resultado = await _fetcher(plano, navegador).descargar(URL)
+
+    assert isinstance(resultado, Descarga)
+    assert resultado.transporte == "httpx"
+    assert navegador.llamadas == 0
+
+
+async def test_a_js_source_in_a_chain_without_a_browser_says_so() -> None:
+    """Una fuente JS en la corrida barata es un error de reparto, no suyo.
+
+    Tiene que distinguirse de una fuente caída: si saliera como fallo normal,
+    el contador de salud la acercaría a la autopausa por algo que decidió el
+    scheduler, y acabaríamos apagando páginas que funcionan.
+    """
+    plano = TransporteFalso("httpx", PAGINA)
+    f = _fetcher(plano)
+
+    with pytest.raises(SinTransporteCapaz, match="necesita renderizado"):
+        await f.descargar(URL, requiere_js=True)
+
+    assert plano.llamadas == 0
+    assert f.hosts_en_circuito == []
 
 
 # ─── Capa 3: circuit breaker por host ─────────────────────────
@@ -261,6 +368,41 @@ async def test_a_disallowing_robots_is_not_an_error() -> None:
     assert f.hosts_en_circuito == []
 
 
+@respx.mock
+async def test_an_html_robots_is_not_parsed_as_rules() -> None:
+    """El caso DiDi: su robots.txt redirige a una página de 404 que da 200.
+
+    `RobotFileParser` sobre HTML produce un parser vacío, que permite todo — la
+    respuesta correcta, pero por accidente. Se descarta explícitamente para que
+    «no hay reglas» y «no llegué a leer reglas» dejen de ser lo mismo.
+    """
+    respx.get("https://institucion.test/robots.txt").mock(
+        return_value=httpx.Response(200, html="<html><body>Página no encontrada</body></html>")
+    )
+    f = Fetcher([TransporteFalso("httpx", PAGINA)], respetar_robots=True)  # type: ignore[list-item]
+
+    parser = await f._leer_robots(URL)  # noqa: SLF001 — es lo que se prueba
+
+    assert parser is None
+    # Y el efecto es el del estándar: sin reglas legibles, se permite.
+    assert await f._permitido(URL) is True  # noqa: SLF001
+
+
+@respx.mock
+async def test_a_plain_text_robots_is_still_honoured() -> None:
+    """Lo que no puede pasar es dejar de respetar un robots.txt de verdad."""
+    respx.get("https://institucion.test/robots.txt").mock(
+        return_value=httpx.Response(
+            200,
+            text="User-agent: *\nDisallow: /",
+            headers={"content-type": "text/plain; charset=utf-8"},
+        )
+    )
+    f = Fetcher([TransporteFalso("httpx", PAGINA)], respetar_robots=True)  # type: ignore[list-item]
+
+    assert await f._permitido(URL) is False  # noqa: SLF001
+
+
 # ─── El transporte de navegador ───────────────────────────────
 
 
@@ -389,6 +531,64 @@ async def test_a_host_that_never_answers_is_not_transient(error: Exception) -> N
 
     assert exc.value.transitorio is False
     await t.cerrar()
+
+
+# ─── El mensaje de error ──────────────────────────────────────
+
+
+def test_a_message_is_flattened_and_cut_at_a_word() -> None:
+    """El «Call log» de Playwright viene multilínea y acaba en una tabla."""
+    crudo = 'Page.goto: net::ERR_CONNECTION_CLOSED\nCall log:\n  - navigating to "x"'
+
+    assert "\n" not in una_linea(crudo, 500)
+    assert una_linea(crudo, 500) == (
+        'Page.goto: net::ERR_CONNECTION_CLOSED Call log: - navigating to "x"'
+    )
+    # Y el corte respeta la palabra: antes salía `waiting until "domcon`.
+    assert una_linea("waiting until domcontentloaded", 20) == "waiting until…"
+
+
+def test_a_message_without_spaces_is_not_cut_to_nothing() -> None:
+    """Una URL larga no tiene dónde cortar: vale más truncada que vacía."""
+    largo = "https://institucion.test/" + "a" * 200
+
+    recortado = una_linea(largo, 40)
+
+    assert len(recortado) == 41  # 40 + la elipsis
+    assert recortado.startswith("https://institucion.test/")
+
+
+async def test_the_error_names_the_url_once() -> None:
+    """El log del 2026-08-02 la traía tres veces en la misma línea.
+
+    `descargar` pasa `str(exc)` —que ya empieza por la URL— como resumen al
+    backoff, y el backoff la anteponía otra vez. Con el nombre del transporte
+    duplicado encima, el mensaje era ilegible justo donde más se lee: en
+    `cli fuentes list`.
+    """
+    transitorio = ErrorDescarga("HTTP 503", transitorio=True)
+    f = _fetcher(
+        TransporteFalso("httpx", transitorio, transitorio, transitorio),
+        max_reintentos=0,
+        esperas_backoff_s=(0.01,),
+    )
+
+    with pytest.raises(CadenaAgotada) as exc:
+        await f.descargar(URL)
+
+    assert str(exc.value).count(URL) == 1
+    assert "backoff agotado" in str(exc.value)
+
+
+async def test_the_transport_name_is_not_repeated() -> None:
+    """Salía `navegador → navegador: Page.goto: …`."""
+    t = TransporteFalso("navegador", ErrorDescarga("navegador: Page.goto: falló"))
+    f = _fetcher(t, max_reintentos=0)
+
+    with pytest.raises(CadenaAgotada) as exc:
+        await f.descargar(URL)
+
+    assert "navegador → Page.goto: falló" in str(exc.value)
 
 
 async def test_a_host_that_never_answers_still_opens_its_circuit() -> None:

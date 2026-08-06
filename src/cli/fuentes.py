@@ -15,13 +15,16 @@ hasta que alguien lo lleve al repo.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select
 
 from core.db import session_scope
 from core.logging import get_logger
+from core.settings import settings
 from domain.orm import FuenteTasas, Institucion
+from llm.client import ClienteLLM
 
 log = get_logger(__name__)
 
@@ -101,6 +104,203 @@ async def listar(*, solo_rotas: bool = False) -> str:
     return "\n".join(lineas)
 
 
+@dataclass(frozen=True, slots=True)
+class _Medida:
+    """Lo que sacó un transporte de una URL."""
+
+    caracteres: int | None = None
+    tasas: int | None = None
+    error: str | None = None
+
+    def render(self) -> str:
+        if self.error is not None:
+            return self.error
+        if self.caracteres is None:
+            return "vacía"
+        cuenta = f"{self.caracteres} caracteres"
+        return cuenta if self.tasas is None else f"{cuenta}, {self.tasas} tasas"
+
+
+async def probar(fuente_id: int | None = None, *, extraer_tasas: bool = False) -> str:
+    """Descarga cada fuente con **cada transporte por separado**.
+
+    La sonda que faltaba. `requiere_js` decide desde qué job se lee una fuente,
+    y hasta ahora nadie la había medido: el YAML dice, literalmente, que las
+    nuevas van marcadas `true` «por prudencia». Repartir dos cadencias sobre una
+    suposición es construir encima de nada.
+
+    `cli tasas fetch --solo-navegador` no sirve para esto: filtra **qué
+    fuentes** corren, no con qué se descargan.
+
+    **Los caracteres solos no deciden.** Una tabla de tasas añade unas decenas
+    de caracteres a una página de marketing que ya tiene cientos, así que
+    cualquier umbral sobre el tamaño sería adivinar. Con `--extraer` se le pasa
+    cada texto al extractor y se cuenta lo único que importa: si de ahí salen
+    tasas. Cuesta dos llamadas al modelo por fuente y es lo que da un veredicto
+    en vez de una pista.
+
+    No toca la base: ni sella hash, ni cuenta fallos, ni pausa nada. Se puede
+    correr contra producción sin consecuencias.
+    """
+    from rates_agent.fetcher import ErrorDescarga, Fetcher, TransporteHttpx, una_linea
+    from rates_agent.navegador import TransporteNavegador
+
+    async with session_scope() as session:
+        consulta = (
+            select(FuenteTasas, Institucion.nombre)
+            .join(Institucion, Institucion.id == FuenteTasas.institucion_id)
+            .where(FuenteTasas.nivel <= 2)
+            .order_by(Institucion.nombre, FuenteTasas.id)
+        )
+        if fuente_id is not None:
+            consulta = consulta.where(FuenteTasas.id == fuente_id)
+        filas = [
+            (f.id, f.url, nombre, f.requiere_js, f.activa)
+            for f, nombre in (await session.execute(consulta)).tuples().all()
+        ]
+
+    if not filas:
+        raise SystemExit(
+            f"Error: no existe la fuente {fuente_id}." if fuente_id else "  No hay fuentes."
+        )
+
+    agente = settings.fetch_user_agent
+    cliente = ClienteLLM() if extraer_tasas else None
+    lineas: list[str] = []
+    desacuerdos = 0
+    try:
+        for id_, url, institucion, requiere_js, activa in filas:
+            medidas: dict[str, _Medida] = {}
+            # El mismo User-Agent en las dos vías: se compara la página, no el bot.
+            for transporte in (
+                TransporteHttpx(user_agent=agente),
+                TransporteNavegador(user_agent=agente),
+            ):
+                # Un fetcher por transporte y sin backoff: se mide qué saca cada
+                # vía, no cómo se recupera la cadena de un sitio caído.
+                solo = Fetcher([transporte], esperas_backoff_s=())
+                try:
+                    descarga = await solo.descargar(url)
+                except ErrorDescarga as exc:
+                    medidas[transporte.nombre] = _Medida(error=una_linea(str(exc), 60))
+                else:
+                    medidas[transporte.nombre] = await _medir(
+                        descarga, cliente, institucion=institucion, url=url
+                    )
+                finally:
+                    await solo.cerrar()
+
+            veredicto = _veredicto(medidas)
+            marca = ""
+            if veredicto is not None and veredicto != requiere_js:
+                desacuerdos += 1
+                marca = "  ← la marca dice lo contrario"
+            lineas.append(f"\n  {institucion}  [{id_}]{'' if activa else '  (pausada)'}")
+            lineas.append(f"    {url}")
+            for nombre, medida in medidas.items():
+                lineas.append(f"      {nombre:<10} {medida.render()}")
+            if veredicto is None:
+                lineas.append("      → sin veredicto: mira las dos medidas y decide")
+            else:
+                lineas.append(f"      → requiere_js: {veredicto}{marca}")
+    finally:
+        if cliente is not None:
+            await cliente.cerrar()
+
+    if not extraer_tasas:
+        lineas.append("\n  Sin --extraer sólo se miden caracteres, y eso no basta para decidir:")
+        lineas.append("  una tabla de tasas pesa poco al lado del marketing de la página.")
+    elif desacuerdos:
+        lineas.append(
+            f"\n  {desacuerdos} fuentes con la marca al revés de lo medido. "
+            "Corregir en seeds/fuentes_tasas.yaml."
+        )
+    else:
+        lineas.append("\n  La marca coincide con lo medido en todas.")
+    return "\n".join(lineas)
+
+
+async def _medir(
+    descarga: object | None, cliente: ClienteLLM | None, *, institucion: str, url: str
+) -> _Medida:
+    """Caracteres de la descarga, y las tasas que saca de ella el extractor."""
+    from rates_agent.extractor import extraer
+
+    if descarga is None:
+        return _Medida()
+    texto: str = descarga.texto  # type: ignore[attr-defined]
+    if cliente is None:
+        return _Medida(caracteres=len(texto))
+    try:
+        extraccion = await extraer(cliente, institucion=institucion, url=url, contenido=texto)
+    except Exception as exc:  # noqa: BLE001 — la sonda reporta, no decide
+        return _Medida(caracteres=len(texto), error=f"{len(texto)} caracteres, extracción: {exc}")
+    return _Medida(caracteres=len(texto), tasas=len(extraccion.tasas))
+
+
+def _veredicto(medidas: dict[str, _Medida]) -> bool | None:
+    """`True` si sólo el navegador consigue tasas.
+
+    Sin haber extraído no hay veredicto: los caracteres dicen cuánto texto
+    trajo cada vía, no si el texto contiene lo que buscamos. Y si ninguna saca
+    tasas, el problema es otro —la URL, un WAF, el umbral— y decidir
+    `requiere_js` sobre eso sería inventarse el dato.
+    """
+    plano = medidas.get("httpx", _Medida()).tasas
+    navegador = medidas.get("navegador", _Medida()).tasas
+    if plano is None and navegador is None:
+        return None
+    if not (plano or navegador):
+        return None
+    return not plano
+
+
+async def purgar(*, dry_run: bool = False) -> str:
+    """Borra las fuentes que el YAML dejó de declarar y nunca produjeron nada.
+
+    La clave del upsert del seed incluye la URL, así que **corregir una URL
+    deja la fila vieja**: se apaga, no se borra, para conservar su historial.
+    Eso está bien una vez y mal a la décima — tras la revisión de URLs el
+    catálogo pasó de 18 filas a 27, y cada corrección futura añade otra.
+
+    Tres condiciones, y las tres a la vez, para que esto no pueda llevarse nada
+    que importe: apagada, apagada **por el seed** (no por una persona ni por el
+    contador de fallos), y sin haber producido una sola tasa en su vida. Con
+    `ultimo_exito_at` puesto, la fila se queda: es historial de algo que un día
+    publicó un dato.
+    """
+    from cli.seed import MOTIVO_PODA
+
+    async with session_scope() as session:
+        candidatas = (
+            (
+                await session.execute(
+                    select(FuenteTasas, Institucion.nombre)
+                    .join(Institucion, Institucion.id == FuenteTasas.institucion_id)
+                    .where(
+                        FuenteTasas.activa.is_(False),
+                        FuenteTasas.pausada_motivo == MOTIVO_PODA,
+                        FuenteTasas.ultimo_exito_at.is_(None),
+                    )
+                    .order_by(Institucion.nombre, FuenteTasas.id)
+                )
+            )
+            .tuples()
+            .all()
+        )
+        lineas = [f"    [{f.id:>3}] {inst:<24} {f.url}" for f, inst in candidatas]
+        if not dry_run:
+            for fuente, _ in candidatas:
+                await session.delete(fuente)
+
+    if not lineas:
+        return "  No hay fuentes que purgar."
+    cabecera = "  Se borrarían:" if dry_run else f"  {len(lineas)} fuentes borradas:"
+    if not dry_run:
+        log.info("fuentes_purgadas", total=len(lineas))
+    return "\n".join([cabecera, *lineas])
+
+
 async def _cambiar_activa(fuente_id: int, *, activa: bool, motivo: str | None) -> str:
     async with session_scope() as session:
         fuente = await session.get(FuenteTasas, fuente_id)
@@ -176,4 +376,4 @@ async def cambiar_url(fuente_id: int, url: str) -> str:
     )
 
 
-__all__ = ["cambiar_url", "listar", "pausar", "reanudar"]
+__all__ = ["cambiar_url", "listar", "pausar", "probar", "purgar", "reanudar"]

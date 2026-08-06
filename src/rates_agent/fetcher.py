@@ -37,6 +37,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import random
+import re
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -62,6 +63,15 @@ class CadenaAgotada(ErrorDescarga):
     """Ningún transporte pudo con la URL. El mensaje enumera qué intentó cada uno."""
 
 
+class SinTransporteCapaz(ErrorDescarga):
+    """La fuente pide renderizado y esta cadena no lo tiene.
+
+    Es un error de reparto —una fuente JS en la corrida sin navegador—, no de
+    la fuente, así que el pipeline lo cuenta aparte: contarlo como fallo la
+    acercaría a la autopausa por algo que hizo el scheduler.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class Descarga:
     """Una página leída con éxito."""
@@ -79,6 +89,9 @@ class Transporte(Protocol):
     """Una forma de traerse el HTML de una URL."""
 
     nombre: str
+    #: Si ejecuta el JavaScript de la página. Lo consulta `descargar` para no
+    #: dejar que un cliente plano resuelva una fuente que necesita renderizado.
+    renderiza_js: bool
 
     async def obtener(self, url: str, *, timeout_s: float) -> str:
         """HTML crudo. Lanza `ErrorDescarga` si no puede."""
@@ -98,6 +111,7 @@ class TransporteHttpx:
     """Cliente HTTP plano. Rápido, barato, y suficiente para la mayoría."""
 
     nombre = "httpx"
+    renderiza_js = False
 
     def __init__(self, *, user_agent: str) -> None:
         self._user_agent = user_agent
@@ -169,23 +183,70 @@ def _host(url: str) -> str:
     return (urlsplit(url).netloc or url).lower()
 
 
+def una_linea(texto: str, tope: int) -> str:
+    """Mensaje de una sola línea, acotado, y cortado donde acaba una palabra.
+
+    Los errores de Playwright traen un «Call log» multilínea, y ese texto acaba
+    en `fuentes_tasas.ultimo_error`, que `cli fuentes list` imprime dentro de
+    una tabla: un salto de línea ahí la parte en dos. Y cortar a bocajarro
+    dejaba cosas como `waiting until "domcon`, que no dice nada — el corte se
+    comía la palabra justo cuando empezaba a ser informativa.
+    """
+    limpio = " ".join(texto.split())
+    if len(limpio) <= tope:
+        return limpio
+    recortado = limpio[:tope]
+    espacio = recortado.rfind(" ")
+    # Sólo si queda mensaje suficiente: con una cadena sin espacios —una URL
+    # larga— cortar en el último espacio la dejaría en nada.
+    if espacio > tope // 2:
+        recortado = recortado[:espacio]
+    return recortado.rstrip(" ,;:") + "…"
+
+
 def _espera(intento: int, base: float, tope: float) -> float:
     return min(base * (2.0**intento), tope) * random.uniform(0.75, 1.25)  # noqa: S311
+
+
+#: Una página de tasas cuyo texto no trae ni un porcentaje es sospechosa: es la
+#: firma de que el extractor de contenido se llevó la tabla junto con el menú.
+_PORCENTAJE = re.compile(r"\d[\d.,]*\s*%")
 
 
 def _texto_legible(html: str, url: str | None = None) -> str:
     """Texto principal de la página. Cadena vacía si no hay nada que leer.
 
+    Dos pasadas, y la segunda existe por medición. `trafilatura.extract`
+    separa el contenido de la plantilla, que es justo lo que se quiere, pero
+    varias de estas tablas de tasas están montadas con divs de maquetación y
+    las descarta enteras. Medido el 2026-08-06: Crediclub, kubo y Finsus traían
+    sus cifras en el HTML y **ninguna** llegaba al texto — ni con navegador, así
+    que no era un problema de renderizado sino de qué se considera contenido.
+
+    `html2txt` no filtra nada: se trae el menú, el pie y el aviso de cookies.
+    Por eso sólo entra cuando la primera pasada no dejó ni un porcentaje, que
+    en una página de tasas significa que se llevó lo que veníamos a leer. Y si
+    tampoco lo rescata, gana la lectura limpia: menos tokens y mejor entrada.
+
     La `url` no cambia la extracción: viaja para que el aviso que trafilatura
-    emite al descartar una página diga **cuál** era. Sin ella el log repetía
-    `discarding data: None`, que no sirve para nada.
+    emite al descartar una página diga **cuál** era.
     """
     import trafilatura
 
-    extraido = trafilatura.extract(
-        html, url=url, include_comments=False, include_tables=True, favor_recall=True
-    )
-    return (extraido or "").strip()
+    fino = (
+        trafilatura.extract(
+            html, url=url, include_comments=False, include_tables=True, favor_recall=True
+        )
+        or ""
+    ).strip()
+    if _PORCENTAJE.search(fino):
+        return fino
+
+    burdo = (trafilatura.html2txt(html) or "").strip()
+    if _PORCENTAJE.search(burdo):
+        log.info("texto_rescatado_sin_filtrar", url=url, fino=len(fino), burdo=len(burdo))
+        return burdo
+    return fino or burdo
 
 
 @dataclass(slots=True)
@@ -296,20 +357,41 @@ class Fetcher:
             return None
         if resp.status_code >= 400:
             return None
+        # El RFC 9309 §2.3 dice `text/plain`, y por algo: `didiglobal.com`
+        # redirige su robots.txt a la página de 404, que contesta **200 con
+        # HTML**. Dárselo a `RobotFileParser` produce un parser vacío que
+        # permite todo — la respuesta correcta, pero por accidente, y sin poder
+        # distinguir «no hay reglas» de «no llegué a leer reglas».
+        # Sin cabecera se sigue adelante: hay servidores que no la mandan, y
+        # exigirla convertiría un robots.txt válido en uno ignorado.
+        tipo = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+        if tipo and tipo != "text/plain":
+            log.info("robots_no_es_texto", url=destino, content_type=tipo)
+            return None
         parser = RobotFileParser()
         parser.parse(resp.text.splitlines())
         return parser
 
     # ── La cadena ──
 
-    async def descargar(self, url: str) -> Descarga | None:
+    async def descargar(self, url: str, *, requiere_js: bool = False) -> Descarga | None:
         """Página leída, o `None` si toda la cadena respondió sana y vacía.
+
+        Args:
+            requiere_js: la página monta su contenido con JavaScript, así que
+                sólo puede resolverla un transporte que lo ejecute. **Sin esto
+                la cadena la resolvía con httpx**: el shell de una SPA —nav,
+                pie, aviso legal— pasa de sobra el umbral de caracteres, así
+                que la descarga se daba por buena, el navegador no llegaba a
+                abrirse y el extractor leía una página real sin ninguna tabla
+                de tasas. Cinco fuentes del catálogo estaban así.
 
         Raises:
             CadenaAgotada: nadie trajo datos y la cadena quedó degradada.
+            SinTransporteCapaz: la fuente pide renderizado y no hay con qué.
         """
         try:
-            return await self._recorrer_cadena(url)
+            return await self._recorrer_cadena(url, requiere_js=requiere_js)
         except CadenaAgotada as exc:
             # El backoff temporal se aplica **desde fuera** de la cadena y no
             # dentro: si `_recorrer_cadena` se llamara a sí misma a través de
@@ -317,12 +399,25 @@ class Fetcher:
             # primera ya tiene y la corrida se quedaría colgada ahí.
             if not (exc.transitorio and self._esperas) or self._backoff_agotado:
                 raise
-            return await self._con_backoff_temporal(url, str(exc))
+            return await self._con_backoff_temporal(url, str(exc), requiere_js=requiere_js)
 
-    async def _recorrer_cadena(self, url: str) -> Descarga | None:
+    async def _recorrer_cadena(self, url: str, *, requiere_js: bool = False) -> Descarga | None:
         """Un pase por la cadena de transportes. Sin esperas largas."""
         host = _host(url)
         estado = self._estado(host)
+
+        # El filtro va **antes** del circuito y de robots: si la cadena no
+        # puede con esta fuente, lo que sobra es todo lo demás.
+        capaces = (
+            [t for t in self._transportes if t.renderiza_js]
+            if requiere_js
+            else (self._transportes)
+        )
+        if not capaces:
+            raise SinTransporteCapaz(
+                f"{url}: la fuente necesita renderizado y esta cadena no lo tiene",
+                transitorio=False,
+            )
 
         if estado.abierto:
             raise CadenaAgotada(f"{host}: circuito abierto en esta corrida")
@@ -337,12 +432,19 @@ class Fetcher:
         degradada = False
         transitoria = False
 
-        for transporte in self._transportes:
+        for transporte in capaces:
             try:
                 html, n = await self._con_reintentos(transporte, url)
             except ErrorDescarga as exc:
                 self._contar_fallo(host)
-                intentos.append((transporte.nombre, str(exc)[:160]))
+                detalle = una_linea(str(exc), 160)
+                # El navegador prefija sus errores con su propio nombre, y el
+                # resumen ya lo antepone: sin esto sale `navegador → navegador:
+                # Page.goto: …`.
+                prefijo = f"{transporte.nombre}:"
+                if detalle.startswith(prefijo):
+                    detalle = detalle[len(prefijo) :].strip()
+                intentos.append((transporte.nombre, detalle))
                 degradada = True
                 transitoria = transitoria or exc.transitorio
                 continue
@@ -407,7 +509,9 @@ class Fetcher:
             estado.abierto = True
             log.warning("fetch_circuito_abierto", host=host, fallos=estado.fallos)
 
-    async def _con_backoff_temporal(self, url: str, resumen: str) -> Descarga | None:
+    async def _con_backoff_temporal(
+        self, url: str, resumen: str, *, requiere_js: bool = False
+    ) -> Descarga | None:
         """Espera y reprueba la cadena entera, con reset half-open.
 
         Serializado por un lock: si diez URLs caen a la vez, se espera una vez y
@@ -415,14 +519,17 @@ class Fetcher:
         volver a esperar veinte minutos por cada una.
         """
         async with self._lock_backoff:
+            # `resumen` es el mensaje de la `CadenaAgotada` que trajo hasta
+            # aquí, y ése ya empieza por la URL: anteponerla otra vez la dejaba
+            # repetida dos y tres veces en la misma línea de error.
             if self._backoff_agotado:
-                raise CadenaAgotada(f"{url}: {resumen} (backoff ya agotado en esta corrida)")
+                raise CadenaAgotada(f"{resumen} (backoff ya agotado en esta corrida)")
 
             # Otra URL pudo haber esperado y recuperado el host mientras ésta
             # aguardaba el lock: se reprueba antes de dormir de nuevo.
             self.reiniciar_circuitos()
             try:
-                return await self._recorrer_cadena(url)
+                return await self._recorrer_cadena(url, requiere_js=requiere_js)
             except CadenaAgotada:
                 pass
 
@@ -437,12 +544,12 @@ class Fetcher:
                 await asyncio.sleep(espera)
                 self.reiniciar_circuitos()
                 try:
-                    return await self._recorrer_cadena(url)
+                    return await self._recorrer_cadena(url, requiere_js=requiere_js)
                 except CadenaAgotada:
                     continue
 
             self._backoff_agotado = True
-            raise CadenaAgotada(f"{url}: {resumen} (backoff agotado)")
+            raise CadenaAgotada(f"{resumen} (backoff agotado)")
 
     async def cerrar(self) -> None:
         for transporte in self._transportes:
@@ -460,6 +567,8 @@ __all__ = [
     "Descarga",
     "ErrorDescarga",
     "Fetcher",
+    "SinTransporteCapaz",
     "Transporte",
     "TransporteHttpx",
+    "una_linea",
 ]

@@ -47,6 +47,50 @@ def test_non_sensitive_payload_is_untouched() -> None:
     assert _redact(event) == event
 
 
+def test_the_token_count_is_not_a_token() -> None:
+    """La métrica con la que se calibra el gasto del LLM salía redactada.
+
+    El patrón `token` está en la lista por `BANXICO_TOKEN` y la coincidencia es
+    por subcadena, así que `tokens` caía dentro. Todo el log de producción
+    decía `"tokens": "***"` y no había forma de saber por qué una llamada costó
+    cuatro veces más que la siguiente.
+    """
+    out = _redact(
+        {
+            "event": "llm_respuesta",
+            "tokens": 1420,
+            "tokens_entrada": 1200,
+            "tokens_salida": 220,
+            "costo_usd": 0.001125,
+        }
+    )
+
+    assert out["tokens"] == 1420
+    assert out["tokens_entrada"] == 1200
+    assert out["tokens_salida"] == 220
+
+
+def test_the_exemption_is_exact_and_does_not_leak_the_real_thing() -> None:
+    """La exención es por clave completa, no por prefijo.
+
+    Si fuera por prefijo, un `tokens_api_key` pasaría entero. Y las llaves que
+    motivaron el patrón siguen redactadas.
+    """
+    out = _redact(
+        {
+            "banxico_token": "abc123",
+            "access_token": "xyz789",
+            "tokens_api_key": "sk-secreto",
+            "tokens": 10,
+        }
+    )
+
+    assert out["banxico_token"] == REDACTED
+    assert out["access_token"] == REDACTED
+    assert out["tokens_api_key"] == REDACTED
+    assert out["tokens"] == 10
+
+
 def test_deep_recursion_is_bounded() -> None:
     """Un log jamás debe poder colgar el proceso por una estructura profunda."""
     deep: dict[str, Any] = {"password": "leaf"}

@@ -43,7 +43,7 @@ from llm.client import ClienteLLM
 from llm.providers.base import ErrorPresupuestoAgotado, ErrorProveedor
 from rates_agent.escalera import reconstruir_escalera
 from rates_agent.extractor import TasaExtraida, extraer
-from rates_agent.fetcher import CadenaAgotada, Fetcher
+from rates_agent.fetcher import CadenaAgotada, Fetcher, SinTransporteCapaz, una_linea
 from rates_agent.reviewer import Decision, HuecoCatalogo, revisar
 
 log = get_logger(__name__)
@@ -164,7 +164,7 @@ async def correr(
         arranque = monotonic()
         limite_s = float(effective.tasas_fetch_minutos_max) * 60.0
 
-        for indice, (fuente_id, url, institucion, hash_previo) in enumerate(fuentes):
+        for indice, (fuente_id, url, institucion, hash_previo, requiere_js) in enumerate(fuentes):
             transcurrido = monotonic() - arranque
             if limite_s > 0 and transcurrido >= limite_s:
                 # El techo se mira **antes** de empezar una fuente: cortar a
@@ -187,6 +187,7 @@ async def correr(
                     url=url,
                     institucion=institucion,
                     hash_previo=hash_previo,
+                    requiere_js=requiere_js,
                 )
             except ErrorPresupuestoAgotado:
                 # El techo hizo su trabajo. No es un fallo de la corrida y no
@@ -200,7 +201,9 @@ async def correr(
                 # violación de clave única con Openbank se llevó por delante
                 # las dos fuentes que faltaban, que no tenían nada que ver.
                 reporte.fallidas += 1
-                reporte.errores.append(f"{institucion}: {type(exc).__name__}: {str(exc)[:200]}")
+                reporte.errores.append(
+                    f"{institucion}: {type(exc).__name__}: {una_linea(str(exc), 200)}"
+                )
                 log.exception("fuente_fallida", institucion=institucion, url=url)
     finally:
         reporte.hosts_en_circuito = fetcher.hosts_en_circuito
@@ -212,7 +215,9 @@ async def correr(
     return reporte
 
 
-async def _fuentes(solo_requieren_js: bool | None) -> list[tuple[int, str, str, str | None]]:
+async def _fuentes(
+    solo_requieren_js: bool | None,
+) -> list[tuple[int, str, str, str | None, bool]]:
     """`(id, url, institución, hash previo)` de las fuentes activas.
 
     Se une con `instituciones` en vez de cargar una relación porque
@@ -233,7 +238,7 @@ async def _fuentes(solo_requieren_js: bool | None) -> list[tuple[int, str, str, 
         if solo_requieren_js is not None:
             consulta = consulta.where(FuenteTasas.requiere_js.is_(solo_requieren_js))
         filas = (await session.execute(consulta)).tuples().all()
-        return [(f.id, f.url, nombre, f.ultimo_hash) for f, nombre in filas]
+        return [(f.id, f.url, nombre, f.ultimo_hash, f.requiere_js) for f, nombre in filas]
 
 
 async def _procesar(
@@ -245,9 +250,17 @@ async def _procesar(
     url: str,
     institucion: str,
     hash_previo: str | None,
+    requiere_js: bool = False,
 ) -> None:
     try:
-        descarga = await fetcher.descargar(url)
+        descarga = await fetcher.descargar(url, requiere_js=requiere_js)
+    except SinTransporteCapaz as exc:
+        # La fuente pide navegador y esta corrida no lo lleva. Es un fallo del
+        # reparto entre jobs, no de la fuente: se anota y **no** cuenta contra
+        # su salud, o el scheduler acabaría autopausando páginas que funcionan.
+        reporte.errores.append(f"{institucion}: {exc}")
+        log.warning("fuente_sin_transporte", institucion=institucion, url=url)
+        return
     except CadenaAgotada as exc:
         reporte.fallidas += 1
         reporte.errores.append(f"{institucion}: {exc}")
@@ -454,18 +467,22 @@ async def _anotar_fallo(
         if fuente is None:
             return
         fuente.fallos_consecutivos += 1
-        fuente.ultimo_error = error[:500]
+        # De una línea: `cli fuentes list` lo imprime dentro de una tabla y un
+        # salto de línea del «Call log» de Playwright la parte en dos.
+        fuente.ultimo_error = una_linea(error, 300)
         if not fuente.activa or umbral <= 0 or fuente.fallos_consecutivos < umbral:
             return
         fuente.activa = False
-        fuente.pausada_motivo = f"{fuente.fallos_consecutivos} fallos seguidos: {error[:200]}"
+        fuente.pausada_motivo = (
+            f"{fuente.fallos_consecutivos} fallos seguidos: {una_linea(error, 200)}"
+        )
         reporte.fuentes_pausadas.append(f"{institucion} — {fuente.url}")
         log.warning(
             "fuente_pausada",
             institucion=institucion,
             url=fuente.url,
             fallos=fuente.fallos_consecutivos,
-            error=error[:200],
+            error=una_linea(error, 200),
         )
 
 

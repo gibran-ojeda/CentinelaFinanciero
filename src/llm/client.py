@@ -25,12 +25,14 @@ from core.logging import get_logger
 from core.settings import settings
 from llm import cost_tracker, parsers
 from llm.providers.base import (
+    FIN_POR_LONGITUD,
     ErrorLimiteDePeticiones,
     ErrorPresupuestoAgotado,
     ErrorProveedor,
     ErrorTiempoAgotado,
     ProveedorLLM,
     RespuestaLLM,
+    RespuestaTruncada,
 )
 from llm.providers.openai_compat import ProveedorOpenAICompat
 
@@ -145,8 +147,20 @@ class ClienteLLM:
         claves_requeridas: tuple[str, ...] = (),
         max_tokens: int = 4000,
     ) -> tuple[dict[str, Any], RespuestaLLM]:
-        """Como `completar`, pero devuelve el objeto JSON ya parseado."""
+        """Como `completar`, pero devuelve el objeto JSON ya parseado.
+
+        Un corte por longitud se distingue **antes** de parsear. El JSON
+        truncado no cierra sus llaves, así que el parser lo rechaza con «no se
+        encontró un objeto JSON» — el mismo mensaje que una alucinación, y a
+        quien lo lee le manda a buscar donde no hay nada. El proveedor ya sabía
+        la causa y nadie miraba el campo.
+        """
         respuesta = await self.completar(sistema=sistema, usuario=usuario, max_tokens=max_tokens)
+        if respuesta.finish_reason == FIN_POR_LONGITUD:
+            raise RespuestaTruncada(
+                f"la respuesta se cortó en el techo de {max_tokens} tokens",
+                contenido_crudo=(respuesta.contenido or "")[:2000],
+            )
         datos = parsers.parsear_json(
             respuesta.contenido,
             claves_requeridas=claves_requeridas,

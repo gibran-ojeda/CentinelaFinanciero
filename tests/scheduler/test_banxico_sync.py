@@ -57,7 +57,7 @@ def cliente_falso(monkeypatch: pytest.MonkeyPatch) -> ClienteFalso:
 async def _ultima_corrida() -> JobRun:
     async with session_scope() as session:
         fila = await session.scalar(
-            select(JobRun).where(JobRun.job_id == JOB_ID).order_by(desc(JobRun.inicio)).limit(1)
+            select(JobRun).where(JobRun.job_id == JOB_ID).order_by(desc(JobRun.id)).limit(1)
         )
     assert fila is not None
     return fila

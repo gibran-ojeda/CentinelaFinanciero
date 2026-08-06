@@ -18,7 +18,13 @@ import pytest
 
 from domain.enums import TipoProducto
 from llm.client import ClienteLLM
-from llm.providers.base import ErrorDeParseo, ProveedorLLM, RespuestaLLM
+from llm.providers.base import (
+    ErrorDeParseo,
+    ProveedorLLM,
+    RespuestaLLM,
+    RespuestaTruncada,
+)
+from rates_agent import prompts
 from rates_agent.extractor import Extraccion, TasaExtraida, extraer
 
 pytestmark = pytest.mark.requires_docker
@@ -96,16 +102,20 @@ def test_the_institution_tenor_is_kept_verbatim() -> None:
 
 
 class ProveedorGuionado(ProveedorLLM):
-    def __init__(self, *respuestas: str) -> None:
+    def __init__(self, *respuestas: str, cortar_hasta: int = 0) -> None:
         self.nombre = "doble"
         self.modelo = "doble"
         self._guion = list(respuestas)
         self.llamadas = 0
         self.ultimo_usuario = ""
+        self.techos: list[int] = []
+        #: Cuántas primeras llamadas salen con `finish_reason="length"`.
+        self._cortar_hasta = cortar_hasta
 
     async def completar(self, **kwargs: object) -> RespuestaLLM:
         self.llamadas += 1
         self.ultimo_usuario = str(kwargs.get("usuario", ""))
+        self.techos.append(int(kwargs.get("max_tokens", 0) or 0))
         contenido = self._guion.pop(0) if self._guion else '{"tasas": []}'
         return RespuestaLLM(
             contenido=contenido,
@@ -114,14 +124,15 @@ class ProveedorGuionado(ProveedorLLM):
             tokens_salida=50,
             costo_usd=0.0001,
             latencia_ms=1,
+            finish_reason="length" if self.llamadas <= self._cortar_hasta else "stop",
         )
 
     async def ping(self) -> bool:
         return True
 
 
-def _cliente(*respuestas: str) -> tuple[ClienteLLM, ProveedorGuionado]:
-    doble = ProveedorGuionado(*respuestas)
+def _cliente(*respuestas: str, cortar_hasta: int = 0) -> tuple[ClienteLLM, ProveedorGuionado]:
+    doble = ProveedorGuionado(*respuestas, cortar_hasta=cortar_hasta)
     return ClienteLLM(doble), doble
 
 
@@ -225,6 +236,57 @@ class TestExtraer:
             await extraer(cliente, institucion="X", url="https://x.test/", contenido="…")
 
         assert doble.llamadas == 2
+
+    async def test_a_truncated_answer_is_retried_with_a_bigger_ceiling(self) -> None:
+        """El caso Klar del 2026-08-06, que caía en bucle sin decir por qué.
+
+        Una página con muchas tasas no cabe en el techo; el JSON se corta a
+        media llave y el parser lo rechaza con «no se encontró un objeto JSON»,
+        que es lo mismo que dice ante una alucinación. Como el reintento del
+        extractor sólo cubría fallos de validación, no había segunda
+        oportunidad, y como el hash no se sellaba, la corrida siguiente repetía
+        el truncamiento exacto.
+        """
+        bueno = json.dumps({"tasas": [{"producto": "P", "tipo": "VISTA", "tasa_nominal": "8.0"}]})
+        # La primera respuesta sale con `finish_reason="length"`.
+        cliente, doble = _cliente('{"tasas": [{"produc', bueno, cortar_hasta=1)
+
+        resultado = await extraer(cliente, institucion="X", url="https://x.test/", contenido="…")
+
+        assert doble.llamadas == 2
+        assert len(resultado.tasas) == 1
+        # Y el segundo intento va con el doble de techo, que es lo que lo
+        # distingue de repetir la misma llamada esperando otra suerte.
+        assert doble.techos[1] == doble.techos[0] * 2
+
+    async def test_a_truncated_answer_says_so_instead_of_blaming_the_model(self) -> None:
+        """Si tampoco cabe al doble, el mensaje tiene que ser accionable."""
+        cliente, doble = _cliente(cortar_hasta=2)
+
+        with pytest.raises(RespuestaTruncada, match="techo de"):
+            await extraer(cliente, institucion="X", url="https://x.test/", contenido="…")
+
+        assert doble.llamadas == 2
+
+    async def test_the_prompt_asks_for_the_unconditional_rate(self) -> None:
+        """La regla que evita prometer un 15 % que exige traer la nómina.
+
+        Ualá publica 6.75 % base, 12 % con gasto y 15 % con nómina; Hey da
+        7.50 % a Fan/Pro y 4.00 % al resto. El modelo emitía una entrada por
+        variante, las tres chocaban en la misma `(tipo, plazo)` y el grupo
+        entero se descartaba como hueco de catálogo: nueve de once tasas
+        extraídas el 2026-08-06 se perdieron así.
+        """
+        cliente, doble = _cliente('{"tasas": []}')
+
+        await extraer(cliente, institucion="Ualá", url="https://uala.test/", contenido="…")
+
+        sistema = prompts.plantilla("extract_rates_system")
+        assert "membresía" in sistema and "nómina" in sistema
+        assert "una\n   sola entrada" in sistema or "una sola entrada" in sistema
+        # Y el tramo por monto sigue siendo una entrada por tramo: son dos ejes
+        # distintos y confundirlos rompería las escaleras de Openbank y DiDi.
+        assert "Un tramo por monto es una entrada por tramo" in sistema
 
     async def test_the_prompt_carries_the_institution_and_the_url(self) -> None:
         cliente, doble = _cliente('{"tasas": []}')

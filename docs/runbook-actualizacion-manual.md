@@ -4,7 +4,7 @@
 
 ## Qué hace la máquina y qué haces tú
 
-Las tasas de SOFIPOs y bancos digitales no tienen API: se publican en la página de cada institución, en tablas que cambian de sitio con cada rediseño. La [§15 del foundation](../foundation-comparador-financiero-mx.md) descarta el scraping por selectores CSS y lo resuelve con fetch dirigido y extracción por LLM — eso es el job `tasas_fetch_dirigido`, que corre cada 4 horas (rejilla ..:45).
+Las tasas de SOFIPOs y bancos digitales no tienen API: se publican en la página de cada institución, en tablas que cambian de sitio con cada rediseño. La [§15 del foundation](../foundation-comparador-financiero-mx.md) descarta el scraping por selectores CSS y lo resuelve con fetch dirigido y extracción por LLM — eso son los jobs `tasas_fetch_rapido` (cada 30 minutos, sin navegador) y `tasas_fetch_navegador` (cada 8 horas, con él).
 
 Lo que **no** es automático, y no debería serlo:
 
@@ -20,8 +20,7 @@ A partir de la segunda lectura, un movimiento pequeño de una tasa ya aprobada s
 
 > **Nota (2026-08-01):** la pasada semanal de las páginas con JavaScript
 > desde la laptop **ya no existe como paso**: Chromium vive en la imagen del
-> VPS y el job de tasas lee todas las fuentes activas de nivel 2 en cada
-> corrida — ver
+> VPS y las dos pasadas de nivel 2 cubren entre ambas el catálogo activo — ver
 > [despliegue.md](despliegue.md#navegador-en-el-vps--decisión-aplicada). Una
 > corrida a mano (`python -m cli tasas fetch`, con `--solo-navegador` /
 > `--sin-navegador` como filtros de depuración) sigue siendo posible: queda
@@ -134,12 +133,15 @@ Las cadencias, para saber qué esperar en esa lista:
 
 | Job | Cuándo | Qué hace |
 | --- | --- | --- |
-| `tasas_fetch_dirigido` | cada 4 h (`..:45`) | nivel 2: lee las páginas oficiales curadas |
+| `tasas_fetch_rapido` | cada 30 min (`..:05`, `..:35`) | nivel 2 sobre las fuentes que rinden a un cliente HTTP plano |
+| `tasas_fetch_navegador` | cada 8 h (`..:20`) | nivel 2 sobre las que sólo se leen renderizando; arranca Chromium |
 | `tasas_research_abierta` | cada 4 h (`..:15`) | nivel 3: busca en abierto **sólo** lo que el nivel 2 no cubre, y a cada institución una vez al día como mucho |
 | `banxico_sync_series` | 07:00 diario | series del SIE (UDI, INPC, CETES) |
 | `cnbv_boletines` | 05:30 diario | indicadores de salud |
 | `banderas_recompute` | 04:30 diario | recomputo de banderas |
 | `frescura_check` | 08:00 diario | sólo mira y reporta |
+
+Las dos pasadas de nivel 2 leen conjuntos **disjuntos** de fuentes: lo decide `requiere_js` de cada una, medido y anotado en `seeds/fuentes_tasas.yaml`. Que la barata corra 48 veces al día no multiplica el gasto, porque el pipeline cortocircuita por hash y una página que no se movió no llega al modelo. Si una fuente empieza a fallar tras un rediseño, `python -m cli fuentes probar --extraer` vuelve a medir con qué transporte se lee.
 
 El nivel 3 aparecerá casi siempre como `OMITIDO` con el motivo «ninguna institución quedó stale» — eso es lo bueno: significa que el fetch dirigido está cubriendo el catálogo. Y **el agregador no tiene job**: las filas `AGREGADOR` del CSV son una captura manual congelada, sólo sirven de contraste y se van retirando con `cli tasas retirar` conforme llegan las lecturas oficiales.
 

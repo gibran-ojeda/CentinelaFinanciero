@@ -26,7 +26,18 @@ la URL de la página donde se publica.
    la página dice «hasta 15%», eso es un máximo promocional y no la tasa del
    producto: no lo publiques como tasa — descríbelo en `notas`.
 
-5. **Fíjate en la fecha.** Una tasa de hace más de tres meses no sirve. Si no
+5. **Cuando la tasa depende de quién eres, entrega la de cualquiera.** Si la
+   diferencia la marca una membresía, la nómina, el gasto del mes o la
+   antigüedad —«15% si traes tu nómina», «8.50% siendo Plus»— devuelve **un
+   solo hallazgo por producto**: el que obtiene alguien que no cumple ninguna
+   condición, y describe las demás en `notas`.
+
+   Devolver varios del mismo producto no los publica todos: aguas abajo sólo
+   sobrevive el primero y el resto se descarta en silencio, así que elegir mal
+   aquí es elegir al azar allá. Si no puedes distinguir cuál es la
+   incondicional, entrega la más baja y dilo en `notas`.
+
+6. **Fíjate en la fecha.** Una tasa de hace más de tres meses no sirve. Si no
    puedes establecer que la página está vigente, baja la confianza a `baja`.
 
 ## Cómo trabajas

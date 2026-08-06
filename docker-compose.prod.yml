@@ -32,6 +32,15 @@ services:
       # RAM antes de que nadie se entere.
       - -c
       - max_connections=50
+      # El default de 5 minutos se midió el 2026-08-02: veinticuatro
+      # checkpoints en dos horas escribiendo entre cinco y ocho buffers cada
+      # uno — unos 20 KB. Con un catálogo de este tamaño el trabajo real cabe
+      # de sobra en una ventana más larga, y el VPS se comparte con el vecino,
+      # así que el fsync periódico por nada sí se nota. Alargar esto sube el
+      # tiempo de recuperación tras un corte, que con este volumen son
+      # segundos; `max_wal_size` no se toca porque nunca se acerca.
+      - -c
+      - checkpoint_timeout=15min
       - -c
       - log_min_duration_statement=1000
     deploy:

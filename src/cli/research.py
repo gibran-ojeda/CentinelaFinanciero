@@ -30,7 +30,15 @@ JOB_RESEARCH = "tasas_research_abierta"
 #: researcher pagan del mismo contador diario, así que el «máximo en un día»
 #: suma las tres familias de corridas — medir solo el research subestimaría
 #: qué tan cerca se anda del techo.
-JOBS_CON_COSTO = (JOB_RESEARCH, "tasas_fetch_dirigido", "tasas_fetch_manual")
+#: `tasas_fetch_dirigido` es el id que tuvo el fetch hasta que se partió en dos
+#: cadencias: se conserva para que el reporte no pierda el histórico.
+JOBS_CON_COSTO = (
+    JOB_RESEARCH,
+    "tasas_fetch_rapido",
+    "tasas_fetch_navegador",
+    "tasas_fetch_dirigido",
+    "tasas_fetch_manual",
+)
 
 #: La barra de la fase 9: por debajo de esto, el nivel 3 trae más trabajo de
 #: revisión del que resuelve.

@@ -38,9 +38,10 @@ Un objeto JSON con una sola clave `tasas`, con una entrada por producto:
 # Reglas que no se rompen
 
 1. **«Hasta X %» no es una tasa.** Es el techo de un tramo, de una promoción o
-   de un segmento de cliente. Si la página no dice a qué plazo y a qué monto
-   corresponde ese número, **no lo incluyas**. Prefiero cero tasas a una tasa
-   que nadie puede contratar.
+   de un segmento de cliente. Si la página no dice a qué plazo, a qué monto o
+   con qué condición corresponde ese número, **no lo incluyas**. Prefiero cero
+   tasas a una tasa que nadie puede contratar. Cuando la página sí lo explica,
+   mira la regla 4 (si el corte es por monto) o la 5 (si es por condición).
 
 2. **El plazo es el que dice la institución.** Si la página dice 360 días, es
    `360`. No lo redondees a 364, ni a 365, ni a "un año". Los plazos de las
@@ -57,12 +58,29 @@ Un objeto JSON con una sola clave `tasas`, con una entrada por producto:
    el primer peso: ponle `monto_minimo: "0"`. El `monto_minimo` de cada entrada
    es donde **empieza** su tramo, no el mínimo de contratación del producto.
 
-5. **«Sin tasas» es una respuesta correcta y frecuente.** Muchas páginas sólo
+5. **Cuando la tasa depende de quién eres, publica la de cualquiera.** Es
+   distinto del tramo por monto. Si la diferencia la marca una **membresía, la
+   nómina, el gasto del mes o la antigüedad** —«15 % si traes tu nómina»,
+   «8.50 % siendo Plus», «7.50 % exclusivo para clientes Pro»— devuelve **una
+   sola entrada**: la que obtiene alguien que no cumple ninguna condición. Las
+   demás descríbelas en `condiciones`.
+
+   Ejemplo. Si la página publica 6.75 % base, 12 % gastando $3,000 al mes y
+   15 % trayendo la nómina, la entrada es la de 6.75 % con
+   `condiciones: "12 % con $3,000 de gasto mensual; 15 % con nómina"`.
+
+   El motivo es de honestidad, no de formato: quien compara aquí no puede
+   contratar la tasa alta sin cumplir un requisito que quizá no cumpla, y
+   enseñársela como si fuera suya sería lo mismo que el «hasta X %» de la
+   regla 1. Si **no puedes distinguir** cuál es la incondicional, no elijas al
+   azar: devuelve la más baja y explícalo en `condiciones`.
+
+6. **«Sin tasas» es una respuesta correcta y frecuente.** Muchas páginas sólo
    traen publicidad. Si no encuentras una tasa con plazo y valor, devuelve
    `{"tasas": []}`. No hay ninguna penalización por no encontrar nada, y sí la
    hay por inventar.
 
-6. **No mezcles tasas de crédito con tasas de ahorro.** Si la página habla de
+7. **No mezcles tasas de crédito con tasas de ahorro.** Si la página habla de
    préstamos, esas tasas no van.
 
 Devuelve sólo el JSON. Sin explicación, sin markdown, sin comentarios.

@@ -120,21 +120,41 @@ def build_registry() -> tuple[JobSpec, ...]:
         ),
         JobSpec(
             id=tasas.JOB_ID,
-            func=tasas.tasas_fetch_dirigido,
-            # Rejilla absoluta cada 4 horas, al minuto 45: CronTrigger y no
-            # IntervalTrigger para que un redeploy no reinicie el reloj, y el
-            # :45 esquiva banderas (04:30), CNBV (05:30), Banxico (07:00) y
-            # frescura (08:00). El cortocircuito por hash del pipeline hace
-            # gratis la mayoría de corridas; la cadencia es para probar el
-            # ciclo y el dueño la bajará a diaria editando esta misma línea.
-            trigger=CronTrigger(hour="*/4", minute=45),
-            name="Lectura de tasas cada 4 horas",
+            func=tasas.tasas_fetch_rapido,
+            # Cada media hora a los minutos 5 y 35: CronTrigger y no
+            # IntervalTrigger para que un redeploy no reinicie el reloj, y esos
+            # minutos esquivan banderas (04:30), CNBV (05:30), Banxico (07:00)
+            # y frescura (08:00) — y también la pasada del navegador (..:20),
+            # que no tiene por qué arrancar Chromium mientras ésta corre.
+            #
+            # Cuarenta y ocho corridas al día no cuestan cuarenta y ocho veces
+            # más: el pipeline cortocircuita por hash y una página que no se
+            # movió no llama al LLM. Lo que se compra es reaccionar en minutos
+            # a un cambio de tasa en vez de en horas.
+            trigger=CronTrigger(minute="5,35"),
+            name="Lectura de tasas cada 30 minutos (sin navegador)",
             enabled=settings.scheduler_tasas_enabled,
-            # Dieciocho páginas, con reintentos y hasta veinte minutos de
-            # backoff temporal si toda la cadena cae por rate-limit. El TTL
-            # tiene que cubrir el peor caso o el lock caduca a media corrida y
-            # otra instancia empieza encima — y sigue muy por debajo de las 4
-            # horas entre corridas, así que tampoco pueden solaparse.
+            # Nueve páginas por httpx, sin renderizado: minutos, no horas. El
+            # TTL cubre el techo de duración (`tasas_fetch_minutos_max`) con
+            # margen y queda por debajo de los 30 minutos entre corridas, así
+            # que dos no pueden solaparse.
+            lock_ttl_seconds=1500,
+            tags=("ingesta",),
+        ),
+        JobSpec(
+            id=tasas.JOB_ID_NAVEGADOR,
+            func=tasas.tasas_fetch_navegador,
+            # Cada ocho horas al minuto 20, con id y lock propios: comparte el
+            # `lock_name` con nadie a propósito. Las dos pasadas leen conjuntos
+            # de fuentes disjuntos —`requiere_js` reparte— así que solaparse no
+            # corrompería nada; separar los minutos es sólo para no tener
+            # Chromium y la pasada barata compitiendo por la RAM del VPS.
+            trigger=CronTrigger(hour="*/8", minute=20),
+            name="Lectura de tasas con navegador cada 8 horas",
+            enabled=settings.scheduler_tasas_enabled,
+            # Cuatro páginas, pero con Chromium por medio y reintentos: es la
+            # cara de las dos. El TTL tiene que cubrir el peor caso o el lock
+            # caduca a media corrida y otra instancia empieza encima.
             lock_ttl_seconds=3600,
             tags=("ingesta",),
         ),

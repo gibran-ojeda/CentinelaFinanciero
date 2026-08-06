@@ -168,6 +168,25 @@ def build_parser() -> argparse.ArgumentParser:
     url_fuente.add_argument("fuente_id", type=int)
     url_fuente.add_argument("url")
 
+    probar_fuente = fuentes_sub.add_parser(
+        "probar", help="descarga con cada transporte y dice si de verdad necesita navegador"
+    )
+    # Sin id se prueban todas. No toca la base, así que no hace falta gate.
+    probar_fuente.add_argument("fuente_id", type=int, nargs="?", default=None)
+    probar_fuente.add_argument(
+        "--extraer",
+        action="store_true",
+        help="además pasa cada texto al extractor y cuenta tasas (cuesta tokens)",
+    )
+
+    purgar_fuentes = fuentes_sub.add_parser(
+        "purgar",
+        help="borra las que el YAML dejó de declarar y nunca produjeron una tasa",
+    )
+    purgar_fuentes.add_argument(
+        "--dry-run", action="store_true", help="lista lo que borraría, sin borrar"
+    )
+
     config = sub.add_parser("config", help="inspección y ajuste del ConfigStore")
     config_sub = config.add_subparsers(dest="subcomando", required=True)
 
@@ -290,6 +309,12 @@ async def _run(args: argparse.Namespace) -> int:
                     print(await fuentes_module.reanudar(args.fuente_id))
                 case "url":
                     print(await fuentes_module.cambiar_url(args.fuente_id, args.url))
+                case "probar":
+                    print("Transporte que necesita cada fuente:")
+                    print(await fuentes_module.probar(args.fuente_id, extraer_tasas=args.extraer))
+                case "purgar":
+                    print("Purga de fuentes retiradas del catálogo:")
+                    print(await fuentes_module.purgar(dry_run=args.dry_run))
             return 0
         case "config":
             match args.subcomando:
