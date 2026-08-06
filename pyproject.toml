@@ -73,7 +73,9 @@ ingest = [
 # traería su propio pool, sus reintentos y su jerarquía de errores — tres cosas
 # que habría que domar para que encajaran con las de `llm/`.
 llm = [
-    "trafilatura>=1.6",
+    # >=2.0 y no >=1.6: `_texto_legible` usa `html2txt` como segunda pasada
+    # cuando la extracción con filtro se lleva la tabla de tasas por delante.
+    "trafilatura>=2.0",
 ]
 # Búsqueda abierta (fase 9, nivel 3): la usa el job semanal del researcher
 # (`tasas_research_abierta`), cuyo gate frío arranca apagado. El import es

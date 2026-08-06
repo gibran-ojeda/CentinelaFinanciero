@@ -22,6 +22,7 @@ from rates_agent.fetcher import (
     Fetcher,
     SinTransporteCapaz,
     TransporteHttpx,
+    _texto_legible,
     una_linea,
 )
 
@@ -130,6 +131,54 @@ async def test_a_chain_that_is_empty_everywhere_returns_none() -> None:
     f = _fetcher(TransporteFalso("httpx", VACIA), TransporteFalso("navegador", VACIA))
 
     assert await f.descargar(URL) is None
+
+
+# ─── La segunda pasada de extracción ──────────────────────────
+
+#: Una tabla montada con divs de maquetación, que es como la publican
+#: Crediclub, kubo y Finsus. `trafilatura.extract` la descarta entera junto con
+#: el menú: la cifra está en el HTML y no llega al texto.
+TABLA_EN_DIVS = """
+<html><body>
+<nav><a href="/">Inicio</a><a href="/creditos">Créditos</a></nav>
+<div class="hero"><h1>Invierte con nosotros</h1>
+<p>Somos una institución regulada por la CNBV y tu dinero está protegido por el
+fondo de protección al ahorro. Abre tu cuenta desde la app en minutos, sin
+comisiones por manejo de cuenta ni saldo mínimo, y empieza a ver crecer tus
+ahorros desde el primer peso que deposites con nosotros hoy mismo.</p></div>
+<div class="tasas"><div class="fila"><span>364 días</span><span>8.80%</span></div>
+<div class="fila"><span>A la vista</span><span>6.30%</span></div></div>
+<footer>Aviso de privacidad</footer>
+</body></html>
+"""
+
+
+def test_a_rate_table_the_filter_discards_is_rescued() -> None:
+    """Medido el 2026-08-06 en Crediclub, kubo y Finsus.
+
+    Las cifras estaban en el HTML —y también en el DOM renderizado, así que no
+    era cosa del navegador— y ninguna llegaba al texto: `extract` se lleva por
+    delante lo que no reconoce como cuerpo del artículo.
+    """
+    texto = _texto_legible(TABLA_EN_DIVS)
+
+    assert "8.80%" in texto
+    assert "6.30%" in texto
+
+
+def test_the_clean_reading_wins_when_it_already_has_the_rates() -> None:
+    """La segunda pasada arrastra menú y pie: sólo entra si hace falta."""
+    texto = _texto_legible(PAGINA)
+
+    assert "8.69" in texto
+    # `PAGINA` es un artículo con su tabla dentro, que `extract` sí conserva:
+    # el rescate no debería haberse disparado y con él no vendría el `<nav>`.
+    assert "Inicio" not in texto
+
+
+def test_a_page_with_no_rates_anywhere_stays_empty() -> None:
+    """Sin porcentajes en ninguna de las dos pasadas, no hay nada que rescatar."""
+    assert _texto_legible(VACIA).strip() == ""
 
 
 # ─── La marca `requiere_js` manda sobre el transporte ─────────

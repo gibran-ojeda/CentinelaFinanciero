@@ -37,6 +37,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import random
+import re
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -207,19 +208,45 @@ def _espera(intento: int, base: float, tope: float) -> float:
     return min(base * (2.0**intento), tope) * random.uniform(0.75, 1.25)  # noqa: S311
 
 
+#: Una página de tasas cuyo texto no trae ni un porcentaje es sospechosa: es la
+#: firma de que el extractor de contenido se llevó la tabla junto con el menú.
+_PORCENTAJE = re.compile(r"\d[\d.,]*\s*%")
+
+
 def _texto_legible(html: str, url: str | None = None) -> str:
     """Texto principal de la página. Cadena vacía si no hay nada que leer.
 
+    Dos pasadas, y la segunda existe por medición. `trafilatura.extract`
+    separa el contenido de la plantilla, que es justo lo que se quiere, pero
+    varias de estas tablas de tasas están montadas con divs de maquetación y
+    las descarta enteras. Medido el 2026-08-06: Crediclub, kubo y Finsus traían
+    sus cifras en el HTML y **ninguna** llegaba al texto — ni con navegador, así
+    que no era un problema de renderizado sino de qué se considera contenido.
+
+    `html2txt` no filtra nada: se trae el menú, el pie y el aviso de cookies.
+    Por eso sólo entra cuando la primera pasada no dejó ni un porcentaje, que
+    en una página de tasas significa que se llevó lo que veníamos a leer. Y si
+    tampoco lo rescata, gana la lectura limpia: menos tokens y mejor entrada.
+
     La `url` no cambia la extracción: viaja para que el aviso que trafilatura
-    emite al descartar una página diga **cuál** era. Sin ella el log repetía
-    `discarding data: None`, que no sirve para nada.
+    emite al descartar una página diga **cuál** era.
     """
     import trafilatura
 
-    extraido = trafilatura.extract(
-        html, url=url, include_comments=False, include_tables=True, favor_recall=True
-    )
-    return (extraido or "").strip()
+    fino = (
+        trafilatura.extract(
+            html, url=url, include_comments=False, include_tables=True, favor_recall=True
+        )
+        or ""
+    ).strip()
+    if _PORCENTAJE.search(fino):
+        return fino
+
+    burdo = (trafilatura.html2txt(html) or "").strip()
+    if _PORCENTAJE.search(burdo):
+        log.info("texto_rescatado_sin_filtrar", url=url, fino=len(fino), burdo=len(burdo))
+        return burdo
+    return fino or burdo
 
 
 @dataclass(slots=True)
