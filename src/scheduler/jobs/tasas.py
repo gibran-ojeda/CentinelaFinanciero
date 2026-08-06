@@ -1,23 +1,29 @@
-"""Job `tasas_fetch_dirigido`: el ciclo de tasas, automatizado.
+"""El ciclo de tasas, automatizado. **Dos pasadas con cadencias distintas.**
 
-Cada cuatro horas (rejilla ..:45). Recorre las fuentes curadas, lee lo que
-cada institución publica, y deja lo que cambió publicado o en la cola de
-revisión según la tolerancia. Es el nivel 2 de §15 del foundation.
+Es el nivel 2 de §15 del foundation: recorrer las fuentes curadas, leer lo que
+cada institución publica, y dejar lo que cambió publicado o en la cola de
+revisión según la tolerancia.
 
-La cadencia alta no multiplica el costo: el pipeline cortocircuita por hash
-de contenido, así que una página idéntica a la corrida anterior no llama al
-LLM — la mayoría de las corridas del día son gratis. Las seis comparten el
-techo diario `llm_cost_daily_limit_usd`; agotado, las siguientes quedan
-OMITIDO, no FALLIDO.
+Van separadas porque cuestan cosas distintas. `tasas_fetch_rapido` es un
+cliente HTTP y corre **cada media hora**; `tasas_fetch_navegador` arranca
+Chromium —unos 300 MB en un contenedor de 768— y corre **cada ocho**. El
+reparto lo decide `requiere_js` de cada fuente, medido el 2026-08-06: nueve
+rinden a un cliente plano y cuatro necesitan renderizado. Cada fuente cae en
+una sola de las dos, así que no compiten por `ultimo_hash` ni se repiten
+trabajo.
 
-Doble gate como el resto: `SCHEDULER_TASAS_ENABLED` decide si se registra, y
-`tasas_fetch_enabled` del ConfigStore lo apaga en caliente sin reiniciar nada.
+La cadencia alta no multiplica el costo: el pipeline cortocircuita por hash de
+contenido, así que una página idéntica a la corrida anterior no llama al LLM —
+la inmensa mayoría de las corridas del día son gratis. Todas comparten el techo
+diario `llm_cost_daily_limit_usd`; agotado, las siguientes quedan OMITIDO, no
+FALLIDO.
 
-Chromium vive en la imagen: la cadena del job lleva httpx y el navegador, y
-la corrida cubre todas las fuentes activas de nivel 2 —las de nivel 3 son
-portadas del researcher y no entran aquí—. El repliegue es la llave caliente
-`tasas_fetch_solo_sin_js`, que devuelve el job a solo-httpx sin deploy — ver
-`docs/despliegue.md`, «Navegador en el VPS».
+Doble gate como el resto: `SCHEDULER_TASAS_ENABLED` decide si se registran, y
+`tasas_fetch_enabled` del ConfigStore las apaga en caliente sin reiniciar nada.
+`tasas_fetch_solo_sin_js` sigue siendo el repliegue del navegador sin deploy,
+pero ahora hace lo que su nombre dice: omite la pasada del navegador entera en
+vez de armar una cadena que no puede renderizar — ver `docs/despliegue.md`,
+«Navegador en el VPS».
 """
 
 from __future__ import annotations
@@ -33,35 +39,59 @@ from scheduler.bitacora import registrar_corrida
 
 log = get_logger(__name__)
 
-JOB_ID = "tasas_fetch_dirigido"
+#: La pasada barata: httpx solo, sobre las fuentes que rinden sin renderizar.
+JOB_ID = "tasas_fetch_rapido"
+#: La cara: arranca Chromium, y por eso va cada ocho horas y no cada media.
+JOB_ID_NAVEGADOR = "tasas_fetch_navegador"
 
 
-def _armar_fetcher() -> Fetcher:
-    """La cadena de transportes según el gate caliente.
+def _armar_fetcher(*, con_navegador: bool) -> Fetcher:
+    """La cadena de transportes de cada pasada.
 
-    httpx siempre; el navegador salvo que `tasas_fetch_solo_sin_js` lo
-    excluya — esa llave es el apagado del navegador sin deploy. El ensamblaje
-    vive aquí y no en el default de `Fetcher()` a propósito: sin él, apagar
-    el gate ensancharía la consulta a las fuentes JS con una cadena que no
-    puede renderizarlas, y las once contarían como «vacías» con corrida
-    EXITOSA — el fallo silencioso, seis veces al día.
+    Cada fuente cae en **una sola** de las dos corridas, según `requiere_js`,
+    así que cada cadena lleva un único transporte: no hay nada que encadenar.
+    Antes iban los dos juntos y httpx resolvía páginas que necesitaban
+    navegador devolviendo el envoltorio de la SPA.
+
+    El navegador se importa aquí dentro: sin el extra `[browser]` instalado,
+    importar el módulo no debe tumbar el job barato, que no lo necesita.
     """
     agente = settings.fetch_user_agent
-    transportes: list[Transporte] = [TransporteHttpx(user_agent=agente)]
-    if not effective.tasas_fetch_solo_sin_js:
-        # Import perezoso, espejo de cli/tasas.py: sin el extra [browser]
-        # instalado, importar el módulo no debe tumbar el job.
-        from rates_agent.navegador import TransporteNavegador
+    if not con_navegador:
+        transportes: list[Transporte] = [TransporteHttpx(user_agent=agente)]
+        return Fetcher(transportes)
 
-        transportes.append(TransporteNavegador(user_agent=agente))
-    return Fetcher(transportes)
+    from rates_agent.navegador import TransporteNavegador
+
+    return Fetcher([TransporteNavegador(user_agent=agente)])
 
 
-async def tasas_fetch_dirigido() -> None:
-    async with registrar_corrida(JOB_ID) as corrida:
+async def tasas_fetch_rapido() -> None:
+    """Cada media hora, sobre lo que rinde a un cliente HTTP plano."""
+    await _correr(JOB_ID, con_navegador=False)
+
+
+async def tasas_fetch_navegador() -> None:
+    """Cada ocho horas, sobre lo que sólo se lee renderizando.
+
+    Aparte y espaciado porque Chromium cuesta unos 300 MB en un contenedor de
+    768: leerlas cada media hora junto al resto era lo que había que evitar.
+    """
+    if effective.tasas_fetch_solo_sin_js:
+        # El repliegue sin deploy: en vez de armar una cadena que no puede
+        # renderizar —y contar sus fuentes como vacías— esta pasada no corre.
+        async with registrar_corrida(JOB_ID_NAVEGADOR) as corrida:
+            corrida.omitir("tasas_fetch_solo_sin_js=true en ConfigStore")
+            log.info("tasas_fetch_navegador_omitido")
+        return
+    await _correr(JOB_ID_NAVEGADOR, con_navegador=True)
+
+
+async def _correr(job_id: str, *, con_navegador: bool) -> None:
+    async with registrar_corrida(job_id) as corrida:
         if not effective.tasas_fetch_enabled:
             corrida.omitir("tasas_fetch_enabled=false en ConfigStore")
-            log.info("tasas_fetch_omitido")
+            log.info("tasas_fetch_omitido", job_id=job_id)
             return
 
         try:
@@ -70,8 +100,8 @@ async def tasas_fetch_dirigido() -> None:
             # las dos piezas (`propios`), y pasarle ambas dejaría Chromium
             # vivo entre corridas de un proceso que no reinicia.
             reporte = await pipeline.correr(
-                fetcher=_armar_fetcher(),
-                solo_requieren_js=False if effective.tasas_fetch_solo_sin_js else None,
+                fetcher=_armar_fetcher(con_navegador=con_navegador),
+                solo_requieren_js=con_navegador,
             )
         except ErrorPresupuestoAgotado as exc:
             # El techo de gasto no es un fallo: es el límite haciendo su
@@ -86,10 +116,10 @@ async def tasas_fetch_dirigido() -> None:
         if reporte.fuentes == 0:
             # Alcanzable desde que las fuentes se apagan solas al acumular
             # fallos: si se pausaran todas, la corrida no tendría nada que
-            # hacer y saldría EXITOSA cada cuatro horas. No es un fallo de la
+            # hacer y saldría EXITOSA cada media hora. No es un fallo de la
             # corrida —es el catálogo vacío— y por eso avisa en vez de reventar:
             # hacer FALLIDO algo que se apagó por diseño no arregla el catálogo.
-            log.error("tasas_sin_fuentes_activas")
+            log.error("tasas_sin_fuentes_activas", job_id=job_id)
 
         if reporte.fracaso_total:
             # Sin esto, una llave de DeepSeek vacía producía un EXITOSO con
@@ -108,4 +138,9 @@ async def tasas_fetch_dirigido() -> None:
             await cache.invalidar()
 
 
-__all__ = ["JOB_ID", "tasas_fetch_dirigido"]
+__all__ = [
+    "JOB_ID",
+    "JOB_ID_NAVEGADOR",
+    "tasas_fetch_navegador",
+    "tasas_fetch_rapido",
+]

@@ -132,7 +132,14 @@ async def _huecos_recientes(session: Any) -> list[dict[str, Any]]:
                 select(JobRun)
                 .where(
                     JobRun.job_id.in_(
-                        ("tasas_fetch_dirigido", "tasas_fetch_manual", "tasas_research_abierta")
+                        (
+                            "tasas_fetch_rapido",
+                            "tasas_fetch_navegador",
+                            # El id que tuvo el fetch antes de partirse en dos.
+                            "tasas_fetch_dirigido",
+                            "tasas_fetch_manual",
+                            "tasas_research_abierta",
+                        )
                     )
                 )
                 .order_by(desc(JobRun.id))
