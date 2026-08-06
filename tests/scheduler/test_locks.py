@@ -66,7 +66,12 @@ class TestConRedisReal:
 
     async def test_lock_expires_with_its_ttl(self) -> None:
         assert await locks.acquire("job-d", ttl_seconds=1) is not None
-        await asyncio.sleep(1.3)
+        # 2 s y no 1.3: el margen sobre el TTL es para que **este** proceso
+        # llegue a preguntar, no para que Redis expire la llave. Con la suite
+        # completa en marcha —dos contenedores y un event loop ocupado— 300 ms
+        # no siempre bastaban, y el test caía una vez cada muchas. Si el lock
+        # de verdad no caducara, esperar más no lo salvaría.
+        await asyncio.sleep(2.0)
         assert await locks.acquire("job-d", ttl_seconds=30) is not None
 
     async def test_extend_renews_only_for_the_owner(self) -> None:
@@ -109,7 +114,9 @@ class TestConRedisReal:
 
     async def test_tick_expires_so_the_next_run_can_proceed(self) -> None:
         assert await locks.claim_tick("job-i", cooldown_seconds=1) is True
-        await asyncio.sleep(1.3)
+        # Mismo margen que el TTL del lock, y por lo mismo: esperar a llegar a
+        # preguntar, no a que Redis expire.
+        await asyncio.sleep(2.0)
         assert await locks.claim_tick("job-i", cooldown_seconds=1) is True
 
     async def test_release_tick_allows_an_immediate_retry(self) -> None:

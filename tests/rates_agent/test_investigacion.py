@@ -595,7 +595,7 @@ async def test_the_job_skips_when_nothing_is_stale(
         corrida = await session.scalar(
             select(JobRun)
             .where(JobRun.job_id == research.JOB_ID)
-            .order_by(desc(JobRun.inicio))
+            .order_by(desc(JobRun.id))
             .limit(1)
         )
     assert corrida is not None
@@ -638,7 +638,7 @@ async def test_the_job_hot_kill_switch_stops_it(
         corrida = await session.scalar(
             select(JobRun)
             .where(JobRun.job_id == research.JOB_ID)
-            .order_by(desc(JobRun.inicio))
+            .order_by(desc(JobRun.id))
             .limit(1)
         )
     assert corrida is not None
