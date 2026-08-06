@@ -71,13 +71,21 @@ nu-cajita-turbo,13.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REV
 nu-plazo-28,6.60,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
 nu-plazo-91,6.70,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
 nu-plazo-182,6.80,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
-# La prensa reportaba que la tasa alta aplica solo a un tramo del saldo y baja
-# escalonadamente por encima; sin leerlo de la pagina oficial no se publica.
-revolut-vista,15.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# retirada 2026-08-06 (sustituida por MANUAL 2026-08-06): revolut-vista,15.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial. La prensa reporta que la tasa alta aplica solo a un tramo del saldo y baja de forma escalonada por encima.
+#
+# Leida con navegador el 2026-08-06 en /instant-access-savings/, que es donde
+# Revolut publica de verdad -la portada no trae ni un porcentaje-. La escalera
+# reemplaza al 15% plano del agregador, que prometia esa tasa sobre cualquier
+# saldo. GAT nominal 16.18% y GAT real 11.98% son las de la nota al pie ¹ de la
+# propia pagina. Por encima de $1,000,000 solo dice "hasta 5%", asi que ese
+# tramo no se declara: la regla 1 prohibe publicar un "hasta X%".
+revolut-vista,15.00,16.18,11.98,2026-08-06,MANUAL,https://www.revolut.com/es-MX/instant-access-savings/,VIGENTE,"Tasa mejorada de 30 dias sobre los primeros $25,000: se conserva con 4 compras de al menos $50 cada 30 dias, o con un plan de pago Premium o Metal. De $25,000 a $1,000,000 paga 7.00% en el plan Estandar (7.30% Premium y 7.50% Metal).",0-25000:15.00;25000-1000000:7.00
 # retirada 2026-08-01 (sustituida por MANUAL 2026-08-01): openbank-vista,13.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
 openbank-vista,13.00,,,2026-08-01,MANUAL,https://www.openbank.mx/,VIGENTE,Escalera por saldo leida en la pagina oficial: 13% los primeros 30 mil y 6.3% de ahi a 1 millon; por encima no se publica rendimiento.,0-30000:13.00;30000-1000000:6.30
 # hey.inc devolvio error 500 el 2026-07-25; el dominio bueno es banco.hey.inc.
 hey-vista,7.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
-# El tope de saldo que se anotaba aqui no esta confirmado contra la pagina
-# oficial.
+# Medido el 2026-08-06: mercadopago.com.mx/cuenta solo publica "Ganancias de
+# hasta 12% anual" -sin plazo, sin monto, sin tope, sin condicion-. El tope de
+# saldo que se anotaba aqui no aparece en ninguna parte de su pagina. Eso es lo
+# que la bandera de tasas ambiguas existe para decir.
 mercado-pago-vista,12.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
