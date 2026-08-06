@@ -62,6 +62,15 @@ class CadenaAgotada(ErrorDescarga):
     """Ningún transporte pudo con la URL. El mensaje enumera qué intentó cada uno."""
 
 
+class SinTransporteCapaz(ErrorDescarga):
+    """La fuente pide renderizado y esta cadena no lo tiene.
+
+    Es un error de reparto —una fuente JS en la corrida sin navegador—, no de
+    la fuente, así que el pipeline lo cuenta aparte: contarlo como fallo la
+    acercaría a la autopausa por algo que hizo el scheduler.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class Descarga:
     """Una página leída con éxito."""
@@ -79,6 +88,9 @@ class Transporte(Protocol):
     """Una forma de traerse el HTML de una URL."""
 
     nombre: str
+    #: Si ejecuta el JavaScript de la página. Lo consulta `descargar` para no
+    #: dejar que un cliente plano resuelva una fuente que necesita renderizado.
+    renderiza_js: bool
 
     async def obtener(self, url: str, *, timeout_s: float) -> str:
         """HTML crudo. Lanza `ErrorDescarga` si no puede."""
@@ -98,6 +110,7 @@ class TransporteHttpx:
     """Cliente HTTP plano. Rápido, barato, y suficiente para la mayoría."""
 
     nombre = "httpx"
+    renderiza_js = False
 
     def __init__(self, *, user_agent: str) -> None:
         self._user_agent = user_agent
@@ -334,14 +347,24 @@ class Fetcher:
 
     # ── La cadena ──
 
-    async def descargar(self, url: str) -> Descarga | None:
+    async def descargar(self, url: str, *, requiere_js: bool = False) -> Descarga | None:
         """Página leída, o `None` si toda la cadena respondió sana y vacía.
+
+        Args:
+            requiere_js: la página monta su contenido con JavaScript, así que
+                sólo puede resolverla un transporte que lo ejecute. **Sin esto
+                la cadena la resolvía con httpx**: el shell de una SPA —nav,
+                pie, aviso legal— pasa de sobra el umbral de caracteres, así
+                que la descarga se daba por buena, el navegador no llegaba a
+                abrirse y el extractor leía una página real sin ninguna tabla
+                de tasas. Cinco fuentes del catálogo estaban así.
 
         Raises:
             CadenaAgotada: nadie trajo datos y la cadena quedó degradada.
+            SinTransporteCapaz: la fuente pide renderizado y no hay con qué.
         """
         try:
-            return await self._recorrer_cadena(url)
+            return await self._recorrer_cadena(url, requiere_js=requiere_js)
         except CadenaAgotada as exc:
             # El backoff temporal se aplica **desde fuera** de la cadena y no
             # dentro: si `_recorrer_cadena` se llamara a sí misma a través de
@@ -349,12 +372,25 @@ class Fetcher:
             # primera ya tiene y la corrida se quedaría colgada ahí.
             if not (exc.transitorio and self._esperas) or self._backoff_agotado:
                 raise
-            return await self._con_backoff_temporal(url, str(exc))
+            return await self._con_backoff_temporal(url, str(exc), requiere_js=requiere_js)
 
-    async def _recorrer_cadena(self, url: str) -> Descarga | None:
+    async def _recorrer_cadena(self, url: str, *, requiere_js: bool = False) -> Descarga | None:
         """Un pase por la cadena de transportes. Sin esperas largas."""
         host = _host(url)
         estado = self._estado(host)
+
+        # El filtro va **antes** del circuito y de robots: si la cadena no
+        # puede con esta fuente, lo que sobra es todo lo demás.
+        capaces = (
+            [t for t in self._transportes if t.renderiza_js]
+            if requiere_js
+            else (self._transportes)
+        )
+        if not capaces:
+            raise SinTransporteCapaz(
+                f"{url}: la fuente necesita renderizado y esta cadena no lo tiene",
+                transitorio=False,
+            )
 
         if estado.abierto:
             raise CadenaAgotada(f"{host}: circuito abierto en esta corrida")
@@ -369,7 +405,7 @@ class Fetcher:
         degradada = False
         transitoria = False
 
-        for transporte in self._transportes:
+        for transporte in capaces:
             try:
                 html, n = await self._con_reintentos(transporte, url)
             except ErrorDescarga as exc:
@@ -446,7 +482,9 @@ class Fetcher:
             estado.abierto = True
             log.warning("fetch_circuito_abierto", host=host, fallos=estado.fallos)
 
-    async def _con_backoff_temporal(self, url: str, resumen: str) -> Descarga | None:
+    async def _con_backoff_temporal(
+        self, url: str, resumen: str, *, requiere_js: bool = False
+    ) -> Descarga | None:
         """Espera y reprueba la cadena entera, con reset half-open.
 
         Serializado por un lock: si diez URLs caen a la vez, se espera una vez y
@@ -464,7 +502,7 @@ class Fetcher:
             # aguardaba el lock: se reprueba antes de dormir de nuevo.
             self.reiniciar_circuitos()
             try:
-                return await self._recorrer_cadena(url)
+                return await self._recorrer_cadena(url, requiere_js=requiere_js)
             except CadenaAgotada:
                 pass
 
@@ -479,7 +517,7 @@ class Fetcher:
                 await asyncio.sleep(espera)
                 self.reiniciar_circuitos()
                 try:
-                    return await self._recorrer_cadena(url)
+                    return await self._recorrer_cadena(url, requiere_js=requiere_js)
                 except CadenaAgotada:
                     continue
 
@@ -502,6 +540,8 @@ __all__ = [
     "Descarga",
     "ErrorDescarga",
     "Fetcher",
+    "SinTransporteCapaz",
     "Transporte",
     "TransporteHttpx",
+    "una_linea",
 ]

@@ -36,6 +36,11 @@ cambio sin previo aviso. El monto mínimo de inversión es de cien pesos.</p>
 
 
 class TransporteFalso:
+    # Representa la cadena entera, no un eslabón: estos tests van sobre el
+    # pipeline y casi todas las fuentes del seed piden renderizado. Qué
+    # transporte resuelve cada fuente lo prueba `test_fetcher`.
+    renderiza_js = True
+
     def __init__(self, nombre: str, *guion: str | ErrorDescarga) -> None:
         self.nombre = nombre
         self._guion = list(guion)
@@ -120,7 +125,7 @@ async def test_level3_sources_are_not_fed_to_the_extractor() -> None:
         )
     assert nivel3  # el seed trae las cuatro portadas de nivel 3
 
-    urls = {url for _, url, _, _ in await pipeline._fuentes(None)}
+    urls = {fila[1] for fila in await pipeline._fuentes(None)}
 
     assert not urls & nivel3
     assert urls  # y las de nivel 2 siguen entrando

@@ -20,6 +20,7 @@ from rates_agent.fetcher import (
     Descarga,
     ErrorDescarga,
     Fetcher,
+    SinTransporteCapaz,
     TransporteHttpx,
     una_linea,
 )
@@ -43,8 +44,13 @@ VACIA = "<html><body><div id='root'></div><script src='app.js'></script></body><
 class TransporteFalso:
     """Devuelve lo que se le ponga en el guion, en orden."""
 
-    def __init__(self, nombre: str, *guion: str | ErrorDescarga) -> None:
+    def __init__(
+        self, nombre: str, *guion: str | ErrorDescarga, renderiza_js: bool | None = None
+    ) -> None:
         self.nombre = nombre
+        # Por defecto renderiza el que se llama «navegador», que es como se
+        # nombra en el resto de los tests.
+        self.renderiza_js = nombre == "navegador" if renderiza_js is None else renderiza_js
         self._guion = list(guion)
         self.llamadas = 0
 
@@ -124,6 +130,57 @@ async def test_a_chain_that_is_empty_everywhere_returns_none() -> None:
     f = _fetcher(TransporteFalso("httpx", VACIA), TransporteFalso("navegador", VACIA))
 
     assert await f.descargar(URL) is None
+
+
+# ─── La marca `requiere_js` manda sobre el transporte ─────────
+
+
+async def test_a_js_source_is_not_resolved_by_the_plain_client() -> None:
+    """El caso Crediclub, y la razón de que el comparador siguiera vacío.
+
+    httpx devuelve el shell de la SPA —nav, pie, aviso legal, copy de
+    marketing— que pasa de sobra el umbral de caracteres. La cadena daba la
+    descarga por buena, Chromium no llegaba a abrirse, y el extractor leía una
+    página perfectamente legible que no contenía ninguna tabla de tasas.
+    """
+    plano = TransporteFalso("httpx", PAGINA)  # texto de sobra, y aun así no gana
+    navegador = TransporteFalso("navegador", PAGINA.replace("8.69", "9.99"))
+
+    resultado = await _fetcher(plano, navegador).descargar(URL, requiere_js=True)
+
+    assert isinstance(resultado, Descarga)
+    assert resultado.transporte == "navegador"
+    assert plano.llamadas == 0
+    assert "9.99" in resultado.texto
+
+
+async def test_a_source_without_the_mark_still_prefers_the_cheap_client() -> None:
+    """Lo barato primero sigue siendo la regla para todo lo demás."""
+    plano = TransporteFalso("httpx", PAGINA)
+    navegador = TransporteFalso("navegador", PAGINA)
+
+    resultado = await _fetcher(plano, navegador).descargar(URL)
+
+    assert isinstance(resultado, Descarga)
+    assert resultado.transporte == "httpx"
+    assert navegador.llamadas == 0
+
+
+async def test_a_js_source_in_a_chain_without_a_browser_says_so() -> None:
+    """Una fuente JS en la corrida barata es un error de reparto, no suyo.
+
+    Tiene que distinguirse de una fuente caída: si saliera como fallo normal,
+    el contador de salud la acercaría a la autopausa por algo que decidió el
+    scheduler, y acabaríamos apagando páginas que funcionan.
+    """
+    plano = TransporteFalso("httpx", PAGINA)
+    f = _fetcher(plano)
+
+    with pytest.raises(SinTransporteCapaz, match="necesita renderizado"):
+        await f.descargar(URL, requiere_js=True)
+
+    assert plano.llamadas == 0
+    assert f.hosts_en_circuito == []
 
 
 # ─── Capa 3: circuit breaker por host ─────────────────────────

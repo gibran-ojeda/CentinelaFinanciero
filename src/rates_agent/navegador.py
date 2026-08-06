@@ -39,6 +39,7 @@ class TransporteNavegador:
     """Carga la página en Chromium headless y devuelve el HTML ya renderizado."""
 
     nombre = "navegador"
+    renderiza_js = True
 
     def __init__(
         self,
