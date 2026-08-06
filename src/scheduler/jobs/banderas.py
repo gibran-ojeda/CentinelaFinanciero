@@ -39,7 +39,7 @@ from core.db import session_scope
 from core.logging import get_logger
 from domain.enums import TipoBandera
 from domain.models import IndicadoresInstitucion
-from domain.orm import Bandera, IndicadorFinanciero, Institucion, Producto
+from domain.orm import Bandera, FuenteTasas, IndicadorFinanciero, Institucion, Producto
 from metrics.flags import evaluar_banderas
 from scheduler.bitacora import registrar_corrida
 
@@ -182,6 +182,27 @@ async def recomputar() -> dict[str, int]:
         # las dos mitades del sistema discrepaban sobre qué es "el mercado".
         medianas = {plazo: median(valores) for plazo, valores in por_plazo.items()}
 
+        # Lo que la última lectura de cada institución tuvo que descartar por la
+        # regla 1. Se toma la más reciente de sus fuentes: si dos páginas suyas
+        # anuncian sin concretar, con nombrar una basta para la señal.
+        ambiguedades: dict[int, str] = {}
+        for institucion_id, texto in (
+            (
+                await session.execute(
+                    select(FuenteTasas.institucion_id, FuenteTasas.ultima_ambiguedad)
+                    .where(
+                        FuenteTasas.activa.is_(True),
+                        FuenteTasas.ultima_ambiguedad.is_not(None),
+                    )
+                    .order_by(FuenteTasas.ultima_ambiguedad_at.desc())
+                )
+            )
+            .tuples()
+            .all()
+        ):
+            if texto is not None:
+                ambiguedades.setdefault(institucion_id, texto)
+
         existentes: dict[int, list[Bandera]] = {}
         for fila_bandera in (
             (await session.execute(select(Bandera).where(Bandera.activa.is_(True))))
@@ -208,6 +229,7 @@ async def recomputar() -> dict[str, int]:
                 # podía aparecer nunca en el producto.
                 gat_publicada=oferta.gat_nominal if oferta else None,
                 tasa_nominal=oferta.tasa_nominal if oferta else None,
+                ambiguedad=ambiguedades.get(institucion.id),
             )
 
             actuales: dict[TipoBandera, Bandera] = {

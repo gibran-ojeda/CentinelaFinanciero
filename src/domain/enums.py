@@ -198,6 +198,13 @@ class TipoBandera(StrEnum):
     SIN_COBERTURA = "SIN_COBERTURA"
     """Informativa y permanente para IFPEs (§5.3)."""
 
+    TASAS_AMBIGUAS = "TASAS_AMBIGUAS"
+    """Anuncia una tasa sin decir a qué plazo, monto o condición corresponde.
+
+    Como `GAT_INCONSISTENTE`, juzga lo que la institución **publica** y no su
+    balance: no sale de la CNBV y por eso viaja sin `periodo_dato`.
+    """
+
 
 class NivelCapitalizacion(StrEnum):
     """NICAP: categoría prudencial que la CNBV asigna a cada SOFIPO (§5.1).

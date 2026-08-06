@@ -257,6 +257,49 @@ async def test_an_inconsistent_published_gat_raises_its_flag() -> None:
     assert banderas[0].severidad is Severidad.AMARILLA
 
 
+async def _anotar_ambiguedad(nombre: str, texto: str | None) -> None:
+    from datetime import UTC, datetime
+
+    from domain.orm import FuenteTasas
+
+    async with session_scope() as session:
+        fuente = await session.scalar(
+            select(FuenteTasas).where(FuenteTasas.institucion_id == await _id_de(nombre)).limit(1)
+        )
+        assert fuente is not None
+        fuente.activa = True
+        fuente.ultima_ambiguedad = texto
+        fuente.ultima_ambiguedad_at = datetime.now(UTC) if texto else None
+
+
+async def test_a_vague_rate_claim_reaches_its_flag() -> None:
+    """El cableado, que es donde la bandera de GAT se quedó muerta un mes.
+
+    La regla puede estar probada y no salir nunca si el job no le pasa el dato.
+    """
+    await _anotar_ambiguedad("Mercado Pago", "Ganancias de hasta 12% anual")
+
+    await recomputar()
+
+    banderas = await _banderas_de("Mercado Pago")
+    ambigua = next(b for b in banderas if b.tipo is TipoBandera.TASAS_AMBIGUAS)
+    assert ambigua.severidad is Severidad.AMARILLA
+    assert "hasta 12% anual" in ambigua.motivo
+    assert ambigua.periodo_dato is None
+
+
+async def test_a_page_that_gets_clearer_loses_its_flag() -> None:
+    """La institución arregla su página y la bandera se retira sola."""
+    await _anotar_ambiguedad("Mercado Pago", "Ganancias de hasta 12% anual")
+    await recomputar()
+
+    await _anotar_ambiguedad("Mercado Pago", None)
+    await recomputar()
+
+    tipos = {b.tipo for b in await _banderas_de("Mercado Pago")}
+    assert TipoBandera.TASAS_AMBIGUAS not in tipos
+
+
 async def test_a_consistent_gat_raises_nothing() -> None:
     await _indicadores("Finsus", imor=Decimal("1.0"))
     await _publica("finsus-plazo-91", "9.00", gat="8.90", fecha=date(2026, 7, 24))
