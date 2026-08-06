@@ -283,10 +283,44 @@ class TestExtraer:
 
         sistema = prompts.plantilla("extract_rates_system")
         assert "membresía" in sistema and "nómina" in sistema
-        assert "una\n   sola entrada" in sistema or "una sola entrada" in sistema
+        assert "Si la página declara una tasa base, ésa es la entrada" in sistema
         # Y el tramo por monto sigue siendo una entrada por tramo: son dos ejes
         # distintos y confundirlos rompería las escaleras de Openbank y DiDi.
         assert "Un tramo por monto es una entrada por tramo" in sistema
+
+    async def test_the_prompt_keeps_a_conditioned_tier_instead_of_dropping_it(self) -> None:
+        """Revolut no publica tasa base para sus primeros $25,000.
+
+        Con la regla 5 tal como estaba —publicar sólo la incondicional— ese
+        tramo se caía, y con él la escalera entera: el producto volvía a ser el
+        15 % plano sin tope que ya tenía. La regla se pudo relajar porque ahora
+        `condiciones` se ve en la tabla; antes iba a `Tasa.notas`, que no leía
+        nadie.
+        """
+        cliente, _ = _cliente('{"tasas": []}')
+
+        await extraer(cliente, institucion="Revolut", url="https://revolut.test/", contenido="…")
+
+        sistema = prompts.plantilla("extract_rates_system")
+        assert "Si la página no declara ninguna base y el único dato es condicionado" in sistema
+        # La promoción temporal no encajaba en ninguno de los cuatro ejes que
+        # la regla nombraba, y es exactamente lo que Revolut publica.
+        assert "tasa mejorada durante tus primeros 30 días" in sistema
+
+    async def test_the_prompt_refuses_a_headline_rate_with_nothing_to_anchor_it(self) -> None:
+        """Mercado Pago publica «Ganancias de hasta 12 % anual» y nada más.
+
+        Medido el 2026-08-06: en `/cuenta` no aparece ni plazo, ni monto, ni
+        tope, ni condición. La regla 1 ya lo prohibía en abstracto y el modelo
+        publicó igual, así que ahora el caso está escrito con su forma real.
+        """
+        cliente, _ = _cliente('{"tasas": []}')
+
+        await extraer(cliente, institucion="Mercado Pago", url="https://mp.test/", contenido="…")
+
+        sistema = prompts.plantilla("extract_rates_system")
+        assert "Ganancias de hasta 12 % anual" in sistema
+        assert "volver vacío es la respuesta buena aquí" in sistema
 
     async def test_the_prompt_carries_the_institution_and_the_url(self) -> None:
         cliente, doble = _cliente('{"tasas": []}')

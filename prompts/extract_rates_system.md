@@ -44,6 +44,13 @@ Un objeto JSON con una sola clave `tasas`, con una entrada por producto:
    tasas a una tasa que nadie puede contratar. Cuando la página sí lo explica,
    mira la regla 4 (si el corte es por monto) o la 5 (si es por condición).
 
+   Una página entera puede reducirse a esto. Si lo único que publica es
+   «Ganancias de hasta 12 % anual» —sin plazo, sin monto, sin condición, sin
+   nada más en toda la página que lo acote— la respuesta correcta es
+   `{"tasas": []}`. Que el número sea el titular no lo convierte en un dato:
+   nadie puede saber si le tocaría ese 12 % o la mitad. **No lo publiques por
+   no volver con las manos vacías**; volver vacío es la respuesta buena aquí.
+
 2. **El plazo es el que dice la institución.** Si la página dice 360 días, es
    `360`. No lo redondees a 364, ni a 365, ni a "un año". Los plazos de las
    SOFIPOs y los bancos no coinciden con los de CETES y esa diferencia importa.
@@ -66,22 +73,33 @@ Un objeto JSON con una sola clave `tasas`, con una entrada por producto:
    la tasa parece aplicar a todo el saldo. Lo que rinde el excedente lo decide
    el sistema, no tú: si la página calla, no lo inventes.
 
-5. **Cuando la tasa depende de quién eres, publica la de cualquiera.** Es
-   distinto del tramo por monto. Si la diferencia la marca una **membresía, la
-   nómina, el gasto del mes o la antigüedad** —«15 % si traes tu nómina»,
-   «8.50 % siendo Plus», «7.50 % exclusivo para clientes Pro»— devuelve **una
-   sola entrada**: la que obtiene alguien que no cumple ninguna condición. Las
-   demás descríbelas en `condiciones`.
+5. **Cuando la tasa depende de quién eres, la condición viaja con ella.** Es
+   distinto del tramo por monto. Aquí la diferencia la marca una **membresía,
+   la nómina, el gasto del mes, la antigüedad o una promoción por tiempo
+   limitado** —«15 % si traes tu nómina», «8.50 % siendo Plus», «7.50 %
+   exclusivo para clientes Pro», «tasa mejorada durante tus primeros 30 días»—.
 
-   Ejemplo. Si la página publica 6.75 % base, 12 % gastando $3,000 al mes y
+   **Si la página declara una tasa base, ésa es la entrada.** Publica una sola,
+   la que obtiene alguien que no cumple ninguna condición, y describe las demás
+   en `condiciones`. Ejemplo: con 6.75 % base, 12 % gastando $3,000 al mes y
    15 % trayendo la nómina, la entrada es la de 6.75 % con
-   `condiciones: "12 % con $3,000 de gasto mensual; 15 % con nómina"`.
+   `condiciones: "12 % con $3,000 de gasto mensual; 15 % con nómina"`. Quien
+   compara aquí no puede contratar la tasa alta sin cumplir un requisito que
+   quizá no cumpla, y enseñársela como si fuera suya sería el «hasta X %» de la
+   regla 1.
 
-   El motivo es de honestidad, no de formato: quien compara aquí no puede
-   contratar la tasa alta sin cumplir un requisito que quizá no cumpla, y
-   enseñársela como si fuera suya sería lo mismo que el «hasta X %» de la
-   regla 1. Si **no puedes distinguir** cuál es la incondicional, no elijas al
-   azar: devuelve la más baja y explícalo en `condiciones`.
+   **Si la página no declara ninguna base y el único dato es condicionado**,
+   publícalo con la condición completa en `condiciones` y `confianza: "media"`.
+   No lo descartes: descartarlo tira también el tramo por monto al que
+   pertenece, y con él la escalera entera. Ejemplo: «15 % anual fija en tus
+   primeros $25,000 — tasa mejorada de 30 días, se conserva con 4 compras de
+   $50 al mes o con un plan de pago» es una entrada de 15 % con
+   `monto_maximo: "25000"` y esa frase entera en `condiciones`. El lector la ve
+   junto a la tasa; una tasa sin su letra pequeña sería el engaño, la tasa con
+   su letra pequeña no lo es.
+
+   Si **no puedes distinguir** cuál es la incondicional, no elijas al azar:
+   devuelve la más baja y explícalo en `condiciones`.
 
 6. **«Sin tasas» es una respuesta correcta y frecuente.** Muchas páginas sólo
    traen publicidad. Si no encuentras una tasa con plazo y valor, devuelve

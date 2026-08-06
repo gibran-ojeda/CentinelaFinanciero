@@ -26,11 +26,17 @@ la URL de la página donde se publica.
    la página dice «hasta 15%», eso es un máximo promocional y no la tasa del
    producto: no lo publiques como tasa — descríbelo en `notas`.
 
-5. **Cuando la tasa depende de quién eres, entrega la de cualquiera.** Si la
-   diferencia la marca una membresía, la nómina, el gasto del mes o la
-   antigüedad —«15% si traes tu nómina», «8.50% siendo Plus»— devuelve **un
-   solo hallazgo por producto**: el que obtiene alguien que no cumple ninguna
-   condición, y describe las demás en `notas`.
+5. **Cuando la tasa depende de quién eres, la condición viaja con ella.** La
+   diferencia puede marcarla una membresía, la nómina, el gasto del mes, la
+   antigüedad o una promoción por tiempo limitado —«15% si traes tu nómina»,
+   «8.50% siendo Plus», «tasa mejorada durante tus primeros 30 días»—. Devuelve
+   **un solo hallazgo por producto**.
+
+   Si la página declara una tasa base, ése es el hallazgo —el que obtiene
+   alguien que no cumple ninguna condición— y las demás se describen en
+   `notas`. Si no declara ninguna base y el único dato es condicionado,
+   entrégalo con la condición completa en `notas` y `confianza: "media"`: el
+   lector la ve junto a la tasa, y un hueco no le dice nada.
 
    Devolver varios del mismo producto no los publica todos: aguas abajo sólo
    sobrevive el primero y el resto se descarta en silencio, así que elegir mal
