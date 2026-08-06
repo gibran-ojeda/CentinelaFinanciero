@@ -24,6 +24,7 @@ from llm.providers.base import (
     RespuestaLLM,
     RespuestaTruncada,
 )
+from rates_agent import prompts
 from rates_agent.extractor import Extraccion, TasaExtraida, extraer
 
 pytestmark = pytest.mark.requires_docker
@@ -266,6 +267,26 @@ class TestExtraer:
             await extraer(cliente, institucion="X", url="https://x.test/", contenido="…")
 
         assert doble.llamadas == 2
+
+    async def test_the_prompt_asks_for_the_unconditional_rate(self) -> None:
+        """La regla que evita prometer un 15 % que exige traer la nómina.
+
+        Ualá publica 6.75 % base, 12 % con gasto y 15 % con nómina; Hey da
+        7.50 % a Fan/Pro y 4.00 % al resto. El modelo emitía una entrada por
+        variante, las tres chocaban en la misma `(tipo, plazo)` y el grupo
+        entero se descartaba como hueco de catálogo: nueve de once tasas
+        extraídas el 2026-08-06 se perdieron así.
+        """
+        cliente, doble = _cliente('{"tasas": []}')
+
+        await extraer(cliente, institucion="Ualá", url="https://uala.test/", contenido="…")
+
+        sistema = prompts.plantilla("extract_rates_system")
+        assert "membresía" in sistema and "nómina" in sistema
+        assert "una\n   sola entrada" in sistema or "una sola entrada" in sistema
+        # Y el tramo por monto sigue siendo una entrada por tramo: son dos ejes
+        # distintos y confundirlos rompería las escaleras de Openbank y DiDi.
+        assert "Un tramo por monto es una entrada por tramo" in sistema
 
     async def test_the_prompt_carries_the_institution_and_the_url(self) -> None:
         cliente, doble = _cliente('{"tasas": []}')

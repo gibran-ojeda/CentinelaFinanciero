@@ -355,6 +355,76 @@ async def test_the_probe_leaves_the_source_untouched(monkeypatch: pytest.MonkeyP
     assert despues.fallos_consecutivos == 3
 
 
+async def _huerfana(*, produjo: bool) -> int:
+    """Una fuente como las que deja el seed al corregir una URL en el YAML."""
+    from cli.seed import MOTIVO_PODA
+
+    async with session_scope() as session:
+        klar = await session.scalar(select(FuenteTasas).where(FuenteTasas.url == KLAR))
+        assert klar is not None
+        fila = FuenteTasas(
+            institucion_id=klar.institucion_id,
+            url=f"https://www.klar.mx/vieja-{'con' if produjo else 'sin'}-datos",
+            nivel=2,
+            activa=False,
+            pausada_motivo=MOTIVO_PODA,
+            ultimo_exito_at=datetime.now(UTC) if produjo else None,
+        )
+        session.add(fila)
+        await session.flush()
+        return int(fila.id)
+
+
+async def test_purging_removes_what_never_produced_anything() -> None:
+    """La corrección de URLs dejó nueve cadáveres y cada una añade otro."""
+    await run_seed()
+    muerta = await _huerfana(produjo=False)
+
+    salida = await fuentes.purgar()
+
+    async with session_scope() as session:
+        assert await session.get(FuenteTasas, muerta) is None
+    assert "1 fuentes borradas" in salida
+
+
+async def test_purging_keeps_what_once_published_a_rate() -> None:
+    """Con `ultimo_exito_at` puesto, la fila es historial de un dato real."""
+    await run_seed()
+    viva = await _huerfana(produjo=True)
+
+    await fuentes.purgar()
+
+    async with session_scope() as session:
+        assert await session.get(FuenteTasas, viva) is not None
+
+
+async def test_purging_does_not_touch_what_a_person_paused() -> None:
+    """Openbank y Supertasas están apagadas por decisión, no por poda."""
+    await run_seed()
+
+    await fuentes.purgar()
+
+    async with session_scope() as session:
+        quedan = (
+            (await session.execute(select(FuenteTasas.url).where(FuenteTasas.activa.is_(False))))
+            .scalars()
+            .all()
+        )
+    assert "https://www.supertasas.com/" in quedan
+    assert "https://www.openbank.mx/cuenta-debito-open-plus" in quedan
+
+
+async def test_a_dry_run_deletes_nothing() -> None:
+    await run_seed()
+    muerta = await _huerfana(produjo=False)
+
+    salida = await fuentes.purgar(dry_run=True)
+
+    async with session_scope() as session:
+        assert await session.get(FuenteTasas, muerta) is not None
+    assert "Se borrarían" in salida
+
+
 async def test_an_unknown_source_says_so_instead_of_failing_silently() -> None:
     await run_seed()
 

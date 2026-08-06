@@ -255,6 +255,52 @@ def _veredicto(medidas: dict[str, _Medida]) -> bool | None:
     return not plano
 
 
+async def purgar(*, dry_run: bool = False) -> str:
+    """Borra las fuentes que el YAML dejó de declarar y nunca produjeron nada.
+
+    La clave del upsert del seed incluye la URL, así que **corregir una URL
+    deja la fila vieja**: se apaga, no se borra, para conservar su historial.
+    Eso está bien una vez y mal a la décima — tras la revisión de URLs el
+    catálogo pasó de 18 filas a 27, y cada corrección futura añade otra.
+
+    Tres condiciones, y las tres a la vez, para que esto no pueda llevarse nada
+    que importe: apagada, apagada **por el seed** (no por una persona ni por el
+    contador de fallos), y sin haber producido una sola tasa en su vida. Con
+    `ultimo_exito_at` puesto, la fila se queda: es historial de algo que un día
+    publicó un dato.
+    """
+    from cli.seed import MOTIVO_PODA
+
+    async with session_scope() as session:
+        candidatas = (
+            (
+                await session.execute(
+                    select(FuenteTasas, Institucion.nombre)
+                    .join(Institucion, Institucion.id == FuenteTasas.institucion_id)
+                    .where(
+                        FuenteTasas.activa.is_(False),
+                        FuenteTasas.pausada_motivo == MOTIVO_PODA,
+                        FuenteTasas.ultimo_exito_at.is_(None),
+                    )
+                    .order_by(Institucion.nombre, FuenteTasas.id)
+                )
+            )
+            .tuples()
+            .all()
+        )
+        lineas = [f"    [{f.id:>3}] {inst:<24} {f.url}" for f, inst in candidatas]
+        if not dry_run:
+            for fuente, _ in candidatas:
+                await session.delete(fuente)
+
+    if not lineas:
+        return "  No hay fuentes que purgar."
+    cabecera = "  Se borrarían:" if dry_run else f"  {len(lineas)} fuentes borradas:"
+    if not dry_run:
+        log.info("fuentes_purgadas", total=len(lineas))
+    return "\n".join([cabecera, *lineas])
+
+
 async def _cambiar_activa(fuente_id: int, *, activa: bool, motivo: str | None) -> str:
     async with session_scope() as session:
         fuente = await session.get(FuenteTasas, fuente_id)
@@ -330,4 +376,4 @@ async def cambiar_url(fuente_id: int, url: str) -> str:
     )
 
 
-__all__ = ["cambiar_url", "listar", "pausar", "probar", "reanudar"]
+__all__ = ["cambiar_url", "listar", "pausar", "probar", "purgar", "reanudar"]

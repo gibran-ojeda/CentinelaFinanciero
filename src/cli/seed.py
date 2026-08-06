@@ -74,6 +74,12 @@ def _default_seeds_dir() -> Path:
 DEFAULT_SEEDS_DIR = _default_seeds_dir()
 
 
+#: Lo que el seed escribe al apagar una fuente que ya no declara el YAML. Es
+#: literal y compartido porque `cli fuentes purgar` lo usa para reconocer
+#: exactamente esas filas y no tocar las que apagó una persona.
+MOTIVO_PODA = "ya no está en seeds/fuentes_tasas.yaml"
+
+
 class SeedError(Exception):
     """Semilla mal formada o que referencia algo inexistente."""
 
@@ -308,7 +314,7 @@ async def _seed_fuentes_tasas(
         if clave in declaradas or not fuente.activa:
             continue
         fuente.activa = False
-        fuente.pausada_motivo = "ya no está en seeds/fuentes_tasas.yaml"
+        fuente.pausada_motivo = MOTIVO_PODA
         report.registrar("fuentes_tasas", "actualizados")
         log.info("fuente_retirada_del_yaml", fuente_id=fuente.id, url=fuente.url)
 
