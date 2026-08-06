@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+from pydantic import ValidationError
+
 from domain.enums import TipoProducto
 from metrics.tramos import Tramo
 from rates_agent.escalera import reconstruir_escalera, render_escalera
@@ -19,6 +22,7 @@ def _entrada(
     tasa: str,
     monto_minimo: str | None,
     *,
+    monto_maximo: str | None = None,
     confianza: str = "alta",
     condiciones: str | None = None,
 ) -> TasaExtraida:
@@ -27,6 +31,7 @@ def _entrada(
         tipo=TipoProducto.VISTA,
         tasa_nominal=Decimal(tasa),
         monto_minimo=Decimal(monto_minimo) if monto_minimo is not None else None,
+        monto_maximo=Decimal(monto_maximo) if monto_maximo is not None else None,
         confianza=confianza,  # type: ignore[arg-type]
         condiciones=condiciones,
     )
@@ -52,8 +57,78 @@ def test_a_missing_floor_counts_as_zero() -> None:
     assert escalera.tramos[0].desde == Decimal("0")
 
 
-def test_a_single_entry_is_not_a_ladder() -> None:
+def test_a_single_entry_without_a_ceiling_is_not_a_ladder() -> None:
+    """Sin tope no hay escalón: es una tasa plana, y así viaja."""
     assert reconstruir_escalera([_entrada("13.00", "0")]) is None
+    assert reconstruir_escalera([]) is None
+
+
+def test_a_single_capped_entry_declares_what_the_excess_earns() -> None:
+    """«15 % en tus primeros $25,000» y silencio por encima.
+
+    Es el caso de Revolut medido el 2026-08-06, y el que hacía desaparecer el
+    tope: sin `monto_maximo` la entrada quedaba plana y la tabla prometía 15 %
+    sobre cualquier saldo. El excedente se declara al 0 % —lo único que la
+    página afirma sobre ese dinero— en vez de dejarlo implícito.
+    """
+    escalera = reconstruir_escalera([_entrada("15.00", "0", monto_maximo="25000")])
+
+    assert escalera is not None
+    assert escalera.tramos == (
+        Tramo(desde=Decimal("0"), hasta=Decimal("25000"), tasa_nominal=Decimal("15.00")),
+        Tramo(desde=Decimal("25000"), hasta=None, tasa_nominal=Decimal("0")),
+    )
+    assert escalera.cabeza.tasa_nominal == Decimal("15.00")
+
+
+def test_the_last_tier_keeps_the_ceiling_the_page_published() -> None:
+    """La escalera completa de Revolut: dos tramos, el segundo acotado.
+
+    Antes de `monto_maximo` el último techo se forzaba a infinito, así que ni
+    siquiera un Openbank leído por fetch podía reproducir su «hasta $1 M» — la
+    única escalera con techo del sistema estaba escrita a mano en el CSV.
+    """
+    escalera = reconstruir_escalera(
+        [
+            _entrada("15.00", "0", monto_maximo="25000"),
+            _entrada("7.00", "25000", monto_maximo="1000000"),
+        ]
+    )
+
+    assert escalera is not None
+    assert escalera.tramos == (
+        Tramo(desde=Decimal("0"), hasta=Decimal("25000"), tasa_nominal=Decimal("15.00")),
+        Tramo(desde=Decimal("25000"), hasta=Decimal("1000000"), tasa_nominal=Decimal("7.00")),
+    )
+
+
+def test_the_next_floor_wins_over_a_declared_ceiling() -> None:
+    """Contigüidad exacta: el techo intermedio sale del conjunto, no de la fila.
+
+    Si la página declara «hasta $30,000» en el primer tramo y arranca el
+    siguiente en $25,000, respetar los dos dejaría un solape que
+    `validar_escalera` rechazaría y la escalera entera se perdería.
+    """
+    escalera = reconstruir_escalera(
+        [_entrada("15.00", "0", monto_maximo="30000"), _entrada("7.00", "25000")]
+    )
+
+    assert escalera is not None
+    assert escalera.tramos[0].hasta == Decimal("25000")
+    assert escalera.tramos[1].hasta is None
+
+
+def test_two_open_entries_still_end_at_infinity() -> None:
+    """Sin techo declarado, el último tramo sigue cubriendo cualquier saldo."""
+    escalera = reconstruir_escalera([_entrada("13.00", "0"), _entrada("6.30", "30000")])
+
+    assert escalera is not None
+    assert escalera.tramos[-1].hasta is None
+
+
+def test_a_ceiling_below_its_own_floor_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="tramo sin recorrido"):
+        _entrada("7.00", "25000", monto_maximo="1000")
 
 
 def test_duplicate_floors_are_irreconstructible() -> None:

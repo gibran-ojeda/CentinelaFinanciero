@@ -45,14 +45,17 @@ class EscaleraExtraida:
 def reconstruir_escalera(entradas: Sequence[TasaExtraida]) -> EscaleraExtraida | None:
     """N entradas del mismo `(tipo, plazo)` → una escalera, o `None` (⇒ hueco).
 
-    Pisos: el `monto_minimo` de cada entrada (`None` → 0), ordenados. Techos:
-    el piso de la siguiente; la última queda sin techo (∞). Es irreconstruible
-    cuando hay menos de dos entradas, cuando dos comparten piso —no se sabe
-    dónde corta el tramo— o cuando el piso mínimo no es 0: una escalera que no
-    cubre desde el primer peso tiene un tramo base que la página no declaró, y
-    la regla 1 del extractor prohíbe inventarlo.
+    Pisos: el `monto_minimo` de cada entrada (`None` → 0), ordenados. Techos: el
+    piso de la siguiente, salvo el del último tramo, que lo declara la propia
+    entrada con `monto_maximo` y queda abierto si la página no lo dice.
+
+    Es irreconstruible cuando no hay entradas, cuando dos comparten piso —no se
+    sabe dónde corta el tramo—, cuando el piso mínimo no es 0 (una escalera que
+    no cubre desde el primer peso tiene un tramo base que la página no declaró,
+    y la regla 1 del extractor prohíbe inventarlo) o cuando hay una sola entrada
+    sin tope: eso es una tasa plana, no una escalera.
     """
-    if len(entradas) < 2:
+    if not entradas:
         return None
 
     ordenadas = sorted(entradas, key=lambda e: e.monto_minimo or _CERO)
@@ -62,21 +65,34 @@ def reconstruir_escalera(entradas: Sequence[TasaExtraida]) -> EscaleraExtraida |
     if pisos[0] != _CERO:
         return None
 
-    crudos = tuple(
-        Tramo(
-            desde=piso,
-            hasta=pisos[indice + 1] if indice + 1 < len(pisos) else None,
-            tasa_nominal=entrada.tasa_nominal,
-        )
-        for indice, (piso, entrada) in enumerate(zip(pisos, ordenadas, strict=True))
-    )
+    # El techo del último sale de `monto_maximo`; el de los demás, del piso del
+    # siguiente. Si la entrada declara los dos, manda el piso del siguiente: es
+    # un dato del conjunto, no de una fila suelta, y `validar_escalera` exige
+    # contigüidad exacta.
+    techos: list[Decimal | None] = [*pisos[1:], ordenadas[-1].monto_maximo]
+
+    crudos = [
+        Tramo(desde=piso, hasta=techo, tasa_nominal=entrada.tasa_nominal)
+        for piso, techo, entrada in zip(pisos, techos, ordenadas, strict=True)
+    ]
+
+    # Un solo tramo acotado —«15% en tus primeros $25,000» y silencio por
+    # encima— no pasa `validar_escalera`, que pide declarar el excedente en vez
+    # de dejarlo implícito. Se declara al 0%, que es lo único que la página
+    # afirma sobre ese dinero (nada) y la política del módulo de tramos:
+    # subestima, nunca promete de más. Con dos tramos o más la escalera ya es
+    # explícita y el último techo se respeta tal cual.
+    if len(crudos) == 1 and crudos[0].hasta is not None:
+        crudos.append(Tramo(desde=crudos[0].hasta, hasta=None, tasa_nominal=_CERO))
+
     try:
-        tramos = validar_escalera(crudos)
+        tramos = validar_escalera(tuple(crudos))
     except ValueError:
         return None
     if not tramos:
-        # El validador normaliza a plana; con ≥2 pisos distintos no ocurre,
-        # pero si ocurriera no habría escalera que persistir.
+        # El validador normaliza a plana la escalera de un solo tramo abierto,
+        # que es el caso de una entrada sin tope: no hay escalera que
+        # persistir, sólo la tasa titular que ya viaja en la `Tasa`.
         return None
 
     peor = min((e.confianza for e in ordenadas), key=_ORDEN_CONFIANZA.__getitem__)
@@ -84,7 +100,9 @@ def reconstruir_escalera(entradas: Sequence[TasaExtraida]) -> EscaleraExtraida |
     return EscaleraExtraida(
         tramos=tramos,
         cabeza=cabeza,
-        condiciones=_condiciones(ordenadas, tramos),
+        # El tramo del excedente no sale de ninguna entrada, así que se recorta
+        # antes de emparejar condiciones con tramos.
+        condiciones=_condiciones(ordenadas, tramos[: len(ordenadas)]),
     )
 
 

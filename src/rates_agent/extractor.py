@@ -53,6 +53,16 @@ class TasaExtraida(BaseModel):
     gat_nominal: Decimal | None = None
     gat_real: Decimal | None = None
     monto_minimo: Decimal | None = None
+    monto_maximo: Decimal | None = None
+    """Donde **acaba** el tramo, si la página lo dice.
+
+    Es transcripción, no juicio: «15% en tus primeros $25,000» son
+    `monto_minimo=0` y `monto_maximo=25000`. Sin este campo, una página que
+    anuncia un tope y calla por encima era inexpresable —`reconstruir_escalera`
+    deducía cada techo del piso del tramo siguiente, así que el último siempre
+    quedaba en infinito— y el tope desaparecía en silencio.
+    """
+
     condiciones: str | None = None
     confianza: Literal["alta", "media", "baja"] = "media"
 
@@ -83,6 +93,21 @@ class TasaExtraida(BaseModel):
             raise ValueError("un producto a la VISTA no lleva plazo_dias")
         if self.plazo_dias is not None and not (1 <= self.plazo_dias <= 3650):
             raise ValueError(f"plazo fuera de rango: {self.plazo_dias}")
+        return self
+
+    @model_validator(mode="after")
+    def _tramo_con_recorrido(self) -> TasaExtraida:
+        # Se rechaza aquí y no en `validar_escalera` porque allí sólo se
+        # comprueba el techo del último tramo: un `monto_maximo` absurdo en
+        # una entrada intermedia se perdería, y esto además da un error que
+        # nombra la entrada culpable.
+        if self.monto_maximo is None:
+            return self
+        piso = self.monto_minimo or Decimal("0")
+        if self.monto_maximo <= piso:
+            raise ValueError(
+                f"tramo sin recorrido: acaba en {self.monto_maximo} y empieza en {piso}"
+            )
         return self
 
 

@@ -19,6 +19,7 @@ Un objeto JSON con una sola clave `tasas`, con una entrada por producto:
       "gat_nominal": "8.69",
       "gat_real": "4.56",
       "monto_minimo": "100.00",
+      "monto_maximo": null,
       "condiciones": "Tasa fija. Rendimientos antes de impuestos.",
       "confianza": "alta"
     }
@@ -30,8 +31,8 @@ Un objeto JSON con una sola clave `tasas`, con una entrada por producto:
   monedero, "cajita", ahorro a la vista); `"PLAZO"` si hay un plazo fijo.
 - `plazo_dias`: entero. **Sólo `null` cuando `tipo` es `"VISTA"`.**
 - Los porcentajes van como cadena decimal sin el signo: `"8.69"`, no `8.69%`.
-- `gat_nominal`, `gat_real`, `monto_minimo` y `condiciones` son `null` si la
-  página no los dice. **No los deduzcas.**
+- `gat_nominal`, `gat_real`, `monto_minimo`, `monto_maximo` y `condiciones` son
+  `null` si la página no los dice. **No los deduzcas.**
 - `confianza`: `"alta"` si el dato está en una tabla o ficha explícita;
   `"media"` si está en prosa y hay que interpretar; `"baja"` si dudas.
 
@@ -55,8 +56,15 @@ Un objeto JSON con una sola clave `tasas`, con una entrada por producto:
 4. **Un tramo por monto es una entrada por tramo.** Si la página dice 13 % hasta
    $30,000 y 7 % de ahí en adelante, son dos entradas con su `monto_minimo` y su
    condición, no un promedio. Incluye también el tramo base aunque aplique desde
-   el primer peso: ponle `monto_minimo: "0"`. El `monto_minimo` de cada entrada
-   es donde **empieza** su tramo, no el mínimo de contratación del producto.
+   el primer peso: ponle `monto_minimo: "0"`.
+
+   `monto_minimo` es donde **empieza** el tramo —no el mínimo de contratación
+   del producto— y `monto_maximo` es donde **acaba**. Ponlo siempre que la
+   página lo diga, aunque no publique ningún tramo por encima: «15 % en tus
+   primeros $25,000» es `monto_minimo: "0"`, `monto_maximo: "25000"`. Ese caso
+   es la razón de que exista el campo — sin él, un tope anunciado se pierde y
+   la tasa parece aplicar a todo el saldo. Lo que rinde el excedente lo decide
+   el sistema, no tú: si la página calla, no lo inventes.
 
 5. **Cuando la tasa depende de quién eres, publica la de cualquiera.** Es
    distinto del tramo por monto. Si la diferencia la marca una **membresía, la

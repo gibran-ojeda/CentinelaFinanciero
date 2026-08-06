@@ -340,7 +340,13 @@ async def _decidir(
             # para saber dónde corta cada tramo (repetidos o ausentes): elegir
             # una de las tasas sería publicar el «hasta 13 %» que el extractor
             # tiene prohibido inventar, así que ese grupo sigue siendo hueco.
-            escalera = reconstruir_escalera(grupo) if len(grupo) > 1 else None
+            #
+            # Se llama también con una sola entrada, que antes ni se intentaba:
+            # una que declara `monto_maximo` —«15 % en tus primeros $25 000»—
+            # también es una escalera, y sin esto su tope se perdía y la tabla
+            # prometía esa tasa sobre cualquier saldo. Sin tope sigue
+            # devolviendo None y la observación viaja plana, como siempre.
+            escalera = reconstruir_escalera(grupo)
             if producto is None or (len(grupo) > 1 and escalera is None):
                 motivo = (
                     "plazo desconocido"

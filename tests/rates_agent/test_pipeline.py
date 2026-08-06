@@ -747,6 +747,62 @@ async def test_amount_tiers_with_distinct_floors_become_one_ladder() -> None:
         ]
 
 
+async def test_a_single_capped_tier_still_becomes_a_ladder() -> None:
+    """El caso Revolut: una sola entrada que declara hasta dónde llega.
+
+    El pipeline ni siquiera intentaba reconstruir con un grupo de uno, así que
+    el tope anunciado se perdía y la observación salía plana — la tabla decía
+    15 % sobre cualquier saldo. Ahora sale la escalera, con el excedente
+    declarado al 0 % porque la página no dice qué paga por encima.
+
+    Va sobre el producto a plazo del catálogo de la fuente de prueba: la forma
+    de la escalera no depende del tipo, y Finsus no tiene uno a la vista.
+    """
+    await _solo_una_fuente()
+    modelo = ModeloFalso(
+        tasas=[
+            {
+                "producto": "Plazo fijo",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "15.00",
+                "monto_minimo": "0",
+                "monto_maximo": "25000",
+            }
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.huecos_catalogo == []
+    assert reporte.en_revision == 1
+
+    async with session_scope() as session:
+        tasa = (await session.execute(select(Tasa))).scalars().one()
+        assert tasa.tasa_nominal == Decimal("15.00")
+        assert [(t.desde, t.hasta, t.tasa_nominal) for t in tasa.tramos] == [
+            (Decimal("0.00"), Decimal("25000.00"), Decimal("15.0000")),
+            (Decimal("25000.00"), None, Decimal("0.0000")),
+        ]
+
+
+async def test_a_single_tier_without_a_cap_stays_flat() -> None:
+    """Sin tope no hay escalera que reconstruir: es el caso normal y no debe
+    ganar tramos por el cambio anterior."""
+    await _solo_una_fuente()
+    modelo = ModeloFalso(tasas=[TASA_364])
+
+    await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    async with session_scope() as session:
+        tasa = (await session.execute(select(Tasa))).scalars().one()
+        assert tasa.tramos == []
+
+
 async def test_a_ladder_that_does_not_start_at_zero_is_a_catalogue_gap() -> None:
     """Una escalera que no cubre desde el primer peso tiene un tramo base que
     la página no declaró — y la regla 1 prohíbe inventarlo."""
