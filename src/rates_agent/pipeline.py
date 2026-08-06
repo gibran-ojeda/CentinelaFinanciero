@@ -43,7 +43,7 @@ from llm.client import ClienteLLM
 from llm.providers.base import ErrorPresupuestoAgotado, ErrorProveedor
 from rates_agent.escalera import reconstruir_escalera
 from rates_agent.extractor import TasaExtraida, extraer
-from rates_agent.fetcher import CadenaAgotada, Fetcher
+from rates_agent.fetcher import CadenaAgotada, Fetcher, una_linea
 from rates_agent.reviewer import Decision, HuecoCatalogo, revisar
 
 log = get_logger(__name__)
@@ -200,7 +200,9 @@ async def correr(
                 # violación de clave única con Openbank se llevó por delante
                 # las dos fuentes que faltaban, que no tenían nada que ver.
                 reporte.fallidas += 1
-                reporte.errores.append(f"{institucion}: {type(exc).__name__}: {str(exc)[:200]}")
+                reporte.errores.append(
+                    f"{institucion}: {type(exc).__name__}: {una_linea(str(exc), 200)}"
+                )
                 log.exception("fuente_fallida", institucion=institucion, url=url)
     finally:
         reporte.hosts_en_circuito = fetcher.hosts_en_circuito
@@ -454,18 +456,22 @@ async def _anotar_fallo(
         if fuente is None:
             return
         fuente.fallos_consecutivos += 1
-        fuente.ultimo_error = error[:500]
+        # De una línea: `cli fuentes list` lo imprime dentro de una tabla y un
+        # salto de línea del «Call log» de Playwright la parte en dos.
+        fuente.ultimo_error = una_linea(error, 300)
         if not fuente.activa or umbral <= 0 or fuente.fallos_consecutivos < umbral:
             return
         fuente.activa = False
-        fuente.pausada_motivo = f"{fuente.fallos_consecutivos} fallos seguidos: {error[:200]}"
+        fuente.pausada_motivo = (
+            f"{fuente.fallos_consecutivos} fallos seguidos: {una_linea(error, 200)}"
+        )
         reporte.fuentes_pausadas.append(f"{institucion} — {fuente.url}")
         log.warning(
             "fuente_pausada",
             institucion=institucion,
             url=fuente.url,
             fallos=fuente.fallos_consecutivos,
-            error=error[:200],
+            error=una_linea(error, 200),
         )
 
 

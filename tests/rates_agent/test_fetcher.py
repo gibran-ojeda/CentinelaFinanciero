@@ -21,6 +21,7 @@ from rates_agent.fetcher import (
     ErrorDescarga,
     Fetcher,
     TransporteHttpx,
+    una_linea,
 )
 
 PAGINA = """
@@ -389,6 +390,64 @@ async def test_a_host_that_never_answers_is_not_transient(error: Exception) -> N
 
     assert exc.value.transitorio is False
     await t.cerrar()
+
+
+# ─── El mensaje de error ──────────────────────────────────────
+
+
+def test_a_message_is_flattened_and_cut_at_a_word() -> None:
+    """El «Call log» de Playwright viene multilínea y acaba en una tabla."""
+    crudo = 'Page.goto: net::ERR_CONNECTION_CLOSED\nCall log:\n  - navigating to "x"'
+
+    assert "\n" not in una_linea(crudo, 500)
+    assert una_linea(crudo, 500) == (
+        'Page.goto: net::ERR_CONNECTION_CLOSED Call log: - navigating to "x"'
+    )
+    # Y el corte respeta la palabra: antes salía `waiting until "domcon`.
+    assert una_linea("waiting until domcontentloaded", 20) == "waiting until…"
+
+
+def test_a_message_without_spaces_is_not_cut_to_nothing() -> None:
+    """Una URL larga no tiene dónde cortar: vale más truncada que vacía."""
+    largo = "https://institucion.test/" + "a" * 200
+
+    recortado = una_linea(largo, 40)
+
+    assert len(recortado) == 41  # 40 + la elipsis
+    assert recortado.startswith("https://institucion.test/")
+
+
+async def test_the_error_names_the_url_once() -> None:
+    """El log del 2026-08-02 la traía tres veces en la misma línea.
+
+    `descargar` pasa `str(exc)` —que ya empieza por la URL— como resumen al
+    backoff, y el backoff la anteponía otra vez. Con el nombre del transporte
+    duplicado encima, el mensaje era ilegible justo donde más se lee: en
+    `cli fuentes list`.
+    """
+    transitorio = ErrorDescarga("HTTP 503", transitorio=True)
+    f = _fetcher(
+        TransporteFalso("httpx", transitorio, transitorio, transitorio),
+        max_reintentos=0,
+        esperas_backoff_s=(0.01,),
+    )
+
+    with pytest.raises(CadenaAgotada) as exc:
+        await f.descargar(URL)
+
+    assert str(exc.value).count(URL) == 1
+    assert "backoff agotado" in str(exc.value)
+
+
+async def test_the_transport_name_is_not_repeated() -> None:
+    """Salía `navegador → navegador: Page.goto: …`."""
+    t = TransporteFalso("navegador", ErrorDescarga("navegador: Page.goto: falló"))
+    f = _fetcher(t, max_reintentos=0)
+
+    with pytest.raises(CadenaAgotada) as exc:
+        await f.descargar(URL)
+
+    assert "navegador → Page.goto: falló" in str(exc.value)
 
 
 async def test_a_host_that_never_answers_still_opens_its_circuit() -> None:

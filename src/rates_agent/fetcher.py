@@ -169,6 +169,27 @@ def _host(url: str) -> str:
     return (urlsplit(url).netloc or url).lower()
 
 
+def una_linea(texto: str, tope: int) -> str:
+    """Mensaje de una sola línea, acotado, y cortado donde acaba una palabra.
+
+    Los errores de Playwright traen un «Call log» multilínea, y ese texto acaba
+    en `fuentes_tasas.ultimo_error`, que `cli fuentes list` imprime dentro de
+    una tabla: un salto de línea ahí la parte en dos. Y cortar a bocajarro
+    dejaba cosas como `waiting until "domcon`, que no dice nada — el corte se
+    comía la palabra justo cuando empezaba a ser informativa.
+    """
+    limpio = " ".join(texto.split())
+    if len(limpio) <= tope:
+        return limpio
+    recortado = limpio[:tope]
+    espacio = recortado.rfind(" ")
+    # Sólo si queda mensaje suficiente: con una cadena sin espacios —una URL
+    # larga— cortar en el último espacio la dejaría en nada.
+    if espacio > tope // 2:
+        recortado = recortado[:espacio]
+    return recortado.rstrip(" ,;:") + "…"
+
+
 def _espera(intento: int, base: float, tope: float) -> float:
     return min(base * (2.0**intento), tope) * random.uniform(0.75, 1.25)  # noqa: S311
 
@@ -342,7 +363,14 @@ class Fetcher:
                 html, n = await self._con_reintentos(transporte, url)
             except ErrorDescarga as exc:
                 self._contar_fallo(host)
-                intentos.append((transporte.nombre, str(exc)[:160]))
+                detalle = una_linea(str(exc), 160)
+                # El navegador prefija sus errores con su propio nombre, y el
+                # resumen ya lo antepone: sin esto sale `navegador → navegador:
+                # Page.goto: …`.
+                prefijo = f"{transporte.nombre}:"
+                if detalle.startswith(prefijo):
+                    detalle = detalle[len(prefijo) :].strip()
+                intentos.append((transporte.nombre, detalle))
                 degradada = True
                 transitoria = transitoria or exc.transitorio
                 continue
@@ -415,8 +443,11 @@ class Fetcher:
         volver a esperar veinte minutos por cada una.
         """
         async with self._lock_backoff:
+            # `resumen` es el mensaje de la `CadenaAgotada` que trajo hasta
+            # aquí, y ése ya empieza por la URL: anteponerla otra vez la dejaba
+            # repetida dos y tres veces en la misma línea de error.
             if self._backoff_agotado:
-                raise CadenaAgotada(f"{url}: {resumen} (backoff ya agotado en esta corrida)")
+                raise CadenaAgotada(f"{resumen} (backoff ya agotado en esta corrida)")
 
             # Otra URL pudo haber esperado y recuperado el host mientras ésta
             # aguardaba el lock: se reprueba antes de dormir de nuevo.
@@ -442,7 +473,7 @@ class Fetcher:
                     continue
 
             self._backoff_agotado = True
-            raise CadenaAgotada(f"{url}: {resumen} (backoff agotado)")
+            raise CadenaAgotada(f"{resumen} (backoff agotado)")
 
     async def cerrar(self) -> None:
         for transporte in self._transportes:
