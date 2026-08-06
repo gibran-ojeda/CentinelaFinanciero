@@ -58,11 +58,18 @@ class TransporteFalso:
 
 
 class ModeloFalso(ProveedorLLM):
-    def __init__(self, *, tasas: list[dict] | None = None, sin_presupuesto: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        tasas: list[dict] | None = None,
+        ambiguas: list[str] | None = None,
+        sin_presupuesto: bool = False,
+    ) -> None:
         self.nombre = "doble"
         self.modelo = "doble"
         self.llamadas = 0
         self._tasas = tasas if tasas is not None else []
+        self._ambiguas = ambiguas if ambiguas is not None else []
         self._sin_presupuesto = sin_presupuesto
 
     async def completar(self, **kwargs: object) -> RespuestaLLM:
@@ -70,7 +77,7 @@ class ModeloFalso(ProveedorLLM):
         if self._sin_presupuesto:
             raise ErrorPresupuestoAgotado("techo diario alcanzado")
         return RespuestaLLM(
-            contenido=json.dumps({"tasas": self._tasas}),
+            contenido=json.dumps({"tasas": self._tasas, "ambiguas": self._ambiguas}),
             modelo="doble",
             tokens_entrada=1000,
             tokens_salida=100,
@@ -145,6 +152,58 @@ async def test_a_read_page_becomes_a_queued_review() -> None:
     assert reporte.tasas_extraidas == 1
     assert reporte.en_revision == 1
     assert reporte.publicadas == 0
+
+
+async def test_a_vague_claim_is_recorded_on_its_source() -> None:
+    """El caso Mercado Pago: la página se lee bien y no hay nada publicable.
+
+    Sin esto era indistinguible de una portada que no habla de tasas —las dos
+    devuelven `tasas: []`— y para quien compara no son lo mismo: una institución
+    no tiene página de tasas y la otra anuncia un número sin decir a qué
+    corresponde.
+    """
+    await _solo_una_fuente()
+    modelo = ModeloFalso(tasas=[], ambiguas=["Ganancias de hasta 12% anual"])
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.ambiguas == ["Finsus"]
+    async with session_scope() as session:
+        fuente = (
+            (await session.execute(select(FuenteTasas).where(FuenteTasas.activa.is_(True))))
+            .scalars()
+            .one()
+        )
+        assert fuente.ultima_ambiguedad == "Ganancias de hasta 12% anual"
+        assert fuente.ultima_ambiguedad_at is not None
+        # Y no cuenta como fallo: la página respondió y el extractor obedeció.
+        assert fuente.fallos_consecutivos == 0
+
+
+async def test_a_clean_reading_clears_a_previous_vague_claim() -> None:
+    """La institución arregla su página y la bandera tiene que irse sola."""
+    await _solo_una_fuente()
+    await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)),
+        cliente=ClienteLLM(ModeloFalso(tasas=[], ambiguas=["hasta 12% anual"])),
+    )
+
+    # Otra página, para que el hash cambie y la lectura vuelva a ocurrir.
+    await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA.replace("8.69", "8.70"))),
+        cliente=ClienteLLM(ModeloFalso(tasas=[TASA_364])),
+    )
+
+    async with session_scope() as session:
+        fuente = (
+            (await session.execute(select(FuenteTasas).where(FuenteTasas.activa.is_(True))))
+            .scalars()
+            .one()
+        )
+        assert fuente.ultima_ambiguedad is None
+        assert fuente.ultima_ambiguedad_at is None
 
 
 async def test_an_unchanged_page_costs_nothing() -> None:

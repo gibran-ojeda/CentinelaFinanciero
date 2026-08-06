@@ -111,10 +111,26 @@ class TasaExtraida(BaseModel):
         return self
 
 
+#: Cuántos reclamos ambiguos se guardan y cuánto de cada uno. Es material para
+#: una bandera, no un archivo: con el titular de la página basta para decir que
+#: no dice a qué corresponde su número.
+MAX_AMBIGUAS = 5
+MAX_AMBIGUA_CARACTERES = 300
+
+
 class Extraccion(BaseModel):
     """Lo que el modelo devolvió para una página."""
 
     tasas: list[TasaExtraida] = Field(default_factory=list)
+
+    ambiguas: list[str] = Field(default_factory=list)
+    """Los reclamos con pinta de tasa que la regla 1 obligó a descartar.
+
+    El modelo ya tomaba esa decisión y se la tragaba, así que una página que
+    sólo anuncia «hasta 12 % anual» era indistinguible de una que no habla de
+    tasas: las dos volvían con `tasas: []`. Son cosas muy distintas para quien
+    compara, y de aquí sale la bandera de tasas ambiguas.
+    """
 
 
 async def extraer(
@@ -215,7 +231,26 @@ def _validar(datos: dict[str, Any]) -> Extraccion:
         raise ValueError("; ".join(errores))
     for detalle in errores:
         log.warning("tasa_extraida_descartada", detalle=detalle)
-    return Extraccion(tasas=validas)
+    return Extraccion(tasas=validas, ambiguas=_ambiguas(datos.get("ambiguas")))
+
+
+def _ambiguas(crudas: object) -> list[str]:
+    """Los reclamos descartados, saneados y acotados.
+
+    No valida: una `ambiguas` malformada **no** puede tumbar una extracción con
+    tasas buenas ni provocar un reintento pagado. Es información secundaria y
+    ante la duda se calla, que es la misma regla que sigue el motor de banderas.
+    """
+    if not isinstance(crudas, list):
+        return []
+    limpias = []
+    for cruda in crudas:
+        if not isinstance(cruda, str):
+            continue
+        texto = " ".join(cruda.split())[:MAX_AMBIGUA_CARACTERES].strip()
+        if texto:
+            limpias.append(texto)
+    return limpias[:MAX_AMBIGUAS]
 
 
 __all__ = ["TASA_MAXIMA_PLAUSIBLE", "Extraccion", "TasaExtraida", "extraer"]

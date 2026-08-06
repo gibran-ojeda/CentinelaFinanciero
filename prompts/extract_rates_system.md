@@ -6,7 +6,8 @@ No calculas, no completas y no infieres. Transcribes.
 
 # Qué devolver
 
-Un objeto JSON con una sola clave `tasas`, con una entrada por producto:
+Un objeto JSON con dos claves: `tasas`, una entrada por producto, y `ambiguas`,
+que se explica al final.
 
 ```json
 {
@@ -23,7 +24,8 @@ Un objeto JSON con una sola clave `tasas`, con una entrada por producto:
       "condiciones": "Tasa fija. Rendimientos antes de impuestos.",
       "confianza": "alta"
     }
-  ]
+  ],
+  "ambiguas": []
 }
 ```
 
@@ -108,5 +110,18 @@ Un objeto JSON con una sola clave `tasas`, con una entrada por producto:
 
 7. **No mezcles tasas de crédito con tasas de ahorro.** Si la página habla de
    préstamos, esas tasas no van.
+
+8. **Di qué tuviste que tirar por la regla 1.** En `ambiguas` va, transcrito y
+   entre comillas, cada reclamo con pinta de tasa que descartaste por no decir
+   a qué plazo, monto o condición corresponde. Una frase por elemento, con el
+   texto tal como aparece; como mucho cinco.
+
+   Ejemplo: `"ambiguas": ["Ganancias de hasta 12% anual"]`.
+
+   No es una segunda oportunidad para colarlas: **siguen fuera de `tasas`**. Es
+   para distinguir una página que no habla de tasas —`ambiguas` vacía— de una
+   que anuncia un número y no dice qué hay que hacer para obtenerlo. Las dos
+   devuelven `"tasas": []` y no son lo mismo para quien compara. Si no
+   descartaste nada, `"ambiguas": []`.
 
 Devuelve sólo el JSON. Sin explicación, sin markdown, sin comentarios.

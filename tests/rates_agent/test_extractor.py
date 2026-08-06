@@ -322,6 +322,40 @@ class TestExtraer:
         assert "Ganancias de hasta 12 % anual" in sistema
         assert "volver vacío es la respuesta buena aquí" in sistema
 
+    async def test_the_discarded_claims_come_back_instead_of_vanishing(self) -> None:
+        """«No hay tasas» y «anuncia un número que no concreta» no son lo mismo.
+
+        Las dos devuelven `tasas: []`, y sin `ambiguas` no había forma de
+        distinguirlas: una institución no tiene página de tasas y la otra
+        publica un titular que nadie puede saber si le tocará.
+        """
+        cliente, _ = _cliente('{"tasas": [], "ambiguas": ["Ganancias de hasta 12% anual"]}')
+
+        extraccion = await extraer(
+            cliente, institucion="Mercado Pago", url="https://mp.test/", contenido="…"
+        )
+
+        assert extraccion.tasas == []
+        assert extraccion.ambiguas == ["Ganancias de hasta 12% anual"]
+
+    async def test_a_malformed_ambiguous_list_never_costs_the_good_rates(self) -> None:
+        """Es información secundaria: ante la duda se calla, no revienta.
+
+        Tumbar una extracción con tasas buenas —o provocar un reintento pagado—
+        porque el modelo se equivocó en un campo accesorio sería el peor
+        cambio posible de los dos.
+        """
+        cliente, doble = _cliente(
+            '{"tasas": [{"producto": "Plazo", "tipo": "PLAZO", "plazo_dias": 364,'
+            ' "tasa_nominal": "8.69"}], "ambiguas": "no soy una lista"}'
+        )
+
+        extraccion = await extraer(cliente, institucion="X", url="https://x.test/", contenido="…")
+
+        assert len(extraccion.tasas) == 1
+        assert extraccion.ambiguas == []
+        assert doble.llamadas == 1  # sin reintento
+
     async def test_the_prompt_carries_the_institution_and_the_url(self) -> None:
         cliente, doble = _cliente('{"tasas": []}')
 
