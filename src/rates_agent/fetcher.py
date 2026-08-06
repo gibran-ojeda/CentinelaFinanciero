@@ -317,6 +317,17 @@ class Fetcher:
             return None
         if resp.status_code >= 400:
             return None
+        # El RFC 9309 §2.3 dice `text/plain`, y por algo: `didiglobal.com`
+        # redirige su robots.txt a la página de 404, que contesta **200 con
+        # HTML**. Dárselo a `RobotFileParser` produce un parser vacío que
+        # permite todo — la respuesta correcta, pero por accidente, y sin poder
+        # distinguir «no hay reglas» de «no llegué a leer reglas».
+        # Sin cabecera se sigue adelante: hay servidores que no la mandan, y
+        # exigirla convertiría un robots.txt válido en uno ignorado.
+        tipo = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+        if tipo and tipo != "text/plain":
+            log.info("robots_no_es_texto", url=destino, content_type=tipo)
+            return None
         parser = RobotFileParser()
         parser.parse(resp.text.splitlines())
         return parser

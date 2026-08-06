@@ -262,6 +262,41 @@ async def test_a_disallowing_robots_is_not_an_error() -> None:
     assert f.hosts_en_circuito == []
 
 
+@respx.mock
+async def test_an_html_robots_is_not_parsed_as_rules() -> None:
+    """El caso DiDi: su robots.txt redirige a una página de 404 que da 200.
+
+    `RobotFileParser` sobre HTML produce un parser vacío, que permite todo — la
+    respuesta correcta, pero por accidente. Se descarta explícitamente para que
+    «no hay reglas» y «no llegué a leer reglas» dejen de ser lo mismo.
+    """
+    respx.get("https://institucion.test/robots.txt").mock(
+        return_value=httpx.Response(200, html="<html><body>Página no encontrada</body></html>")
+    )
+    f = Fetcher([TransporteFalso("httpx", PAGINA)], respetar_robots=True)  # type: ignore[list-item]
+
+    parser = await f._leer_robots(URL)  # noqa: SLF001 — es lo que se prueba
+
+    assert parser is None
+    # Y el efecto es el del estándar: sin reglas legibles, se permite.
+    assert await f._permitido(URL) is True  # noqa: SLF001
+
+
+@respx.mock
+async def test_a_plain_text_robots_is_still_honoured() -> None:
+    """Lo que no puede pasar es dejar de respetar un robots.txt de verdad."""
+    respx.get("https://institucion.test/robots.txt").mock(
+        return_value=httpx.Response(
+            200,
+            text="User-agent: *\nDisallow: /",
+            headers={"content-type": "text/plain; charset=utf-8"},
+        )
+    )
+    f = Fetcher([TransporteFalso("httpx", PAGINA)], respetar_robots=True)  # type: ignore[list-item]
+
+    assert await f._permitido(URL) is False  # noqa: SLF001
+
+
 # ─── El transporte de navegador ───────────────────────────────
 
 
