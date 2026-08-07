@@ -39,8 +39,15 @@ _MAX_REDACTION_DEPTH = 6
 #: Es una lista explícita y no una regla nueva: aflojar la coincidencia por
 #: subcadena para arreglar un caso concreto es cómo se escapa un secreto de
 #: verdad. Añadir aquí exige mirar la clave y decidir que no lo es.
+#:
+#: El precio de esa decisión se cobró el 2026-08-07: faltaba `max_tokens` y el
+#: log de una extracción truncada salía `"max_tokens": "***"` — el único número
+#: que dice si el techo se quedó corto, tapado justo en el evento que existe
+#: para diagnosticarlo. **Cada campo nuevo que cuente o limite tokens hay que
+#: añadirlo aquí**, y el fallo es silencioso: no rompe nada, sólo borra el dato
+#: cuando hace falta.
 EXENTAS: frozenset[str] = frozenset(
-    {"tokens", "tokens_entrada", "tokens_salida", "tokens_totales"}
+    {"tokens", "tokens_entrada", "tokens_salida", "tokens_totales", "max_tokens"}
 )
 
 _configured = False

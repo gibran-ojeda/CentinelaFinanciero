@@ -454,18 +454,24 @@ productos:
   # 28 es «tasa exclusiva al ser Fan Hey o Hey Pro, por tiempo limitado», así
   # que va a `condiciones` por la regla 5 y no se siembra como producto.
   #
-  # Sin `nombre_publicado` a propósito: el plazo ya los distingue, y Hey
-  # escribe su nombre distinto en cada corrida —«Inversión Hey», «Inversión Hey
-  # a 7 días», «Cliente Hey 7 días»—, así que atarse a esa cadena rompería la
-  # lectura la próxima vez que cambien el copy.
-  #
   # «Inversión Hey Negocios» (7 y 28 días) queda **fuera a propósito**: es
   # banca de empresas, y la cobertura del IPAB, el ISR y la ganancia real que
-  # calculamos son los de una persona física. Si aparece como hueco en una
-  # corrida, no es un olvido.
+  # calculamos son los de una persona física.
+  #
+  # Pero dejarlo fuera no basta: Hey lo publica en la misma página y en el
+  # mismo plazo, así que su casilla `(PLAZO, 7)` y `(PLAZO, 28)` aloja dos
+  # productos publicados y el pipeline no puede decidir cuál es el nuestro.
+  # La corrida del 2026-08-07 lo demostró: las cuatro tasas de Hey salieron
+  # como hueco con ese motivo exacto. Por eso llevan `nombre_publicado`.
+  #
+  # Se había decidido no ponerlo porque Hey escribía su nombre distinto en cada
+  # corrida —«Inversión Hey a 7 días», «Cliente Hey 7 días»—, pero eso era el
+  # prompt viejo emitiendo una entrada por segmento. Con la regla 5 colapsando
+  # las variantes de membresía, el nombre que llega es estable: «Inversión Hey».
   - institucion: Hey Banco
     nombre: Hey Inversión 7 días
     slug: hey-plazo-7
+    nombre_publicado: Inversión Hey
     tipo: PLAZO
     instrumento: DEPOSITO_BANCARIO
     plazo_dias: 7
@@ -475,6 +481,7 @@ productos:
   - institucion: Hey Banco
     nombre: Hey Inversión 28 días
     slug: hey-plazo-28
+    nombre_publicado: Inversión Hey
     tipo: PLAZO
     instrumento: DEPOSITO_BANCARIO
     plazo_dias: 28
