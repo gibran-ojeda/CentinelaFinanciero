@@ -152,6 +152,7 @@ async def correr(
     fetcher: Fetcher | None = None,
     cliente: ClienteLLM | None = None,
     solo_requieren_js: bool | None = None,
+    forzar: bool = False,
 ) -> ReporteCorrida:
     """Recorre las fuentes activas y deja el resultado en la base.
 
@@ -161,6 +162,14 @@ async def correr(
             Es el filtro de depuración de la CLI — repetir una mitad de la
             corrida sin pagar la otra — y el que usa el repliegue
             `tasas_fetch_solo_sin_js`.
+        forzar: extrae aunque la página no haya cambiado. El cortocircuito por
+            hash asume que lo que cambia es la página, y hay un caso en que no:
+            **cuando cambia el catálogo**. El 2026-08-07 se dieron de alta los
+            nueve productos que Klar y Hey publican de verdad, y las corridas
+            siguientes los habrían dejado sin tasa para siempre —el hash de
+            esas dos páginas estaba sellado desde antes— hasta que a Klar se le
+            ocurriera editar su web. Cuesta tokens: es un override manual, no
+            algo que el job programado use nunca.
     """
     reporte = ReporteCorrida()
     propios = fetcher is None or cliente is None
@@ -199,7 +208,7 @@ async def correr(
                     fuente_id=fuente_id,
                     url=url,
                     institucion=institucion,
-                    hash_previo=hash_previo,
+                    hash_previo=None if forzar else hash_previo,
                     requiere_js=requiere_js,
                 )
             except ErrorPresupuestoAgotado:

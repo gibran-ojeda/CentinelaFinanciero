@@ -512,6 +512,7 @@ async def correr_fetch(
     *,
     solo_navegador: bool = False,
     sin_navegador: bool = False,
+    forzar: bool = False,
     esperas_backoff_s: tuple[float, ...] | None = None,
 ) -> ReporteCorrida:
     """Corre el pipeline de lectura desde la terminal.
@@ -527,6 +528,12 @@ async def correr_fetch(
 
     Con `--sin-navegador` no se importa Playwright: una máquina sin el extra
     `[browser]` puede correr la mitad httpx igual.
+
+    `--forzar` ignora el cortocircuito por hash y **paga la extracción de cada
+    página**. Existe para el caso en que lo que cambió no es la web sino el
+    catálogo: dar de alta un producto no mueve el hash de la página que lo
+    publica, así que sin esto la corrida siguiente la saltaría por «sin
+    cambios» y el producto nuevo se quedaría sin tasa indefinidamente.
     """
     solo_js: bool | None = True if solo_navegador else (False if sin_navegador else None)
     agente = settings.fetch_user_agent
@@ -549,9 +556,13 @@ async def correr_fetch(
     # bajo su propio id: `cli revisiones list` agrega los huecos de las
     # corridas recientes de ambos, y así ninguna borra lo que vio la otra.
     async with registrar_corrida(JOB_ID_FETCH_MANUAL) as corrida:
-        reporte = await pipeline.correr(fetcher=fetcher, solo_requieren_js=solo_js)
+        reporte = await pipeline.correr(fetcher=fetcher, solo_requieren_js=solo_js, forzar=forzar)
         corrida.metricas.update(reporte.como_metricas())
         corrida.metricas["disparada_por"] = "cli"
+        if forzar:
+            # Queda en la bitácora: una corrida forzada cuesta tokens que las
+            # demás no, y explica un pico de gasto que si no parecería un error.
+            corrida.metricas["forzada"] = True
         if reporte.fracaso_total:
             # Fallida en la bitácora, pero sin lanzar: la persona delante de
             # la terminal todavía recibe el render con la primera causa.
