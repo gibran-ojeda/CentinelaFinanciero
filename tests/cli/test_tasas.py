@@ -102,11 +102,12 @@ async def test_seed_dataset_publishes_only_verified_rates() -> None:
     await run_seed()
     report = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
-    # Seis VIGENTE: las gubernamentales verificadas contra el SIE de Banxico y
-    # cetesdirecto, más la escalera de Openbank leída de su página oficial.
-    # Todo lo demás es de agregador y queda pendiente.
-    assert report.por_estado["VIGENTE"] == 6
-    assert report.por_estado["PENDIENTE_REVISION"] == 29
+    # Siete VIGENTE: las gubernamentales verificadas contra el SIE de Banxico y
+    # cetesdirecto, más las dos escaleras leídas a mano de la página oficial de
+    # su institución —Openbank y Revolut—. Todo lo demás es de agregador y
+    # queda pendiente.
+    assert report.por_estado["VIGENTE"] == 7
+    assert report.por_estado["PENDIENTE_REVISION"] == 28
 
     async with session_scope() as session:
         vigentes = (
@@ -129,6 +130,7 @@ async def test_seed_dataset_publishes_only_verified_rates() -> None:
         "cetes-364",
         "cetes-91",
         "openbank-vista",
+        "revolut-vista",
     }
 
 
@@ -363,14 +365,15 @@ async def test_the_review_list_names_what_cannot_be_published() -> None:
     motivos = {p.motivo for p in lista.pendientes}
 
     assert motivos == {"sin verificar", "sin tasa"}
-    assert sum(p.motivo == "sin verificar" for p in lista.pendientes) == 29
+    assert sum(p.motivo == "sin verificar" for p in lista.pendientes) == 28
 
-    # Ninguna de las seis VIGENTE aparece: CETES, BONDDIA y la escalera de
-    # Openbank salen de fuente primaria.
+    # Ninguna de las siete VIGENTE aparece: CETES, BONDDIA y las escaleras de
+    # Openbank y Revolut salen de fuente primaria.
     slugs = {p.producto_slug for p in lista.pendientes}
     assert "cetes-28" not in slugs
     assert "bonddia" not in slugs
     assert "openbank-vista" not in slugs
+    assert "revolut-vista" not in slugs
 
 
 async def test_the_review_list_carries_the_official_url_to_open() -> None:
@@ -442,10 +445,10 @@ async def test_an_aggregator_rate_is_accepted_as_pending(tmp_path: Path) -> None
 
 
 async def test_the_seed_holds_no_aggregator_rate_as_current() -> None:
-    """El catálogo semilla cumple la invariante: 29 de agregador, ninguna vigente.
+    """El catálogo semilla cumple la invariante: 28 de agregador, ninguna vigente.
 
-    Eran 30 hasta que la lectura oficial de Openbank retiró (comentó) su fila
-    de contraste.
+    Eran 30 hasta que las lecturas oficiales de Openbank y Revolut retiraron
+    (comentaron) sus filas de contraste.
     """
     await run_seed()
     await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
@@ -457,7 +460,7 @@ async def test_the_seed_holds_no_aggregator_rate_as_current() -> None:
             .all()
         )
 
-    assert len(agregadas) == 29
+    assert len(agregadas) == 28
     assert all(t.estado is EstadoTasa.PENDIENTE_REVISION for t in agregadas)
 
 
@@ -499,7 +502,7 @@ async def test_a_superseded_aggregator_row_gets_commented_out(tmp_path: Path) ->
     reporte = await retirar_sustituidas(copia)
 
     assert [r[0] for r in reporte.retiradas] == ["hey-vista"]
-    assert reporte.conservadas == 28
+    assert reporte.conservadas == 27
 
     original = (DEFAULT_SEEDS_DIR / "tasas.csv").read_text(encoding="utf-8").splitlines()
     nuevo = copia.read_text(encoding="utf-8").splitlines()
@@ -551,5 +554,5 @@ async def test_nothing_is_retired_without_an_official_reading(tmp_path: Path) ->
     reporte = await retirar_sustituidas(copia)
 
     assert reporte.retiradas == []
-    assert reporte.conservadas == 29
+    assert reporte.conservadas == 28
     assert copia.read_text(encoding="utf-8") == antes
