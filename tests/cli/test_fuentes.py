@@ -256,6 +256,18 @@ def _sin_red(monkeypatch: pytest.MonkeyPatch, *, plano: str, renderizado: str) -
     )
 
 
+async def _probar(fuente_id: int | None = None, *, extraer_tasas: bool = False) -> str:
+    """Todo lo que la sonda escribe, en el orden en que lo escribe.
+
+    La sonda imprime cada fuente en cuanto la mide en vez de devolver el
+    informe entero al final —una muerte a mitad se llevaba lo ya medido y lo ya
+    pagado—, así que los tests capturan por el mismo sitio que la terminal.
+    """
+    escrito: list[str] = []
+    resumen = await fuentes.probar(fuente_id, extraer_tasas=extraer_tasas, escribir=escrito.append)
+    return "\n".join([*escrito, resumen])
+
+
 class ModeloFalso(ProveedorLLM):
     """Devuelve tasas sólo si el texto trae una tabla."""
 
@@ -296,7 +308,7 @@ async def test_the_probe_reports_each_transport_separately(
     _sin_red(monkeypatch, plano=SHELL, renderizado=CON_TABLA)
     monkeypatch.setattr(fuentes, "ClienteLLM", lambda: ClienteLLM(ModeloFalso()))
 
-    salida = await fuentes.probar(fuente.id, extraer_tasas=True)
+    salida = await _probar(fuente.id, extraer_tasas=True)
 
     assert "httpx      " in salida and "navegador  " in salida
     assert "0 tasas" in salida and "1 tasas" in salida
@@ -312,7 +324,7 @@ async def test_the_probe_says_no_when_the_plain_client_is_enough(
     _sin_red(monkeypatch, plano=CON_TABLA, renderizado=CON_TABLA)
     monkeypatch.setattr(fuentes, "ClienteLLM", lambda: ClienteLLM(ModeloFalso()))
 
-    salida = await fuentes.probar(fuente.id, extraer_tasas=True)
+    salida = await _probar(fuente.id, extraer_tasas=True)
 
     assert "requiere_js: False" in salida
 
@@ -330,7 +342,7 @@ async def test_without_extracting_the_probe_refuses_to_guess(
     fuente = await _klar()
     _sin_red(monkeypatch, plano=SHELL, renderizado=CON_TABLA)
 
-    salida = await fuentes.probar(fuente.id)
+    salida = await _probar(fuente.id)
 
     assert "sin veredicto" in salida
     assert "requiere_js: True" not in salida
@@ -348,7 +360,7 @@ async def test_the_probe_leaves_the_source_untouched(monkeypatch: pytest.MonkeyP
         suya.fallos_consecutivos = 3
     _sin_red(monkeypatch, plano=SHELL, renderizado=CON_TABLA)
 
-    await fuentes.probar(fuente.id)
+    await _probar(fuente.id)
 
     despues = await _klar()
     assert despues.ultimo_hash == "b" * 64

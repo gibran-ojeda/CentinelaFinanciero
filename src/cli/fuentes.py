@@ -15,6 +15,7 @@ hasta que alguien lo lleve al repo.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -121,7 +122,12 @@ class _Medida:
         return cuenta if self.tasas is None else f"{cuenta}, {self.tasas} tasas"
 
 
-async def probar(fuente_id: int | None = None, *, extraer_tasas: bool = False) -> str:
+async def probar(
+    fuente_id: int | None = None,
+    *,
+    extraer_tasas: bool = False,
+    escribir: Callable[[str], None] = print,
+) -> str:
     """Descarga cada fuente con **cada transporte por separado**.
 
     La sonda que faltaba. `requiere_js` decide desde qué job se lee una fuente,
@@ -141,6 +147,14 @@ async def probar(fuente_id: int | None = None, *, extraer_tasas: bool = False) -
 
     No toca la base: ni sella hash, ni cuenta fallos, ni pausa nada. Se puede
     correr contra producción sin consecuencias.
+
+    **Escribe cada fuente en cuanto la mide**, no al final. Con quince fuentes,
+    dos transportes cada una y un Chromium por medio, la corrida es larga y hay
+    muchas formas de que se muera —el 2026-08-06 se murió en la primera, sin
+    traza, seguramente por memoria—. Acumular la salida en una lista hacía que
+    cualquier muerte se llevara todo lo medido y, con `--extraer`, las llamadas
+    al modelo ya pagadas. `escribir` existe para que los tests capturen lo
+    mismo que ve la terminal.
     """
     from rates_agent.fetcher import ErrorDescarga, Fetcher, TransporteHttpx, una_linea
     from rates_agent.navegador import TransporteNavegador
@@ -166,7 +180,6 @@ async def probar(fuente_id: int | None = None, *, extraer_tasas: bool = False) -
 
     agente = settings.fetch_user_agent
     cliente = ClienteLLM() if extraer_tasas else None
-    lineas: list[str] = []
     desacuerdos = 0
     try:
         for id_, url, institucion, requiere_js, activa in filas:
@@ -195,29 +208,31 @@ async def probar(fuente_id: int | None = None, *, extraer_tasas: bool = False) -
             if veredicto is not None and veredicto != requiere_js:
                 desacuerdos += 1
                 marca = "  ← la marca dice lo contrario"
-            lineas.append(f"\n  {institucion}  [{id_}]{'' if activa else '  (pausada)'}")
-            lineas.append(f"    {url}")
-            for nombre, medida in medidas.items():
-                lineas.append(f"      {nombre:<10} {medida.render()}")
-            if veredicto is None:
-                lineas.append("      → sin veredicto: mira las dos medidas y decide")
-            else:
-                lineas.append(f"      → requiere_js: {veredicto}{marca}")
+            bloque = [f"\n  {institucion}  [{id_}]{'' if activa else '  (pausada)'}", f"    {url}"]
+            bloque += [
+                f"      {nombre:<10} {medida.render()}" for nombre, medida in medidas.items()
+            ]
+            bloque.append(
+                "      → sin veredicto: mira las dos medidas y decide"
+                if veredicto is None
+                else f"      → requiere_js: {veredicto}{marca}"
+            )
+            escribir("\n".join(bloque))
     finally:
         if cliente is not None:
             await cliente.cerrar()
 
     if not extraer_tasas:
-        lineas.append("\n  Sin --extraer sólo se miden caracteres, y eso no basta para decidir:")
-        lineas.append("  una tabla de tasas pesa poco al lado del marketing de la página.")
-    elif desacuerdos:
-        lineas.append(
+        return (
+            "\n  Sin --extraer sólo se miden caracteres, y eso no basta para decidir:"
+            "\n  una tabla de tasas pesa poco al lado del marketing de la página."
+        )
+    if desacuerdos:
+        return (
             f"\n  {desacuerdos} fuentes con la marca al revés de lo medido. "
             "Corregir en seeds/fuentes_tasas.yaml."
         )
-    else:
-        lineas.append("\n  La marca coincide con lo medido en todas.")
-    return "\n".join(lineas)
+    return "\n  La marca coincide con lo medido en todas."
 
 
 async def _medir(

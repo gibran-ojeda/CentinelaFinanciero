@@ -310,6 +310,10 @@ async def _run(args: argparse.Namespace) -> int:
                 case "url":
                     print(await fuentes_module.cambiar_url(args.fuente_id, args.url))
                 case "probar":
+                    # La sonda imprime cada fuente según la mide; aquí sólo
+                    # queda el resumen. Si la corrida se muere a mitad —quince
+                    # fuentes con un Chromium cada una dan margen de sobra—, lo
+                    # medido hasta ahí ya está en la terminal.
                     print("Transporte que necesita cada fuente:")
                     print(await fuentes_module.probar(args.fuente_id, extraer_tasas=args.extraer))
                 case "purgar":
