@@ -163,13 +163,25 @@ async def extraer(
         datos, respuesta = await cliente.completar_json(
             sistema=sistema, usuario=usuario, claves_requeridas=("tasas",), max_tokens=MAX_TOKENS
         )
-    except RespuestaTruncada:
+    except RespuestaTruncada as exc:
         # Una página con muchas tasas no cabe en el techo, y hasta ahora eso
         # era indistinguible de una alucinación: el JSON cortado no cierra sus
         # llaves y el parser decía «no se encontró un objeto JSON». Klar caía
         # aquí en cada corrida, sin sellar el hash, así que volvía a truncarse
         # igual la siguiente. Un reintento con el doble de techo.
-        log.warning("extraccion_truncada", url=url, max_tokens=MAX_TOKENS)
+        #
+        # Va el **final** de lo que llegó, no el principio. Un modelo que se
+        # repite escribe las primeras entradas bien y luego entra en bucle, así
+        # que la cabeza se ve igual esté sano o no; la cola dice en qué se
+        # quedó atascado. El 2026-08-07 Klar llenó los 6000 y después los
+        # 12000 desde una página de 2318 caracteres, que no es una tabla
+        # grande: es otra cosa, y sin ver la cola no hay forma de saber cuál.
+        log.warning(
+            "extraccion_truncada",
+            url=url,
+            max_tokens=MAX_TOKENS,
+            cola=_cola(exc.contenido_crudo),
+        )
         datos, respuesta = await cliente.completar_json(
             sistema=sistema,
             usuario=usuario,
@@ -232,6 +244,16 @@ def _validar(datos: dict[str, Any]) -> Extraccion:
     for detalle in errores:
         log.warning("tasa_extraida_descartada", detalle=detalle)
     return Extraccion(tasas=validas, ambiguas=_ambiguas(datos.get("ambiguas")))
+
+
+#: Cuánto del final de una respuesta truncada va al log. Suficiente para ver
+#: si el modelo entró en bucle y en qué; no tanto como para inundar la bitácora
+#: de una corrida con nueve fuentes.
+COLA_TRUNCADA = 400
+
+
+def _cola(contenido: str | None) -> str:
+    return (contenido or "")[-COLA_TRUNCADA:]
 
 
 def _ambiguas(crudas: object) -> list[str]:

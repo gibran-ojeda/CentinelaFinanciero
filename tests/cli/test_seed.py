@@ -140,6 +140,32 @@ async def test_hey_carries_its_pagares_and_no_sight_account() -> None:
     ]
 
 
+async def test_hey_declares_its_name_to_beat_the_business_product() -> None:
+    """Hey publica «Inversión Hey» y «Inversión Hey Negocios» al mismo plazo.
+
+    Negocios queda fuera del catálogo a propósito, pero eso no lo quita de la
+    página: la casilla `(PLAZO, 28)` aloja dos productos publicados y sin el
+    nombre el pipeline no puede decidir cuál es el nuestro. La corrida del
+    2026-08-07 devolvió las cuatro tasas de Hey como hueco por esto.
+    """
+    await run_seed()
+
+    async with session_scope() as session:
+        nombres = (
+            (
+                await session.execute(
+                    select(Producto.nombre_publicado)
+                    .join(Institucion)
+                    .where(Institucion.nombre == "Hey Banco", Producto.activo.is_(True))
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert set(nombres) == {"Inversión Hey"}
+
+
 async def test_no_institution_is_marked_as_demo() -> None:
     """Las ficticias salieron del producto; el catálogo entero es real.
 
