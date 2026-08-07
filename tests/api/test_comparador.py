@@ -103,7 +103,7 @@ async def test_the_transition_policy_adds_the_unverified_rows(
 ) -> None:
     slugs = await _slugs(api_lectura)
 
-    assert "hey-vista" in slugs  # institución real con tasa sin confirmar
+    assert "didi-vista" in slugs  # institución real con tasa sin confirmar
     assert SLUGS_VERIFICADOS | SLUGS_FIXTURE <= slugs
 
 
@@ -114,9 +114,9 @@ async def test_unverified_rows_are_always_marked_as_such(api_lectura: AsyncClien
     por_slug = {f["producto_slug"]: f for f in cuerpo["filas"]}
 
     # Institución real con tasa sin confirmar: la marca va en la procedencia.
-    assert por_slug["hey-vista"]["institucion"]["es_demostracion"] is False
-    assert por_slug["hey-vista"]["procedencia"]["verificada"] is False
-    assert por_slug["hey-vista"]["procedencia"]["estado"] == "PENDIENTE_REVISION"
+    assert por_slug["didi-vista"]["institucion"]["es_demostracion"] is False
+    assert por_slug["didi-vista"]["procedencia"]["verificada"] is False
+    assert por_slug["didi-vista"]["procedencia"]["estado"] == "PENDIENTE_REVISION"
 
     # Y lo verificado de verdad no lleva la marca.
     assert por_slug["cetes-28"]["institucion"]["es_demostracion"] is False

@@ -315,7 +315,7 @@ async def test_an_unverified_rate_computes_while_the_transition_policy_is_on(
     respondía 404 al llegar aquí: tres endpoints, dos reglas.
     """
     cuerpo = await _calcular(
-        api_lectura, monto="10000", producto_ids=[await _producto_id("hey-vista")]
+        api_lectura, monto="10000", producto_ids=[await _producto_id("didi-vista")]
     )
 
     resultado = cuerpo["resultados"][0]
