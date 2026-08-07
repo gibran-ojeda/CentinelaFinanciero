@@ -79,6 +79,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="sólo las fuentes que rinden a un cliente HTTP plano",
     )
+    fetch.add_argument(
+        "--forzar",
+        action="store_true",
+        help="extrae aunque la página no haya cambiado (cuesta tokens); para "
+        "cuando lo que cambió es el catálogo y no la web",
+    )
 
     banxico = sub.add_parser("banxico", help="ingesta del SIE de Banxico")
     banxico_sub = banxico.add_subparsers(dest="subcomando", required=True)
@@ -240,7 +246,9 @@ async def _run(args: argparse.Namespace) -> int:
                 return 0
             if args.subcomando == "fetch":
                 reporte = await tasas_module.correr_fetch(
-                    solo_navegador=args.solo_navegador, sin_navegador=args.sin_navegador
+                    solo_navegador=args.solo_navegador,
+                    sin_navegador=args.sin_navegador,
+                    forzar=args.forzar,
                 )
                 print("Lectura de tasas:")
                 print(reporte.render())

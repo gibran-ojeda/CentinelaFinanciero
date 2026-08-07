@@ -231,6 +231,34 @@ async def test_an_unchanged_page_costs_nothing() -> None:
     assert modelo.llamadas == llamadas_tras_la_primera  # ni un token más
 
 
+async def test_forcing_reads_a_page_that_did_not_change() -> None:
+    """El cortocircuito por hash asume que lo que cambia es la página.
+
+    Y hay un caso en que no: cuando cambia el **catálogo**. Dar de alta los
+    nueve productos que Klar y Hey publican no mueve el hash de sus páginas,
+    así que sin esto la corrida siguiente los saltaría por «sin cambios» y esos
+    productos se quedarían sin tasa hasta que a la institución le diera por
+    editar su web.
+    """
+    await _solo_una_fuente()
+    modelo = ModeloFalso(tasas=[TASA_364])
+
+    await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+    llamadas_tras_la_primera = modelo.llamadas
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)),
+        cliente=ClienteLLM(modelo),
+        forzar=True,
+    )
+
+    assert reporte.sin_cambios_en_la_pagina == 0
+    assert reporte.leidas == 1
+    assert modelo.llamadas > llamadas_tras_la_primera  # sí paga, y a propósito
+
+
 async def test_the_hash_is_only_stamped_after_a_successful_extraction() -> None:
     """Si la extracción revienta, la próxima corrida tiene que reintentarlo."""
     await _solo_una_fuente()
