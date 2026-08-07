@@ -38,7 +38,14 @@ TASA_MAXIMA_PLAUSIBLE = Decimal("100")
 #: default del proveedor porque es una decisión de **esta** tarea: una tabla
 #: con quince plazos, su GAT nominal y su GAT real ocupa bastante más JSON que
 #: una respuesta cualquiera. Si aun así se corta, se reintenta con el doble.
-MAX_TOKENS = 6000
+#:
+#: Medido el 2026-08-07 contra la página de Klar, que es la más larga del
+#: catálogo: siete productos con sus condiciones ocupan ~7250 tokens de salida.
+#: Con 6000 se truncaba **siempre** —la cola del log lo enseñó cortándose a
+#: media sexta entrada, sin repetirse— así que cada lectura de Klar costaba dos
+#: llamadas y tiraba la primera. Subir el techo no cuesta nada mientras no se
+#: use: se paga lo generado, no lo permitido.
+MAX_TOKENS = 9000
 
 
 class TasaExtraida(BaseModel):
