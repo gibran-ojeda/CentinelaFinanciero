@@ -43,9 +43,9 @@ async def test_imports_the_full_seed_dataset() -> None:
     await run_seed()
     report = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
-    assert report.creadas == 35
+    assert report.creadas == 29
     assert report.errores == []
-    assert await _contar_tasas() == 35
+    assert await _contar_tasas() == 29
 
 
 async def test_importing_invalidates_the_comparador_cache(
@@ -107,7 +107,7 @@ async def test_seed_dataset_publishes_only_verified_rates() -> None:
     # su institución —Openbank y Revolut—. Todo lo demás es de agregador y
     # queda pendiente.
     assert report.por_estado["VIGENTE"] == 7
-    assert report.por_estado["PENDIENTE_REVISION"] == 28
+    assert report.por_estado["PENDIENTE_REVISION"] == 22
 
     async with session_scope() as session:
         vigentes = (
@@ -142,8 +142,8 @@ async def test_reimporting_the_same_file_creates_nothing() -> None:
     segundo = await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
 
     assert segundo.creadas == 0
-    assert segundo.duplicadas == 35
-    assert await _contar_tasas() == 35
+    assert segundo.duplicadas == 29
+    assert await _contar_tasas() == 29
 
 
 # ─── Columna tramos ───────────────────────────────────────────
@@ -365,7 +365,7 @@ async def test_the_review_list_names_what_cannot_be_published() -> None:
     motivos = {p.motivo for p in lista.pendientes}
 
     assert motivos == {"sin verificar", "sin tasa"}
-    assert sum(p.motivo == "sin verificar" for p in lista.pendientes) == 28
+    assert sum(p.motivo == "sin verificar" for p in lista.pendientes) == 22
 
     # Ninguna de las siete VIGENTE aparece: CETES, BONDDIA y las escaleras de
     # Openbank y Revolut salen de fuente primaria.
@@ -460,19 +460,19 @@ async def test_the_seed_holds_no_aggregator_rate_as_current() -> None:
             .all()
         )
 
-    assert len(agregadas) == 28
+    assert len(agregadas) == 22
     assert all(t.estado is EstadoTasa.PENDIENTE_REVISION for t in agregadas)
 
 
 # ─── Retiro de filas de agregador sustituidas ─────────────────
 
 
-async def _con_hey_sustituida(tmp_path: Path) -> Path:
-    """Seed + import + lectura oficial VIGENTE de hey-vista; copia del CSV."""
+async def _con_stori_sustituida(tmp_path: Path) -> Path:
+    """Seed + import + lectura oficial VIGENTE de stori-plazo-28; copia del CSV."""
     await run_seed()
     await import_csv(DEFAULT_SEEDS_DIR / "tasas.csv")
     async with session_scope() as session:
-        producto = await session.scalar(select(Producto).where(Producto.slug == "hey-vista"))
+        producto = await session.scalar(select(Producto).where(Producto.slug == "stori-plazo-28"))
         assert producto is not None
         session.add(
             Tasa(
@@ -497,12 +497,12 @@ async def test_a_superseded_aggregator_row_gets_commented_out(tmp_path: Path) ->
     Retirar es comentar: la línea original queda a la vista con la razón, y
     todo lo demás se conserva byte a byte.
     """
-    copia = await _con_hey_sustituida(tmp_path)
+    copia = await _con_stori_sustituida(tmp_path)
 
     reporte = await retirar_sustituidas(copia)
 
-    assert [r[0] for r in reporte.retiradas] == ["hey-vista"]
-    assert reporte.conservadas == 27
+    assert [r[0] for r in reporte.retiradas] == ["stori-plazo-28"]
+    assert reporte.conservadas == 21
 
     original = (DEFAULT_SEEDS_DIR / "tasas.csv").read_text(encoding="utf-8").splitlines()
     nuevo = copia.read_text(encoding="utf-8").splitlines()
@@ -515,12 +515,12 @@ async def test_a_superseded_aggregator_row_gets_commented_out(tmp_path: Path) ->
     # Ambos lectores la ignoran: reimportar ve una fila menos.
     segundo = await import_csv(copia)
     assert segundo.creadas == 0
-    assert segundo.duplicadas == 34
+    assert segundo.duplicadas == 28
 
 
 async def test_retiring_is_idempotent(tmp_path: Path) -> None:
     """Una fila ya comentada deja de ser candidata: la segunda pasada no toca."""
-    copia = await _con_hey_sustituida(tmp_path)
+    copia = await _con_stori_sustituida(tmp_path)
     await retirar_sustituidas(copia)
     tras_primera = copia.read_text(encoding="utf-8")
 
@@ -531,12 +531,12 @@ async def test_retiring_is_idempotent(tmp_path: Path) -> None:
 
 
 async def test_dry_run_reports_without_writing(tmp_path: Path) -> None:
-    copia = await _con_hey_sustituida(tmp_path)
+    copia = await _con_stori_sustituida(tmp_path)
     antes = copia.read_text(encoding="utf-8")
 
     reporte = await retirar_sustituidas(copia, dry_run=True)
 
-    assert [r[0] for r in reporte.retiradas] == ["hey-vista"]
+    assert [r[0] for r in reporte.retiradas] == ["stori-plazo-28"]
     assert copia.read_text(encoding="utf-8") == antes
     assert "simulación" in reporte.render()
 
@@ -554,5 +554,5 @@ async def test_nothing_is_retired_without_an_official_reading(tmp_path: Path) ->
     reporte = await retirar_sustituidas(copia)
 
     assert reporte.retiradas == []
-    assert reporte.conservadas == 28
+    assert reporte.conservadas == 22
     assert copia.read_text(encoding="utf-8") == antes

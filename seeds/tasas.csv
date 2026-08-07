@@ -41,14 +41,24 @@ finsus-plazo-28,7.19,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVI
 finsus-plazo-91,7.50,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
 finsus-plazo-182,7.89,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
 finsus-plazo-364,8.69,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
-# klar.mx no exponia la tabla a un cliente HTTP plano el 2026-07-25. La prensa
-# reportaba hasta 15% para las categorias Plus y Platino; sin leerlo de la
-# pagina oficial no se publica.
-klar-vista,8.50,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
-klar-plazo-28,8.20,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
-klar-plazo-91,8.30,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
-klar-plazo-182,8.40,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
-klar-plazo-364,8.50,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# klar.mx no exponia la tabla a un cliente HTTP plano el 2026-07-25.
+#
+# Retiradas el 2026-08-07, tras leer klar.mx/inversion con navegador. Las cinco
+# estaban mal dos veces. Los plazos 28/91/182/364 no existen en Klar —vende
+# 7/30/90/180/365— y las tasas 8.20 a 8.50 son las de Klar **Plus y Platino** a
+# 30, 90, 180 y 365 dias, no las que obtiene cualquiera (Klar paga 6.20 a 6.50
+# a esos plazos). El 8.50 de klar-vista es la de Plus a un año puesta en una
+# cuenta a la vista; Klar paga 3% en su Cuenta.
+#
+# Sus cuatro productos a plazo quedan apagados en productos.yaml. klar-vista
+# sigue activo —ahora mapeado a «Cuenta»— y su 8.50 se sustituye solo en cuanto
+# la primera lectura oficial pase por la cola de revision.
+#
+# retirada 2026-08-07: klar-vista,8.50,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# retirada 2026-08-07: klar-plazo-28,8.20,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# retirada 2026-08-07: klar-plazo-91,8.30,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# retirada 2026-08-07: klar-plazo-182,8.40,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# retirada 2026-08-07: klar-plazo-364,8.50,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
 # kubofinanciero.com no exponia la tabla a un cliente HTTP plano el 2026-07-25.
 # El 12.00% a 364 dias esta muy por encima del mercado (CETES 364d en 6.93%):
 # candidato a RED_FLAG_TASA si el IMOR entra en alerta.
@@ -83,7 +93,13 @@ revolut-vista,15.00,16.18,11.98,2026-08-06,MANUAL,https://www.revolut.com/es-MX/
 # retirada 2026-08-01 (sustituida por MANUAL 2026-08-01): openbank-vista,13.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
 openbank-vista,13.00,,,2026-08-01,MANUAL,https://www.openbank.mx/,VIGENTE,Escalera por saldo leida en la pagina oficial: 13% los primeros 30 mil y 6.3% de ahi a 1 millon; por encima no se publica rendimiento.,0-30000:13.00;30000-1000000:6.30
 # hey.inc devolvio error 500 el 2026-07-25; el dominio bueno es banco.hey.inc.
-hey-vista,7.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+#
+# Retirada el 2026-08-07: Hey no publica ningun producto a la vista. Ese 7.00 es
+# su tasa de Fan Hey / Hey Pro **a 7 dias**, y sin membresia paga 4.00. El
+# producto queda apagado en productos.yaml y sus pagares a 7 y 28 dias lo
+# sustituyen.
+#
+# retirada 2026-08-07: hey-vista,7.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
 # Medido el 2026-08-06: mercadopago.com.mx/cuenta solo publica "Ganancias de
 # hasta 12% anual" -sin plazo, sin monto, sin tope, sin condicion-. El tope de
 # saldo que se anotaba aqui no aparece en ninguna parte de su pagina. Eso es lo
