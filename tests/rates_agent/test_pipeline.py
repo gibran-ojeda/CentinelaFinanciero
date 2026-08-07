@@ -862,6 +862,92 @@ async def test_a_single_tier_without_a_cap_stays_flat() -> None:
         assert tasa.tramos == []
 
 
+async def test_two_products_in_one_slot_never_become_a_ladder() -> None:
+    """El caso Klar, que llegó a la cola de revisión el 2026-08-06.
+
+    Su página publica «Cuenta» al 3 % e «Inversión Flexible» al 6 %, las dos a
+    la vista. Con la clave vieja —sólo `(tipo, plazo)`— caían en el mismo grupo
+    y salía la escalera «$0–$100: 3 % · $100 en adelante: 6 %», que Klar no
+    ofrece: los $100 son el mínimo de contratación del segundo producto, y el
+    dinero por encima no pasa a rendir 6 % solo.
+
+    Van sobre el producto a plazo del catálogo de prueba porque Finsus no tiene
+    uno a la vista; lo que se prueba es la clave, que no mira el tipo.
+    """
+    await _solo_una_fuente()
+    modelo = ModeloFalso(
+        tasas=[
+            {
+                "producto": "Cuenta",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "3.00",
+                "monto_minimo": "0",
+            },
+            {
+                "producto": "Inversión Flexible",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "6.00",
+                "monto_minimo": "100",
+            },
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    # Ninguna observación: no hay forma de saber cuál de los dos es el producto
+    # que el catálogo tiene dado de alta.
+    assert reporte.en_revision == 0
+    assert reporte.publicadas == 0
+    assert {h["producto"] for h in reporte.huecos_catalogo} == {"Cuenta", "Inversión Flexible"}
+
+    async with session_scope() as session:
+        assert (await session.execute(select(Tasa))).scalars().all() == []
+
+
+async def test_the_tiers_of_one_product_still_become_a_ladder() -> None:
+    """Mismo nombre, montos distintos: eso sí es una escalera, y no se rompe."""
+    await _solo_una_fuente()
+    modelo = ModeloFalso(
+        tasas=[
+            {
+                "producto": "Plazo fijo",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "13.00",
+                "monto_minimo": "0",
+            },
+            {
+                # El mismo producto escrito con otro espaciado y otra caja: no
+                # es otro producto, y partirlo convertiría una escalera buena
+                # en un hueco.
+                "producto": "  plazo   FIJO ",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "6.30",
+                "monto_minimo": "30000",
+            },
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.huecos_catalogo == []
+    assert reporte.en_revision == 1
+
+    async with session_scope() as session:
+        tasa = (await session.execute(select(Tasa))).scalars().one()
+        assert [(t.desde, t.hasta) for t in tasa.tramos] == [
+            (Decimal("0.00"), Decimal("30000.00")),
+            (Decimal("30000.00"), None),
+        ]
+
+
 async def test_a_ladder_that_does_not_start_at_zero_is_a_catalogue_gap() -> None:
     """Una escalera que no cubre desde el primer peso tiene un tramo base que
     la página no declaró — y la regla 1 prohíbe inventarlo."""

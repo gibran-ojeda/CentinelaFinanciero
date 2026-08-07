@@ -67,6 +67,12 @@ que se explica al final.
    condición, no un promedio. Incluye también el tramo base aunque aplique desde
    el primer peso: ponle `monto_minimo: "0"`.
 
+   Los tramos de un producto llevan **exactamente el mismo `producto`**, letra
+   por letra: es lo que los identifica como tramos del mismo. Si son productos
+   distintos —«Cuenta» al 3 % e «Inversión Flexible» al 6 %— van con sus
+   nombres distintos, aunque compartan tipo y plazo. No son una escalera: el
+   dinero no pasa de uno a otro solo, hay que contratarlo.
+
    `monto_minimo` es donde **empieza** el tramo —no el mínimo de contratación
    del producto— y `monto_maximo` es donde **acaba**. Ponlo siempre que la
    página lo diga, aunque no publique ningún tramo por encima: «15 % en tus

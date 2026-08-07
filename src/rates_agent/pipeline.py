@@ -26,6 +26,7 @@ horas, media lectura hoy vale más que una corrida que no termina.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from time import monotonic
@@ -357,8 +358,17 @@ async def _decidir(
             session, [p.id for p in productos.values()], incluir_pendientes=True
         )
 
-        for clave, grupo in _agrupar(extraidas).items():
-            producto = productos.get(clave)
+        grupos = _agrupar(extraidas)
+        # Cuántos productos publicados caen en la misma casilla del catálogo.
+        # Más de uno significa que la página ofrece más de lo que el catálogo
+        # conoce, y entonces no hay forma de decidir cuál de ellos es el
+        # producto que tenemos dado de alta.
+        por_casilla = Counter(clave[:2] for clave in grupos)
+
+        for clave, grupo in grupos.items():
+            casilla = clave[:2]
+            producto = productos.get(casilla)
+            colisionan = por_casilla[casilla] > 1
             # Varias entradas del mismo (tipo, plazo) son los **tramos por
             # monto** de un producto —Openbank publica 13 % hasta $30 000 y
             # 6.3 % de ahí en adelante— y se reconstruyen como UNA observación
@@ -372,12 +382,16 @@ async def _decidir(
             # también es una escalera, y sin esto su tope se perdía y la tabla
             # prometía esa tasa sobre cualquier saldo. Sin tope sigue
             # devolviendo None y la observación viaja plana, como siempre.
-            escalera = reconstruir_escalera(grupo)
-            if producto is None or (len(grupo) > 1 and escalera is None):
+            escalera = None if colisionan else reconstruir_escalera(grupo)
+            if producto is None or colisionan or (len(grupo) > 1 and escalera is None):
                 motivo = (
                     "plazo desconocido"
                     if producto is None
-                    else "tramos ambiguos (montos repetidos o sin monto)"
+                    else (
+                        "el catálogo tiene un solo producto para varios que publica la página"
+                        if colisionan
+                        else "tramos ambiguos (montos repetidos o sin monto)"
+                    )
                 )
                 for extraida in grupo:
                     reporte.huecos_catalogo.append(
@@ -421,24 +435,56 @@ async def _decidir(
                     reporte.sin_cambio += 1
 
 
-def _agrupar(extraidas: list[TasaExtraida]) -> dict[tuple[str, int | None], list[TasaExtraida]]:
-    """Las extracciones por `(tipo, plazo)`, en orden de aparición.
+def _agrupar(extraidas: list[TasaExtraida]) -> dict[_ClaveGrupo, list[TasaExtraida]]:
+    """Las extracciones por producto publicado, en orden de aparición.
 
     Un grupo de una entrada es el caso normal; uno de varias son los tramos
     por monto de un mismo producto, que `reconstruir_escalera` decide si se
     pueden reconstruir o quedan como hueco.
+
+    **La clave incluye el nombre del producto**, no sólo `(tipo, plazo)`. Klar
+    publica en la misma página «Cuenta» al 3 % e «Inversión Flexible» al 6 %,
+    las dos a la vista: con la clave vieja caían en el mismo grupo y salía la
+    escalera «$0–$100: 3 % · $100 en adelante: 6 %», que Klar no ofrece. Los
+    $100 son el mínimo de contratación del segundo producto, no el piso de un
+    tramo, y el dinero por encima de $100 no pasa a rendir 6 % solo: hay que
+    moverlo a otro producto. El modelo sí los distinguía —les puso nombres
+    distintos— y esta función tiraba el nombre.
+
+    Los tramos de un mismo producto sí comparten nombre, y la regla 4 del
+    prompt lo pide explícitamente. Si aun así llegaran con nombres distintos,
+    el grupo se parte y sale hueco de catálogo: es el fallo seguro de los dos.
     """
-    grupos: dict[tuple[str, int | None], list[TasaExtraida]] = {}
+    grupos: dict[_ClaveGrupo, list[TasaExtraida]] = {}
     for extraida in extraidas:
-        grupos.setdefault(_clave(extraida.tipo, extraida.plazo_dias), []).append(extraida)
+        clave = (*_clave(extraida.tipo, extraida.plazo_dias), _nombre(extraida.producto))
+        grupos.setdefault(clave, []).append(extraida)
     return grupos
 
 
-async def _productos_de(session: Any, institucion: str) -> dict[tuple[str, int | None], Producto]:
+def _nombre(producto: str) -> str:
+    """El nombre publicado, normalizado para compararlo.
+
+    Sin mayúsculas ni espacios de más: «Cuenta de Ahorro » y «cuenta de ahorro»
+    son el mismo producto, y partirlos por eso convertiría una escalera buena
+    en un hueco.
+    """
+    return " ".join(producto.split()).casefold()
+
+
+async def _productos_de(session: Any, institucion: str) -> dict[_ClaveCatalogo, Producto]:
     """Productos de esa institución, indexados por `(tipo, plazo)`.
 
     La clave es lo que la página publica —un tipo y un plazo— y no el nombre,
     que cada institución escribe distinto cada temporada.
+
+    Dos productos activos en la misma casilla **se descartan los dos**. El
+    diccionario se quedaba con el último y la corrida atribuía la tasa a un
+    producto elegido por el orden de la consulta; hoy no pasa porque ninguna
+    institución tiene dos, pero pasará en cuanto se den de alta los dos que
+    Klar publica a la vista —«Cuenta» al 3 % e «Inversión Flexible» al 6 %—,
+    que es justo lo que los huecos de catálogo están pidiendo. Sin producto no
+    hay observación y sale hueco, que es el fallo seguro.
     """
     filas = (
         (
@@ -451,10 +497,33 @@ async def _productos_de(session: Any, institucion: str) -> dict[tuple[str, int |
         .scalars()
         .all()
     )
-    return {_clave(p.tipo, p.plazo_dias): p for p in filas}
+    por_casilla: dict[_ClaveCatalogo, list[Producto]] = {}
+    for producto in filas:
+        por_casilla.setdefault(_clave(producto.tipo, producto.plazo_dias), []).append(producto)
+
+    catalogo: dict[_ClaveCatalogo, Producto] = {}
+    for casilla, productos in por_casilla.items():
+        if len(productos) > 1:
+            log.warning(
+                "catalogo_ambiguo",
+                institucion=institucion,
+                tipo=casilla[0],
+                plazo_dias=casilla[1],
+                slugs=[p.slug for p in productos],
+            )
+            continue
+        catalogo[casilla] = productos[0]
+    return catalogo
 
 
-def _clave(tipo: TipoProducto, plazo_dias: int | None) -> tuple[str, int | None]:
+#: `(tipo, plazo)` identifica la casilla del **catálogo**; el nombre del
+#: producto identifica lo que la **página** publica. Son cosas distintas, y
+#: confundirlas es lo que fabricó la escalera de Klar.
+_ClaveCatalogo = tuple[str, int | None]
+_ClaveGrupo = tuple[str, int | None, str]
+
+
+def _clave(tipo: TipoProducto, plazo_dias: int | None) -> _ClaveCatalogo:
     return (tipo.value, plazo_dias)
 
 
