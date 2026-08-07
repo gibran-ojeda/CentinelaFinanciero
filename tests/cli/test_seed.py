@@ -39,11 +39,105 @@ async def test_seed_loads_the_whole_mvp_catalog() -> None:
 
     assert report.total_creados > 0
     assert await _contar(Institucion) == 17
-    assert await _contar(Producto) == 40
+    assert await _contar(Producto) == 48
     assert await _contar(ParametroFiscal) == 2
     assert await _contar(SerieEconomica) == 2
     assert await _contar(ValorSerieEconomica) == 21
     assert await _contar(FuenteTasas) == 18
+
+
+async def test_klar_carries_the_terms_it_actually_offers() -> None:
+    """Los plazos sembrados eran el calendario de CETES con el nombre de Klar.
+
+    Klar publica 7, 30, 90, 180 y 365 días; el catálogo tenía 28, 91, 182 y
+    364, que es exactamente lo que la regla 2 del extractor prohíbe hacer. Y
+    sus tasas —8.20 a 8.50— eran las de Klar Plus, no las de cualquiera.
+    """
+    await run_seed()
+
+    async with session_scope() as session:
+        filas = (
+            (
+                await session.execute(
+                    select(Producto.slug, Producto.plazo_dias, Producto.activo)
+                    .join(Institucion)
+                    .where(Institucion.nombre == "Klar", Producto.tipo == TipoProducto.PLAZO)
+                    .order_by(Producto.plazo_dias)
+                )
+            )
+            .tuples()
+            .all()
+        )
+
+    activos = {(slug, plazo) for slug, plazo, activo in filas if activo}
+    assert activos == {
+        ("klar-fija-7", 7),
+        ("klar-fija-30", 30),
+        ("klar-fija-90", 90),
+        ("klar-fija-180", 180),
+        ("klar-fija-365", 365),
+    }
+    # Los inventados siguen ahí, apagados: su historial de tasas no se borra.
+    apagados = {slug for slug, _, activo in filas if not activo}
+    assert apagados == {"klar-plazo-28", "klar-plazo-91", "klar-plazo-182", "klar-plazo-364"}
+
+
+async def test_the_two_sight_products_of_klar_declare_their_published_name() -> None:
+    """Sin el nombre, «Cuenta» e «Inversión Flexible» son indistinguibles.
+
+    Las dos son VISTA y sin plazo, así que caen en la misma casilla y el
+    pipeline las manda a hueco — que es lo correcto mientras nada las separe.
+    """
+    await run_seed()
+
+    async with session_scope() as session:
+        filas = (
+            (
+                await session.execute(
+                    select(Producto.slug, Producto.nombre_publicado)
+                    .join(Institucion)
+                    .where(
+                        Institucion.nombre == "Klar",
+                        Producto.tipo == TipoProducto.VISTA,
+                        Producto.activo.is_(True),
+                    )
+                    .order_by(Producto.slug)
+                )
+            )
+            .tuples()
+            .all()
+        )
+
+    assert filas == [("klar-flexible", "Inversión Flexible"), ("klar-vista", "Cuenta")]
+
+
+async def test_hey_carries_its_pagares_and_no_sight_account() -> None:
+    """Hey publica a 7 y 28 días y nada a la vista.
+
+    Su `hey-vista` sembrado al 7.00 % era la tasa de Fan Hey / Hey Pro **a 7
+    días** colocada en una cuenta que no existe.
+    """
+    await run_seed()
+
+    async with session_scope() as session:
+        filas = (
+            (
+                await session.execute(
+                    select(Producto.slug, Producto.plazo_dias, Producto.activo)
+                    .join(Institucion)
+                    .where(Institucion.nombre == "Hey Banco")
+                    .order_by(Producto.slug)
+                )
+            )
+            .tuples()
+            .all()
+        )
+
+    assert filas == [
+        ("hey-plazo-28", 28, True),
+        ("hey-plazo-7", 7, True),
+        ("hey-vista", None, False),
+    ]
 
 
 async def test_no_institution_is_marked_as_demo() -> None:

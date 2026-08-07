@@ -107,9 +107,30 @@ productos:
     monto_minimo: 100.00
     liquidez: AL_VENCIMIENTO
 
+  # ── Klar, medido en klar.mx/inversion el 2026-08-07 ────────────────────────
+  #
+  # Publica una tabla de dos filas —membresía × siete productos— con esta nota
+  # al pie: «Tasa Fija aplicable a una inversión mínima de $100 pesos».
+  #
+  #                        Klar    Klar Plus y Platino
+  #   Cuenta                3 %          5 %
+  #   Inversión Flexible    6 %          8 %
+  #   Inversión Fija   7 d  6.10 %       8.10 %
+  #   Inversión Fija  30 d  6.20 %       8.20 %
+  #   Inversión Fija  90 d  6.30 %       8.30 %
+  #   Inversión Fija 180 d  6.40 %       8.40 %
+  #   Inversión Fija 365 d  6.50 %       8.50 %
+  #
+  # La fila de Plus y Platino no se siembra: es una tasa por membresía, y la
+  # regla 5 del extractor manda publicar la que obtiene cualquiera y describir
+  # el resto en `condiciones`.
+  #
+  # «Cuenta» e «Inversión Flexible» son las dos a la vista y sin plazo, así que
+  # la casilla `(tipo, plazo)` no las distingue: necesitan `nombre_publicado`.
   - institucion: Klar
     nombre: Klar Ahorro
     slug: klar-vista
+    nombre_publicado: Cuenta
     tipo: VISTA
     instrumento: DEPOSITO_SOFIPO
     monto_minimo: 0.00
@@ -117,6 +138,72 @@ productos:
     penalizacion_retiro: >-
       La tasa más alta requiere categoría de cliente Plus o Platino.
 
+  # Al final de la página, la comparativa: Flexible permite retiro y añadir
+  # dinero a la inversión existente; Fija no permite ninguna de las dos.
+  - institucion: Klar
+    nombre: Klar Inversión Flexible
+    slug: klar-flexible
+    nombre_publicado: Inversión Flexible
+    tipo: VISTA
+    instrumento: DEPOSITO_SOFIPO
+    monto_minimo: 0.00
+    liquidez: INMEDIATA
+
+  - institucion: Klar
+    nombre: Klar Inversión Fija 7 días
+    slug: klar-fija-7
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 7
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Klar
+    nombre: Klar Inversión Fija 30 días
+    slug: klar-fija-30
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 30
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Klar
+    nombre: Klar Inversión Fija 90 días
+    slug: klar-fija-90
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 90
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Klar
+    nombre: Klar Inversión Fija 180 días
+    slug: klar-fija-180
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 180
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Klar
+    nombre: Klar Inversión Fija 365 días
+    slug: klar-fija-365
+    tipo: PLAZO
+    instrumento: DEPOSITO_SOFIPO
+    plazo_dias: 365
+    monto_minimo: 100.00
+    liquidez: AL_VENCIMIENTO
+
+  # Apagados el 2026-08-07: **estos cuatro plazos no existen en Klar**. Son el
+  # calendario de CETES —28/91/182/364— puesto sobre los productos de Klar, que
+  # son de 7/30/90/180/365 días, y es justo lo que la regla 2 del extractor
+  # prohíbe hacer. Sus tasas sembradas (8.20, 8.30, 8.40 y 8.50) son las de
+  # Klar Plus a 30, 90, 180 y 365 días: plazo inventado y tasa de membresía
+  # presentada como la de cualquiera, las dos cosas a la vez.
+  #
+  # No se borran: `activo: false` los saca del comparador y de la calculadora y
+  # deja su historial de tasas auditable, que es lo que un comparador de datos
+  # financieros no debería poder destruir.
   - institucion: Klar
     nombre: Klar Plazo 28 días
     slug: klar-plazo-28
@@ -125,6 +212,7 @@ productos:
     plazo_dias: 28
     monto_minimo: 100.00
     liquidez: AL_VENCIMIENTO
+    activo: false
 
   - institucion: Klar
     nombre: Klar Plazo 91 días
@@ -134,6 +222,7 @@ productos:
     plazo_dias: 91
     monto_minimo: 100.00
     liquidez: AL_VENCIMIENTO
+    activo: false
 
   - institucion: Klar
     nombre: Klar Plazo 182 días
@@ -143,6 +232,7 @@ productos:
     plazo_dias: 182
     monto_minimo: 100.00
     liquidez: AL_VENCIMIENTO
+    activo: false
 
   - institucion: Klar
     nombre: Klar Plazo 364 días
@@ -152,6 +242,7 @@ productos:
     plazo_dias: 364
     monto_minimo: 100.00
     liquidez: AL_VENCIMIENTO
+    activo: false
 
   - institucion: kubo.financiero
     nombre: kubo Plazo Fijo 91 días
@@ -356,6 +447,43 @@ productos:
     monto_minimo: 0.00
     liquidez: INMEDIATA
 
+  # ── Hey Banco, medido en banco.hey.inc el 2026-08-07 ───────────────────────
+  #
+  # Publica pagarés a 7 y 28 días desde $1,000, y nada a la vista. Como Cliente
+  # Hey se paga **4.00 %** a los dos plazos; el 7.00 % a 7 días y el 7.50 % a
+  # 28 es «tasa exclusiva al ser Fan Hey o Hey Pro, por tiempo limitado», así
+  # que va a `condiciones` por la regla 5 y no se siembra como producto.
+  #
+  # Sin `nombre_publicado` a propósito: el plazo ya los distingue, y Hey
+  # escribe su nombre distinto en cada corrida —«Inversión Hey», «Inversión Hey
+  # a 7 días», «Cliente Hey 7 días»—, así que atarse a esa cadena rompería la
+  # lectura la próxima vez que cambien el copy.
+  #
+  # «Inversión Hey Negocios» (7 y 28 días) queda **fuera a propósito**: es
+  # banca de empresas, y la cobertura del IPAB, el ISR y la ganancia real que
+  # calculamos son los de una persona física. Si aparece como hueco en una
+  # corrida, no es un olvido.
+  - institucion: Hey Banco
+    nombre: Hey Inversión 7 días
+    slug: hey-plazo-7
+    tipo: PLAZO
+    instrumento: DEPOSITO_BANCARIO
+    plazo_dias: 7
+    monto_minimo: 1000.00
+    liquidez: AL_VENCIMIENTO
+
+  - institucion: Hey Banco
+    nombre: Hey Inversión 28 días
+    slug: hey-plazo-28
+    tipo: PLAZO
+    instrumento: DEPOSITO_BANCARIO
+    plazo_dias: 28
+    monto_minimo: 1000.00
+    liquidez: AL_VENCIMIENTO
+
+  # Apagado el 2026-08-07: Hey no publica ningún producto a la vista. Su 7.00 %
+  # sembrado es la tasa de Fan Hey / Hey Pro **a 7 días**, que el agregador
+  # colocó en una cuenta a la vista.
   - institucion: Hey Banco
     nombre: Hey Inversión a la vista
     slug: hey-vista
@@ -363,6 +491,7 @@ productos:
     instrumento: DEPOSITO_BANCARIO
     monto_minimo: 0.00
     liquidez: INMEDIATA
+    activo: false
 
   - institucion: Ualá
     nombre: Ualá Rendimientos

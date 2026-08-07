@@ -178,6 +178,17 @@ class Producto(TimestampMixin, Base):
     )
     nombre: Mapped[str] = mapped_column(String(160), nullable=False)
     slug: Mapped[str] = mapped_column(String(180), nullable=False, unique=True)
+    #: Nombre exacto con el que la institución lo publica en su página, cuando
+    #: hace falta para distinguirlo. Mismo papel que `Institucion.nombre_cnbv`:
+    #: Klar escribe «Cuenta» y nosotros mostramos «Klar Ahorro».
+    #:
+    #: Sólo se consulta cuando `(tipo, plazo)` no basta. Klar publica «Cuenta»
+    #: al 3 % e «Inversión Flexible» al 6 %, las dos a la vista y sin plazo:
+    #: sin esto caen en la misma casilla y no hay forma de saber cuál es cuál.
+    #: Donde el plazo ya distingue —los pagarés de Hey a 7 y 28 días— se deja
+    #: en NULL a propósito: Hey escribe su nombre distinto en cada corrida, y
+    #: atarse a esa cadena sería cambiar un fallo por otro.
+    nombre_publicado: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
     tipo: Mapped[TipoProducto] = mapped_column(EnumText(TipoProducto, 8), nullable=False)
     #: Determina el tratamiento fiscal. No se deriva de la categoría de la
     #: institución: un banco puede ofrecer PRLV y también fondos de deuda.
