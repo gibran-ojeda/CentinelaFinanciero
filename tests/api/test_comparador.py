@@ -37,9 +37,14 @@ RUTA = "/api/v1/comparador"
 #: La deuda gubernamental verificada contra el SIE de Banxico y cetesdirecto.
 SLUGS_GOBIERNO = frozenset({"cetes-28", "cetes-91", "cetes-182", "cetes-364", "bonddia"})
 
-#: Todo lo verificado contra fuente primaria: el gobierno más la escalera de
-#: Openbank leída de su página oficial (la fila MANUAL/VIGENTE del seed).
-SLUGS_VERIFICADOS = SLUGS_GOBIERNO | {"openbank-vista"}
+#: Todo lo verificado contra fuente primaria: el gobierno más las dos escaleras
+#: leídas a mano de la página oficial de su institución (filas MANUAL/VIGENTE
+#: del seed). Revolut se suma el 2026-08-06 y es la única que trae GAT
+#: publicada, que su propia nota al pie declara.
+SLUGS_VERIFICADOS = SLUGS_GOBIERNO | {"openbank-vista", "revolut-vista"}
+
+#: Verificadas cuya GAT calculamos nosotros: todas menos Revolut.
+SLUGS_SIN_GAT_PUBLICADA = SLUGS_VERIFICADOS - {"revolut-vista"}
 
 #: Tasas VIGENTE que añade `comparador_poblado` sobre instituciones reales,
 #: para que cada filtro de §7 tenga algo que incluir y algo que excluir.
@@ -198,6 +203,18 @@ async def test_a_tiered_row_carries_its_ladder(api_lectura: AsyncClient) -> None
     assert cuerpo["monto_consultado"] is None
 
 
+async def test_a_row_carries_the_small_print_of_its_rate(api_lectura: AsyncClient) -> None:
+    """`Tasa.notas` guardaba la letra pequeña y no salía por ninguna parte: la
+    fila del comparador no tenía ese campo. Una tasa condicionada sin su
+    condición al lado se lee como incondicional."""
+    cuerpo = (await api_lectura.get(RUTA)).json()
+    por_slug = {f["producto_slug"]: f for f in cuerpo["filas"]}
+
+    assert "por encima no se publica rendimiento" in por_slug["openbank-vista"]["condiciones"]
+    # Y una tasa sin letra pequeña no inventa ninguna.
+    assert por_slug["finsus-plazo-91"]["condiciones"] is None
+
+
 async def test_an_amount_switches_every_row_to_its_effective_rate(
     api_lectura: AsyncClient,
 ) -> None:
@@ -312,7 +329,7 @@ async def test_category_filter_includes_and_excludes(api_lectura: AsyncClient) -
 
 async def test_bank_category_excludes_sofipos(api_lectura: AsyncClient) -> None:
     slugs = await _slugs(api_lectura, categoria="BANCO_DIGITAL")
-    assert slugs == {"nu-cajita-turbo", "nu-plazo-91", "openbank-vista"}
+    assert slugs == {"nu-cajita-turbo", "nu-plazo-91", "openbank-vista", "revolut-vista"}
 
 
 async def test_several_categories_can_be_selected_at_once(api_lectura: AsyncClient) -> None:
@@ -329,6 +346,7 @@ async def test_several_categories_can_be_selected_at_once(api_lectura: AsyncClie
         "nu-cajita-turbo",
         "nu-plazo-91",
         "openbank-vista",
+        "revolut-vista",
     }
     assert not slugs & SLUGS_GOBIERNO  # gobierno no marcado
 
@@ -363,6 +381,7 @@ async def test_amount_below_every_minimum_leaves_only_free_products(
         "nu-plazo-91",
         "mercado-pago-vista",
         "openbank-vista",
+        "revolut-vista",
     }
     # Todo lo que exige un mínimo queda fuera, incluidos los CETES.
     assert not (slugs & SLUGS_GOBIERNO)
@@ -377,7 +396,7 @@ async def test_non_positive_amount_is_rejected(api_lectura: AsyncClient) -> None
 
 async def test_ipab_only_includes_and_excludes(api_lectura: AsyncClient) -> None:
     slugs = await _slugs(api_lectura, seguro="IPAB")
-    assert slugs == {"nu-cajita-turbo", "nu-plazo-91", "openbank-vista"}
+    assert slugs == {"nu-cajita-turbo", "nu-plazo-91", "openbank-vista", "revolut-vista"}
     assert "finsus-plazo-91" not in slugs
 
 
@@ -397,6 +416,7 @@ async def test_several_coverages_can_be_selected_at_once(api_lectura: AsyncClien
         "nu-cajita-turbo",
         "nu-plazo-91",
         "openbank-vista",
+        "revolut-vista",
         "finsus-plazo-91",
         "klar-vista",
         "libertad-plazo-364",
@@ -490,10 +510,12 @@ async def test_orders_by_nominal_rate(api_lectura: AsyncClient) -> None:
     cuerpo = (await api_lectura.get(RUTA, params={"orden": "tasa_nominal"})).json()
     tasas = [Decimal(f["tasa_nominal"]) for f in cuerpo["filas"]]
     assert tasas == sorted(tasas, reverse=True)
-    # Nu y Openbank empatan al 13.00 titular; el desempate estable por slug
+    # Revolut encabeza con su 15.00 titular —el primer tramo de su escalera—.
+    # Detrás, Nu y Openbank empatan al 13.00 y el desempate estable por slug
     # descendente pone a Openbank primero.
-    assert cuerpo["filas"][0]["producto_slug"] == "openbank-vista"
-    assert cuerpo["filas"][1]["producto_slug"] == "nu-cajita-turbo"
+    assert cuerpo["filas"][0]["producto_slug"] == "revolut-vista"
+    assert cuerpo["filas"][1]["producto_slug"] == "openbank-vista"
+    assert cuerpo["filas"][2]["producto_slug"] == "nu-cajita-turbo"
 
 
 async def test_ascending_order_is_supported(api_lectura: AsyncClient) -> None:
@@ -522,9 +544,11 @@ async def test_gat_order_falls_back_to_the_computed_equivalent(
 
     gats = [Decimal(f["gat"]["nominal"]) for f in cuerpo["filas"]]
     assert gats == sorted(gats, reverse=True)
-    # Ninguna institución real publica GAT todavía: todas calculadas, y cada
-    # fila lo declara.
-    assert all(f["gat"]["es_calculada"] for f in cuerpo["filas"])
+    # Revolut es la única del seed que publica su GAT; el resto se calcula, y
+    # cada fila declara cuál de las dos cosas es.
+    calculadas = {f["producto_slug"] for f in cuerpo["filas"] if f["gat"]["es_calculada"]}
+    assert "revolut-vista" not in calculadas
+    assert calculadas == {f["producto_slug"] for f in cuerpo["filas"]} - {"revolut-vista"}
 
 
 async def test_gat_order_uses_the_published_value_when_there_is_one(
@@ -566,7 +590,7 @@ async def test_gat_order_uses_the_published_value_when_there_is_one(
 
     gats = [Decimal(f["gat"]["nominal"]) for f in cuerpo["filas"]]
     assert gats == sorted(gats, reverse=True)
-    assert all(por_slug[slug]["es_calculada"] for slug in SLUGS_VERIFICADOS)
+    assert all(por_slug[slug]["es_calculada"] for slug in SLUGS_SIN_GAT_PUBLICADA)
 
 
 async def test_ordering_is_stable_for_equal_values(api_lectura: AsyncClient) -> None:

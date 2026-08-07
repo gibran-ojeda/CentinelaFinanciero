@@ -58,11 +58,18 @@ class TransporteFalso:
 
 
 class ModeloFalso(ProveedorLLM):
-    def __init__(self, *, tasas: list[dict] | None = None, sin_presupuesto: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        tasas: list[dict] | None = None,
+        ambiguas: list[str] | None = None,
+        sin_presupuesto: bool = False,
+    ) -> None:
         self.nombre = "doble"
         self.modelo = "doble"
         self.llamadas = 0
         self._tasas = tasas if tasas is not None else []
+        self._ambiguas = ambiguas if ambiguas is not None else []
         self._sin_presupuesto = sin_presupuesto
 
     async def completar(self, **kwargs: object) -> RespuestaLLM:
@@ -70,7 +77,7 @@ class ModeloFalso(ProveedorLLM):
         if self._sin_presupuesto:
             raise ErrorPresupuestoAgotado("techo diario alcanzado")
         return RespuestaLLM(
-            contenido=json.dumps({"tasas": self._tasas}),
+            contenido=json.dumps({"tasas": self._tasas, "ambiguas": self._ambiguas}),
             modelo="doble",
             tokens_entrada=1000,
             tokens_salida=100,
@@ -145,6 +152,58 @@ async def test_a_read_page_becomes_a_queued_review() -> None:
     assert reporte.tasas_extraidas == 1
     assert reporte.en_revision == 1
     assert reporte.publicadas == 0
+
+
+async def test_a_vague_claim_is_recorded_on_its_source() -> None:
+    """El caso Mercado Pago: la página se lee bien y no hay nada publicable.
+
+    Sin esto era indistinguible de una portada que no habla de tasas —las dos
+    devuelven `tasas: []`— y para quien compara no son lo mismo: una institución
+    no tiene página de tasas y la otra anuncia un número sin decir a qué
+    corresponde.
+    """
+    await _solo_una_fuente()
+    modelo = ModeloFalso(tasas=[], ambiguas=["Ganancias de hasta 12% anual"])
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.ambiguas == ["Finsus"]
+    async with session_scope() as session:
+        fuente = (
+            (await session.execute(select(FuenteTasas).where(FuenteTasas.activa.is_(True))))
+            .scalars()
+            .one()
+        )
+        assert fuente.ultima_ambiguedad == "Ganancias de hasta 12% anual"
+        assert fuente.ultima_ambiguedad_at is not None
+        # Y no cuenta como fallo: la página respondió y el extractor obedeció.
+        assert fuente.fallos_consecutivos == 0
+
+
+async def test_a_clean_reading_clears_a_previous_vague_claim() -> None:
+    """La institución arregla su página y la bandera tiene que irse sola."""
+    await _solo_una_fuente()
+    await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)),
+        cliente=ClienteLLM(ModeloFalso(tasas=[], ambiguas=["hasta 12% anual"])),
+    )
+
+    # Otra página, para que el hash cambie y la lectura vuelva a ocurrir.
+    await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA.replace("8.69", "8.70"))),
+        cliente=ClienteLLM(ModeloFalso(tasas=[TASA_364])),
+    )
+
+    async with session_scope() as session:
+        fuente = (
+            (await session.execute(select(FuenteTasas).where(FuenteTasas.activa.is_(True))))
+            .scalars()
+            .one()
+        )
+        assert fuente.ultima_ambiguedad is None
+        assert fuente.ultima_ambiguedad_at is None
 
 
 async def test_an_unchanged_page_costs_nothing() -> None:
@@ -745,6 +804,62 @@ async def test_amount_tiers_with_distinct_floors_become_one_ladder() -> None:
             (Decimal("0.00"), Decimal("30000.00"), Decimal("13.0000")),
             (Decimal("30000.00"), None, Decimal("6.3000")),
         ]
+
+
+async def test_a_single_capped_tier_still_becomes_a_ladder() -> None:
+    """El caso Revolut: una sola entrada que declara hasta dónde llega.
+
+    El pipeline ni siquiera intentaba reconstruir con un grupo de uno, así que
+    el tope anunciado se perdía y la observación salía plana — la tabla decía
+    15 % sobre cualquier saldo. Ahora sale la escalera, con el excedente
+    declarado al 0 % porque la página no dice qué paga por encima.
+
+    Va sobre el producto a plazo del catálogo de la fuente de prueba: la forma
+    de la escalera no depende del tipo, y Finsus no tiene uno a la vista.
+    """
+    await _solo_una_fuente()
+    modelo = ModeloFalso(
+        tasas=[
+            {
+                "producto": "Plazo fijo",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "15.00",
+                "monto_minimo": "0",
+                "monto_maximo": "25000",
+            }
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.huecos_catalogo == []
+    assert reporte.en_revision == 1
+
+    async with session_scope() as session:
+        tasa = (await session.execute(select(Tasa))).scalars().one()
+        assert tasa.tasa_nominal == Decimal("15.00")
+        assert [(t.desde, t.hasta, t.tasa_nominal) for t in tasa.tramos] == [
+            (Decimal("0.00"), Decimal("25000.00"), Decimal("15.0000")),
+            (Decimal("25000.00"), None, Decimal("0.0000")),
+        ]
+
+
+async def test_a_single_tier_without_a_cap_stays_flat() -> None:
+    """Sin tope no hay escalera que reconstruir: es el caso normal y no debe
+    ganar tramos por el cambio anterior."""
+    await _solo_una_fuente()
+    modelo = ModeloFalso(tasas=[TASA_364])
+
+    await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    async with session_scope() as session:
+        tasa = (await session.execute(select(Tasa))).scalars().one()
+        assert tasa.tramos == []
 
 
 async def test_a_ladder_that_does_not_start_at_zero_is_a_catalogue_gap() -> None:

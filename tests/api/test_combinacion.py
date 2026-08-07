@@ -297,15 +297,19 @@ async def test_a_tiered_allocation_carries_its_ladder_and_blends(
     assert Decimal(asignacion["ten"]) == Decimal("9.4200")
 
 
-async def test_without_the_insurance_toggle_everything_goes_to_the_best_rate(
+async def test_without_the_insurance_toggle_only_rate_tiers_still_split(
     api_lectura: AsyncClient,
 ) -> None:
-    """Sin tope que respetar, la heurística deja de repartir.
+    """Apagar el seguro no convierte al optimizador en «todo al que más rinde».
 
-    Es coherente: los topes son la única razón por la que diversificar mejora
-    algo en este modelo. Quitarlos convierte al optimizador en "todo al que más
-    rinde", que es exactamente lo que la bandera del comparador desaconseja —
-    y por eso el interruptor viene encendido por defecto.
+    Quedan los topes de la propia tasa. Revolut paga 15 % sobre los primeros
+    $25,000 y 7 % por encima, así que meterle los $250,000 enteros rendiría
+    menos que llenar ese tramo y llevarse el resto al 13 % de Nu — que es lo
+    que hace el water-filling.
+
+    Hasta el 2026-08-06 el catálogo no tenía ninguna escalera con techo entre
+    las mejores tasas, así que este test afirmaba que sin seguro no había
+    ninguna razón para repartir. La había; no había con qué verla.
     """
     cuerpo = (
         await api_lectura.post(
@@ -314,8 +318,12 @@ async def test_without_the_insurance_toggle_everything_goes_to_the_best_rate(
         )
     ).json()
 
-    assert len(cuerpo["asignaciones"]) == 1
-    assert Decimal(cuerpo["asignaciones"][0]["porcentaje"]) == Decimal("100")
+    asignaciones = cuerpo["asignaciones"]
+    assert [a["producto_slug"] for a in asignaciones] == ["revolut-vista", "nu-cajita-turbo"]
+    # El primer tramo de Revolut, hasta el peso: ni uno más, porque por encima
+    # paga menos que la alternativa.
+    assert Decimal(asignaciones[0]["monto"]) == Decimal("25000.00")
+    assert sum(Decimal(a["monto"]) for a in asignaciones) == Decimal("250000.00")
 
 
 async def test_sovereign_debt_absorbs_whatever_does_not_fit(

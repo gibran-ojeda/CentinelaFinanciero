@@ -2,6 +2,17 @@ producto_slug,tasa_nominal,gat_nominal,gat_real,fecha_dato,fuente,fuente_url,est
 # De donde puede salir un numero que se publica: de la institucion que lo ofrece,
 # de la autoridad (Banxico SIE, CNBV) o del emisor. Nada mas.
 #
+# `notas` es la letra pequeña **de la tasa**, y desde el 2026-08-06 se publica en
+# la fila del comparador: promociones, topes de saldo, requisitos, que mide
+# exactamente el numero. Nuestra contabilidad -que si un dominio devolvio 403,
+# que falta verificar, que habria que revisar- NO va ahi: va en una linea de
+# comentario encima de la fila. Escribir "sin verificar contra la pagina
+# oficial" en 30 filas llenaba la tabla de una frase que la pastilla de
+# procedencia ya dice, y enterraba las tres notas que si importaban.
+#
+# Por eso las filas AGREGADOR van con `notas` vacia: son contraste sin
+# verificar, y cualquier cosa que escribieramos ahi seria de oidas.
+#
 # La columna opcional `tramos` captura tasas escalonadas por saldo con el
 # formato desde-hasta:tasa;... (hasta vacio = sin techo). La tasa_nominal de la
 # fila debe ser la del primer tramo, que es la titular. Ej.:
@@ -12,39 +23,69 @@ producto_slug,tasa_nominal,gat_nominal,gat_real,fecha_dato,fuente,fuente_url,est
 # estan aqui solo como contraste: cuando llegue la lectura oficial, su valor es
 # el termino de comparacion que decide si la lectura se publica sola o pasa por
 # revision humana. Cada una se retira en cuanto su lectura oficial la sustituye.
-cetes-28,6.18,,,2026-07-23,MANUAL,https://www.cetesdirecto.com/tablas/valores_gubernamentales/cetes.html,VIGENTE,Resultado de la subasta semanal. Leida de la serie SF43936 del SIE de Banxico el 2026-07-25; el enlace apunta a la publicacion legible de la misma subasta en cetesdirecto.
-cetes-91,6.49,,,2026-07-23,MANUAL,https://www.cetesdirecto.com/tablas/valores_gubernamentales/cetes.html,VIGENTE,Resultado de la subasta semanal. Leida de la serie SF43939 del SIE de Banxico el 2026-07-25; el enlace apunta a la publicacion legible de la misma subasta en cetesdirecto.
-cetes-182,6.75,,,2026-07-23,MANUAL,https://www.cetesdirecto.com/tablas/valores_gubernamentales/cetes.html,VIGENTE,Resultado de la subasta semanal. Leida de la serie SF43942 del SIE de Banxico el 2026-07-25; el enlace apunta a la publicacion legible de la misma subasta en cetesdirecto.
-cetes-364,6.93,,,2026-07-23,MANUAL,https://www.cetesdirecto.com/tablas/valores_gubernamentales/cetes.html,VIGENTE,Resultado de la subasta semanal. Leida de la serie SF43945 del SIE de Banxico el 2026-07-25; el enlace apunta a la publicacion legible de la misma subasta en cetesdirecto.
-bonddia,6.42,,,2026-07-25,MANUAL,https://www.cetesdirecto.com/tablas/valores_gubernamentales/bonddia.html,VIGENTE,Rendimiento de los ultimos 7 dias publicado por cetesdirecto. Se toma el de 7 dias y no el diario porque este ultimo es demasiado ruidoso para comparar.
-didi-vista,15.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial: didiglobal.com devolvio 403 a un cliente HTTP plano. Tasa promocional con tope de saldo.
-finsus-plazo-28,7.19,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial: finsus.mx devolvio 403.
-finsus-plazo-91,7.50,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial: finsus.mx devolvio 403.
-finsus-plazo-182,7.89,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial: finsus.mx devolvio 403.
-finsus-plazo-364,8.69,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial: finsus.mx devolvio 403.
-klar-vista,8.50,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial. La prensa reporta hasta 15% para categorias Plus y Platino: el dato requiere revision humana antes de publicarse.
-klar-plazo-28,8.20,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial: klar.mx no expone la tabla a un cliente HTTP plano.
-klar-plazo-91,8.30,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-klar-plazo-182,8.40,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-klar-plazo-364,8.50,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-kubo-plazo-91,7.60,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial: kubofinanciero.com no expone la tabla a un cliente HTTP plano.
-kubo-plazo-182,7.76,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-kubo-plazo-364,12.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar. Muy por encima del mercado (CETES 364d en 6.93%): candidata a bandera compuesta RED_FLAG_TASA si el IMOR estuviera en alerta.
-stori-plazo-28,7.05,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-stori-plazo-91,11.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar. Muy por encima del mercado a ese plazo.
-stori-plazo-182,10.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar. Muy por encima del mercado a ese plazo.
-stori-plazo-364,8.25,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-supertasas-vista,6.30,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-supertasas-plazo-28,6.40,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-supertasas-plazo-91,6.60,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-supertasas-plazo-182,7.70,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-supertasas-plazo-364,8.60,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-nu-cajita-turbo,13.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial: nu.com.mx devolvio 403. Tasa promocional con tope de saldo.
-nu-plazo-28,6.60,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-nu-plazo-91,6.70,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-nu-plazo-182,6.80,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
-revolut-vista,15.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial. La prensa reporta que la tasa alta aplica solo a un tramo del saldo y baja de forma escalonada por encima.
+#
+# Los CETES salen de las series del SIE de Banxico leidas el 2026-07-25:
+# SF43936 (28d), SF43939 (91d), SF43942 (182d) y SF43945 (364d). El enlace
+# apunta a la publicacion legible de la misma subasta en cetesdirecto.
+cetes-28,6.18,,,2026-07-23,MANUAL,https://www.cetesdirecto.com/tablas/valores_gubernamentales/cetes.html,VIGENTE,Resultado de la subasta semanal.
+cetes-91,6.49,,,2026-07-23,MANUAL,https://www.cetesdirecto.com/tablas/valores_gubernamentales/cetes.html,VIGENTE,Resultado de la subasta semanal.
+cetes-182,6.75,,,2026-07-23,MANUAL,https://www.cetesdirecto.com/tablas/valores_gubernamentales/cetes.html,VIGENTE,Resultado de la subasta semanal.
+cetes-364,6.93,,,2026-07-23,MANUAL,https://www.cetesdirecto.com/tablas/valores_gubernamentales/cetes.html,VIGENTE,Resultado de la subasta semanal.
+# Se toma el rendimiento de 7 dias y no el diario: el diario es demasiado
+# ruidoso para comparar contra plazos.
+bonddia,6.42,,,2026-07-25,MANUAL,https://www.cetesdirecto.com/tablas/valores_gubernamentales/bonddia.html,VIGENTE,Rendimiento de los ultimos 7 dias publicado por cetesdirecto.
+# didiglobal.com devolvio 403 a un cliente HTTP plano el 2026-07-25.
+didi-vista,15.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# finsus.mx devolvio 403 el 2026-07-25.
+finsus-plazo-28,7.19,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+finsus-plazo-91,7.50,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+finsus-plazo-182,7.89,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+finsus-plazo-364,8.69,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# klar.mx no exponia la tabla a un cliente HTTP plano el 2026-07-25. La prensa
+# reportaba hasta 15% para las categorias Plus y Platino; sin leerlo de la
+# pagina oficial no se publica.
+klar-vista,8.50,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+klar-plazo-28,8.20,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+klar-plazo-91,8.30,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+klar-plazo-182,8.40,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+klar-plazo-364,8.50,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# kubofinanciero.com no exponia la tabla a un cliente HTTP plano el 2026-07-25.
+# El 12.00% a 364 dias esta muy por encima del mercado (CETES 364d en 6.93%):
+# candidato a RED_FLAG_TASA si el IMOR entra en alerta.
+kubo-plazo-91,7.60,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+kubo-plazo-182,7.76,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+kubo-plazo-364,12.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# El 11.00% a 91 dias y el 10.00% a 182 estan muy por encima del mercado a esos
+# plazos; sin lectura oficial no hay con que contrastarlos.
+stori-plazo-28,7.05,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+stori-plazo-91,11.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+stori-plazo-182,10.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+stori-plazo-364,8.25,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+supertasas-vista,6.30,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+supertasas-plazo-28,6.40,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+supertasas-plazo-91,6.60,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+supertasas-plazo-182,7.70,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+supertasas-plazo-364,8.60,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# nu.com.mx devolvio 403 el 2026-07-25.
+nu-cajita-turbo,13.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+nu-plazo-28,6.60,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+nu-plazo-91,6.70,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+nu-plazo-182,6.80,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# retirada 2026-08-06 (sustituida por MANUAL 2026-08-06): revolut-vista,15.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial. La prensa reporta que la tasa alta aplica solo a un tramo del saldo y baja de forma escalonada por encima.
+#
+# Leida con navegador el 2026-08-06 en /instant-access-savings/, que es donde
+# Revolut publica de verdad -la portada no trae ni un porcentaje-. La escalera
+# reemplaza al 15% plano del agregador, que prometia esa tasa sobre cualquier
+# saldo. GAT nominal 16.18% y GAT real 11.98% son las de la nota al pie ¹ de la
+# propia pagina. Por encima de $1,000,000 solo dice "hasta 5%", asi que ese
+# tramo no se declara: la regla 1 prohibe publicar un "hasta X%".
+revolut-vista,15.00,16.18,11.98,2026-08-06,MANUAL,https://www.revolut.com/es-MX/instant-access-savings/,VIGENTE,"Tasa mejorada de 30 dias sobre los primeros $25,000: se conserva con 4 compras de al menos $50 cada 30 dias, o con un plan de pago Premium o Metal. De $25,000 a $1,000,000 paga 7.00% en el plan Estandar (7.30% Premium y 7.50% Metal).",0-25000:15.00;25000-1000000:7.00
 # retirada 2026-08-01 (sustituida por MANUAL 2026-08-01): openbank-vista,13.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial.
 openbank-vista,13.00,,,2026-08-01,MANUAL,https://www.openbank.mx/,VIGENTE,Escalera por saldo leida en la pagina oficial: 13% los primeros 30 mil y 6.3% de ahi a 1 millon; por encima no se publica rendimiento.,0-30000:13.00;30000-1000000:6.30
-hey-vista,7.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial: hey.inc devolvio error 500.
-mercado-pago-vista,12.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,Sin verificar contra la pagina oficial. Tasa con tope de saldo. Sin cobertura IPAB ni PROSOFIPO.
+# hey.inc devolvio error 500 el 2026-07-25; el dominio bueno es banco.hey.inc.
+hey-vista,7.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,
+# Medido el 2026-08-06: mercadopago.com.mx/cuenta solo publica "Ganancias de
+# hasta 12% anual" -sin plazo, sin monto, sin tope, sin condicion-. El tope de
+# saldo que se anotaba aqui no aparece en ninguna parte de su pagina. Eso es lo
+# que la bandera de tasas ambiguas existe para decir.
+mercado-pago-vista,12.00,,,2026-07-25,AGREGADOR,https://www.tasas.mx/,PENDIENTE_REVISION,

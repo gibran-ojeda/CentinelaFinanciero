@@ -107,6 +107,9 @@ function escaleraTexto(fila: FilaComparador): string {
           <span class="producto tenue" role="cell">
             {fila.producto}
             {fila.escalonada && <span class="escalera tenue-2">{escaleraTexto(fila)}</span>}
+            {fila.condiciones && (
+              <span class="condiciones tenue-2" title={fila.condiciones}>{fila.condiciones}</span>
+            )}
           </span>
           <span class="tenue" role="cell">
             {plazoCorto(fila.plazo_dias, fila.tipo)}
@@ -209,6 +212,7 @@ function escaleraTexto(fila: FilaComparador): string {
         </div>
 
         {fila.escalonada && <div class="escalera-tarjeta tenue-2">{escaleraTexto(fila)}</div>}
+        {fila.condiciones && <div class="escalera-tarjeta tenue-2">{fila.condiciones}</div>}
 
         <div class="tarjeta-pie">
           <span class="tenue">
@@ -312,6 +316,20 @@ function escaleraTexto(fila: FilaComparador): string {
     margin-top: 2px;
     font-size: 11px;
     line-height: 1.35;
+  }
+  /* La letra pequeña de la tasa. Se corta a tres líneas: es texto de longitud
+     libre que escribe cada institución, y una promoción de cinco renglones
+     estiraría su fila y descuadraría la tabla entera. Completa en el `title`. */
+  .condiciones {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.35;
+    text-wrap: pretty;
   }
   .marca-tramo {
     display: block;

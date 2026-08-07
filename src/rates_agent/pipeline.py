@@ -48,6 +48,11 @@ from rates_agent.reviewer import Decision, HuecoCatalogo, revisar
 
 log = get_logger(__name__)
 
+#: Tope de lo que se guarda de los reclamos ambiguos de una fuente. Acaba en el
+#: motivo de una bandera, que se lee en una pastilla y en un `title`: más largo
+#: no informa mejor.
+TOPE_AMBIGUEDAD = 400
+
 
 @dataclass(slots=True)
 class ReporteCorrida:
@@ -68,6 +73,10 @@ class ReporteCorrida:
     #: error: es una URL que apunta a donde no hay nada que leer, y sin
     #: nombrarla se confunde con una lectura buena que no se movió.
     sin_tasas: list[str] = field(default_factory=list)
+    #: Instituciones que anuncian una tasa sin decir a qué corresponde. Va
+    #: aparte de `sin_tasas` porque son problemas distintos: una URL mal
+    #: apuntada se arregla cambiando la URL, y esto no se arregla desde aquí.
+    ambiguas: list[str] = field(default_factory=list)
     #: Fuentes que esta corrida apagó por acumular fallos.
     fuentes_pausadas: list[str] = field(default_factory=list)
     presupuesto_agotado: bool = False
@@ -99,6 +108,7 @@ class ReporteCorrida:
             "hosts_en_circuito": self.hosts_en_circuito,
             "huecos_catalogo": self.huecos_catalogo,
             "sin_tasas": self.sin_tasas,
+            "ambiguas": self.ambiguas,
             "fuentes_pausadas": self.fuentes_pausadas,
             "presupuesto_agotado": self.presupuesto_agotado,
             "cortada_por_tiempo": self.cortada_por_tiempo,
@@ -123,6 +133,8 @@ class ReporteCorrida:
             lineas.append(f"  huecos de catálogo      {len(self.huecos_catalogo):>4}")
         if self.sin_tasas:
             lineas.append(f"  se leyeron sin tasas    {', '.join(self.sin_tasas)}")
+        if self.ambiguas:
+            lineas.append(f"  anuncian sin concretar  {', '.join(self.ambiguas)}")
         for pausada in self.fuentes_pausadas:
             lineas.append(f"  ⚠ fuente pausada: {pausada}")
         if self.presupuesto_agotado:
@@ -308,11 +320,25 @@ async def _procesar(
         reporte.sin_tasas.append(institucion)
         log.info("extraccion_sin_tasas", institucion=institucion, url=url)
 
+    if extraccion.ambiguas:
+        # No es un fallo: la página se leyó bien y el extractor obedeció la
+        # regla 1. Es la institución la que no dice a qué corresponde su
+        # número, y eso acaba en una bandera.
+        reporte.ambiguas.append(institucion)
+        log.info(
+            "tasas_ambiguas", institucion=institucion, url=url, cuantas=len(extraccion.ambiguas)
+        )
+
     reporte.tasas_extraidas += len(extraccion.tasas)
     await _decidir(reporte, extraccion.tasas, institucion=institucion, url=url)
     # El sello va al final: si la extracción reventó, la próxima corrida tiene
     # que volver a intentarlo en vez de creer que ya se procesó.
-    await _sellar(fuente_id, descarga.hash_contenido, con_tasas=bool(extraccion.tasas))
+    await _sellar(
+        fuente_id,
+        descarga.hash_contenido,
+        con_tasas=bool(extraccion.tasas),
+        ambiguas=extraccion.ambiguas,
+    )
 
 
 async def _decidir(
@@ -340,7 +366,13 @@ async def _decidir(
             # para saber dónde corta cada tramo (repetidos o ausentes): elegir
             # una de las tasas sería publicar el «hasta 13 %» que el extractor
             # tiene prohibido inventar, así que ese grupo sigue siendo hueco.
-            escalera = reconstruir_escalera(grupo) if len(grupo) > 1 else None
+            #
+            # Se llama también con una sola entrada, que antes ni se intentaba:
+            # una que declara `monto_maximo` —«15 % en tus primeros $25 000»—
+            # también es una escalera, y sin esto su tope se perdía y la tabla
+            # prometía esa tasa sobre cualquier saldo. Sin tope sigue
+            # devolviendo None y la observación viaja plana, como siempre.
+            escalera = reconstruir_escalera(grupo)
             if producto is None or (len(grupo) > 1 and escalera is None):
                 motivo = (
                     "plazo desconocido"
@@ -426,20 +458,36 @@ def _clave(tipo: TipoProducto, plazo_dias: int | None) -> tuple[str, int | None]
     return (tipo.value, plazo_dias)
 
 
-async def _sellar(fuente_id: int, hash_contenido: str, *, con_tasas: bool) -> None:
+async def _sellar(
+    fuente_id: int,
+    hash_contenido: str,
+    *,
+    con_tasas: bool,
+    ambiguas: list[str] | None = None,
+) -> None:
     """Marca la descarga, y el éxito **sólo** si de verdad salieron tasas.
 
     `ultima_extraccion_at` dice «se descargó»; `ultimo_exito_at`, «sirvió de
     algo». Confundirlas es lo que dejó seis portadas sin tasas indistinguibles
     de seis lecturas buenas.
+
+    `ambiguas` en `None` significa «no hubo lectura»: la página no cambió y se
+    saltó la extracción, así que lo que declara sigue siendo lo de la vez
+    anterior. Una lista —aunque venga vacía— sí sobrescribe.
     """
     async with session_scope() as session:
         fuente = await session.get(FuenteTasas, fuente_id)
-        if fuente is not None:
-            fuente.ultimo_hash = hash_contenido
-            fuente.ultima_extraccion_at = datetime.now(UTC)
-            if con_tasas:
-                fuente.ultimo_exito_at = datetime.now(UTC)
+        if fuente is None:
+            return
+        fuente.ultimo_hash = hash_contenido
+        fuente.ultima_extraccion_at = datetime.now(UTC)
+        if con_tasas:
+            fuente.ultimo_exito_at = datetime.now(UTC)
+        if ambiguas is not None:
+            fuente.ultima_ambiguedad = (
+                una_linea(" · ".join(ambiguas), TOPE_AMBIGUEDAD) if ambiguas else None
+            )
+            fuente.ultima_ambiguedad_at = datetime.now(UTC) if ambiguas else None
 
 
 async def _sanar(fuente_id: int) -> None:

@@ -474,6 +474,17 @@ class FuenteTasas(TimestampMixin, Base):
     #: Por qué se apagó. Distingue la pausa automática de una decisión humana,
     #: que es lo que decide si reanudar es seguro.
     pausada_motivo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Los reclamos de la última lectura que la regla 1 obligó a descartar, ya
+    #: unidos en una frase. Mercado Pago anuncia «hasta 12 % anual» y no dice
+    #: plazo, monto ni condición: la página se lee perfectamente y no hay nada
+    #: publicable. De aquí sale la bandera de tasas ambiguas.
+    #:
+    #: Cada lectura lo sobrescribe —`NULL` cuando no descartó nada—, porque
+    #: describe lo que la página dice **hoy**, no su historia.
+    ultima_ambiguedad: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ultima_ambiguedad_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         CheckConstraint("nivel IN (2, 3)", name="ck_nivel_de_fuente"),

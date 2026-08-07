@@ -62,6 +62,11 @@
 # - **kubo**: httpx recibe 111 caracteres; el navegador sí trae la tabla.
 # - **cetesdirecto/cetes.html**: ver arriba.
 #
+# Una séptima portada, que la revisión del 2026-08-02 no cazó porque el 403 de
+# Revolut tapaba el problema de debajo: su URL apuntaba a `revolut.com/es-MX/`,
+# que no publica ninguna tasa. Corregida el 2026-08-06 con el navegador; ver la
+# nota de su entrada.
+#
 # Para volver a medir cuando una página se rediseñe:
 # `python -m cli fuentes probar --extraer`
 
@@ -141,8 +146,17 @@ fuentes_tasas:
     nivel: 2
     requiere_js: false
 
+  # La portada no publica ninguna tasa —cero porcentajes en el DOM—; toda la
+  # estructura está en `/instant-access-savings/`, medida el 2026-08-06: 15 %
+  # en los primeros $25,000 (GAT nominal 16.18 %, real 11.98 %), 7.00 %
+  # Estándar de ahí a $1,000,000 —7.30 % Premium, 7.50 % Metal— y «hasta 5 %»
+  # por encima, que la regla 1 no deja publicar. El 15 % es una tasa mejorada
+  # de 30 días que se conserva con 4 compras de $50 al mes o con plan de pago.
+  #
+  # Sigue en `requiere_js: true`: da 403 al bot identificado y cambiar de
+  # página no arregla eso. Si el navegador tampoco pasa, es lectura manual.
   - institucion: Revolut
-    url: https://www.revolut.com/es-MX/
+    url: https://www.revolut.com/es-MX/instant-access-savings/
     nivel: 2
     requiere_js: true
 

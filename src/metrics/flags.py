@@ -414,6 +414,34 @@ def evaluar_red_flag_tasa(
     )
 
 
+def evaluar_tasas_ambiguas(
+    indicadores: IndicadoresInstitucion, *, ambiguedad: str | None
+) -> Bandera | None:
+    """Anuncia una tasa y no dice a qué corresponde.
+
+    Mercado Pago publica «Ganancias de hasta 12 % anual» en su página de cuenta
+    y nada más: ni plazo, ni monto, ni tope, ni condición. La regla 1 del
+    extractor impide publicar ese número, y hasta ahora el resultado era
+    silencio — indistinguible de una institución que no tiene página de tasas.
+
+    No sale de la CNBV, así que va **sin `periodo_dato`**: fecharla con el
+    trimestre de un boletín sugeriría que el dato viene de ahí. El precedente
+    es `evaluar_gat_inconsistente`, que también juzga lo publicado y no el
+    balance.
+    """
+    if not ambiguedad:
+        return None
+    return Bandera(
+        institucion_id=indicadores.institucion_id,
+        tipo=TipoBandera.TASAS_AMBIGUAS,
+        severidad=Severidad.AMARILLA,
+        motivo=(
+            f"Anuncia «{ambiguedad}» sin decir a qué plazo, monto o condición "
+            f"corresponde, así que no hay forma de saber qué rendimiento obtendrías."
+        ),
+    )
+
+
 def evaluar_gat_inconsistente(
     indicadores: IndicadoresInstitucion,
     umbrales: UmbralesBanderas,
@@ -445,6 +473,9 @@ def evaluar_gat_inconsistente(
 #: Orden de severidad para desempatar. Las compuestas rojas mandan.
 _PESO_SEVERIDAD = {Severidad.ROJA: 2, Severidad.AMARILLA: 1}
 
+#: Las que no hablan de la salud de la institución y por eso no se suprimen.
+_SIEMPRE_VISIBLES = frozenset({TipoBandera.SIN_COBERTURA, TipoBandera.TASAS_AMBIGUAS})
+
 
 def resolver_prioridad(banderas: list[Bandera]) -> list[Bandera]:
     """Aplica la nota de diseño de §5.2: se muestra sólo la más severa.
@@ -453,15 +484,21 @@ def resolver_prioridad(banderas: list[Bandera]) -> list[Bandera]:
     individuales que la componen sería repetir el mismo hallazgo tres veces y
     dar la impresión de tres problemas donde hay uno.
 
-    Excepción deliberada: `SIN_COBERTURA` sobrevive siempre. No es un hallazgo
-    sobre la salud de la institución sino un hecho estructural sobre la figura
-    regulatoria (§5.3), y el usuario necesita verlo aunque haya algo más grave.
+    Dos excepciones deliberadas, y por la misma razón: ninguna de las dos es un
+    hallazgo sobre la salud de la institución, así que no compiten en severidad
+    con las que sí lo son.
+
+    - `SIN_COBERTURA` es un hecho estructural sobre la figura regulatoria
+      (§5.3), y el usuario necesita verlo aunque haya algo más grave.
+    - `TASAS_AMBIGUAS` es sobre lo que la institución **publica**. Dejar que una
+      bandera de morosidad la tapara sería esconder justo lo que impide
+      comprobar la otra.
     """
     if not banderas:
         return []
 
-    permanentes = [b for b in banderas if b.tipo is TipoBandera.SIN_COBERTURA]
-    evaluadas = [b for b in banderas if b.tipo is not TipoBandera.SIN_COBERTURA]
+    permanentes = [b for b in banderas if b.tipo in _SIEMPRE_VISIBLES]
+    evaluadas = [b for b in banderas if b.tipo not in _SIEMPRE_VISIBLES]
 
     compuestas_rojas = [b for b in evaluadas if b.compuesta and b.severidad is Severidad.ROJA]
     if compuestas_rojas:
@@ -483,12 +520,14 @@ def evaluar_banderas(
     mediana_mercado: Decimal | None = None,
     gat_publicada: Decimal | None = None,
     tasa_nominal: Decimal | None = None,
+    ambiguedad: str | None = None,
 ) -> list[Bandera]:
     """Punto de entrada del motor: evalúa todo y resuelve prioridad.
 
     `mediana_mercado` es el contexto de mercado que menciona §5.2 — lo calcula
     quien llama, porque depende del conjunto de productos comparables y no de
-    esta institución.
+    esta institución. `ambiguedad` es lo que la última lectura de sus fuentes
+    tuvo que descartar por la regla 1 del extractor.
     """
     candidatas = evaluar_individuales(indicadores, umbrales)
 
@@ -506,6 +545,7 @@ def evaluar_banderas(
             gat_publicada=gat_publicada,
             tasa_nominal=tasa_nominal,
         ),
+        evaluar_tasas_ambiguas(indicadores, ambiguedad=ambiguedad),
     ]
     candidatas.extend(b for b in compuestas if b is not None)
 
@@ -531,5 +571,6 @@ __all__ = [
     "evaluar_nicap",
     "evaluar_no_recomendable",
     "evaluar_red_flag_tasa",
+    "evaluar_tasas_ambiguas",
     "resolver_prioridad",
 ]

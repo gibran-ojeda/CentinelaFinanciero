@@ -219,6 +219,48 @@ def test_priority_resolution_of_an_empty_list() -> None:
     assert resolver_prioridad([]) == []
 
 
+# ─── Tasas ambiguas ──────────────────────────────────────────
+
+
+def test_a_headline_rate_with_nothing_to_anchor_it_is_flagged(
+    umbrales: UmbralesBanderas,
+) -> None:
+    """Mercado Pago anuncia «hasta 12 % anual» y no dice nada más.
+
+    La regla 1 del extractor impide publicar ese número, y hasta ahora el
+    resultado era silencio: indistinguible de una institución que no tiene
+    página de tasas.
+    """
+    banderas = evaluar_banderas(
+        _indicadores(), umbrales, ambiguedad="Ganancias de hasta 12% anual"
+    )
+
+    ambigua = next(b for b in banderas if b.tipo is TipoBandera.TASAS_AMBIGUAS)
+    assert ambigua.severidad is Severidad.AMARILLA
+    assert "Ganancias de hasta 12% anual" in ambigua.motivo
+    # Sin `periodo_dato`: no sale de la CNBV, y fecharla con un trimestre suyo
+    # sugeriría que el dato viene de ahí.
+    assert ambigua.periodo_dato is None
+
+
+def test_no_vague_claim_no_flag(umbrales: UmbralesBanderas) -> None:
+    assert evaluar_banderas(_indicadores(), umbrales, ambiguedad=None) == []
+    assert evaluar_banderas(_indicadores(), umbrales, ambiguedad="") == []
+
+
+def test_a_vague_claim_survives_a_red_composite(umbrales: UmbralesBanderas) -> None:
+    """No compite en severidad con los hallazgos de salud, como SIN_COBERTURA.
+
+    Dejar que una bandera de morosidad la tapara sería esconder justo lo que
+    impide comprobar la otra.
+    """
+    banderas = evaluar_banderas(_en_riesgo(), umbrales, ambiguedad="hasta 12% anual")
+
+    tipos = {b.tipo for b in banderas}
+    assert TipoBandera.NO_RECOMENDABLE in tipos
+    assert TipoBandera.TASAS_AMBIGUAS in tipos
+
+
 def test_a_healthy_ifpe_shows_only_its_structural_flag(
     umbrales: UmbralesBanderas,
 ) -> None:
