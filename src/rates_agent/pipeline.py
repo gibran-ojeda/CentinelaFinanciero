@@ -353,22 +353,21 @@ async def _decidir(
         return
 
     async with session_scope() as session:
-        productos = await _productos_de(session, institucion)
+        catalogo = await _productos_de(session, institucion)
         vigentes = await tasas_vigentes_por_producto(
-            session, [p.id for p in productos.values()], incluir_pendientes=True
+            session, [p.id for p in catalogo.todos()], incluir_pendientes=True
         )
 
         grupos = _agrupar(extraidas)
         # Cuántos productos publicados caen en la misma casilla del catálogo.
-        # Más de uno significa que la página ofrece más de lo que el catálogo
-        # conoce, y entonces no hay forma de decidir cuál de ellos es el
-        # producto que tenemos dado de alta.
+        # Más de uno significa que la página ofrece más de lo que la casilla
+        # puede distinguir, y ahí sólo el nombre publicado desempata.
         por_casilla = Counter(clave[:2] for clave in grupos)
 
         for clave, grupo in grupos.items():
             casilla = clave[:2]
-            producto = productos.get(casilla)
-            colisionan = por_casilla[casilla] > 1
+            producto = catalogo.resolver(clave, grupos_en_la_casilla=por_casilla[casilla])
+            colisionan = producto is None and por_casilla[casilla] > 1
             # Varias entradas del mismo (tipo, plazo) son los **tramos por
             # monto** de un producto —Openbank publica 13 % hasta $30 000 y
             # 6.3 % de ahí en adelante— y se reconstruyen como UNA observación
@@ -382,14 +381,15 @@ async def _decidir(
             # también es una escalera, y sin esto su tope se perdía y la tabla
             # prometía esa tasa sobre cualquier saldo. Sin tope sigue
             # devolviendo None y la observación viaja plana, como siempre.
-            escalera = None if colisionan else reconstruir_escalera(grupo)
-            if producto is None or colisionan or (len(grupo) > 1 and escalera is None):
+            escalera = reconstruir_escalera(grupo) if producto is not None else None
+            if producto is None or (len(grupo) > 1 and escalera is None):
                 motivo = (
-                    "plazo desconocido"
-                    if producto is None
+                    "el catálogo no distingue los varios productos de esta casilla; "
+                    "se arregla con `nombre_publicado` en seeds/productos.yaml"
+                    if colisionan
                     else (
-                        "el catálogo tiene un solo producto para varios que publica la página"
-                        if colisionan
+                        "plazo desconocido"
+                        if producto is None
                         else "tramos ambiguos (montos repetidos o sin monto)"
                     )
                 )
@@ -472,19 +472,55 @@ def _nombre(producto: str) -> str:
     return " ".join(producto.split()).casefold()
 
 
-async def _productos_de(session: Any, institucion: str) -> dict[_ClaveCatalogo, Producto]:
-    """Productos de esa institución, indexados por `(tipo, plazo)`.
+@dataclass(frozen=True, slots=True)
+class _Catalogo:
+    """Los productos de una institución, con las dos formas de encontrarlos.
 
-    La clave es lo que la página publica —un tipo y un plazo— y no el nombre,
-    que cada institución escribe distinto cada temporada.
+    `por_casilla` es la de siempre: `(tipo, plazo)`, que es lo que la página
+    publica de cada tasa. `por_nombre` sólo tiene los que declaran
+    `nombre_publicado`, y es la que desempata cuando una casilla aloja a más de
+    uno — Klar publica «Cuenta» e «Inversión Flexible», las dos a la vista.
+    """
 
-    Dos productos activos en la misma casilla **se descartan los dos**. El
-    diccionario se quedaba con el último y la corrida atribuía la tasa a un
-    producto elegido por el orden de la consulta; hoy no pasa porque ninguna
-    institución tiene dos, pero pasará en cuanto se den de alta los dos que
-    Klar publica a la vista —«Cuenta» al 3 % e «Inversión Flexible» al 6 %—,
-    que es justo lo que los huecos de catálogo están pidiendo. Sin producto no
-    hay observación y sale hueco, que es el fallo seguro.
+    por_casilla: dict[_ClaveCatalogo, Producto]
+    por_nombre: dict[_ClaveGrupo, Producto]
+
+    def resolver(self, clave: _ClaveGrupo, *, grupos_en_la_casilla: int) -> Producto | None:
+        """El producto del catálogo para un grupo de extracciones, si lo hay.
+
+        El nombre manda sobre la casilla: es el dato más específico, y cuando
+        está declarado es porque la casilla sola no bastaba.
+
+        `grupos_en_la_casilla` es cuántos productos distintos publica la página
+        en esa misma casilla. Con más de uno y sin nombre que lo resuelva no se
+        devuelve nada, **aunque el catálogo tenga un producto ahí**: tenerlo no
+        dice cuál de los publicados es, y dárselo a los dos es exactamente lo
+        que fabricó la escalera de Klar.
+        """
+        if (por_nombre := self.por_nombre.get(clave)) is not None:
+            return por_nombre
+        if grupos_en_la_casilla > 1:
+            return None
+        return self.por_casilla.get(clave[:2])
+
+    def todos(self) -> list[Producto]:
+        vistos = {p.id: p for p in self.por_casilla.values()}
+        vistos.update({p.id: p for p in self.por_nombre.values()})
+        return list(vistos.values())
+
+
+async def _productos_de(session: Any, institucion: str) -> _Catalogo:
+    """Productos activos de esa institución, listos para resolver.
+
+    La casilla es lo que la página publica de cada tasa —un tipo y un plazo— y
+    no el nombre, que cada institución escribe distinto cada temporada. Por eso
+    el nombre es opcional: se declara sólo donde la casilla no alcanza.
+
+    Dos productos en la misma casilla y **ninguno con nombre declarado** se
+    descartan los dos. Antes el diccionario se quedaba con el último y la
+    corrida atribuía la tasa a un producto elegido por el orden de la consulta.
+    Sin producto no hay observación y sale hueco, que es el fallo seguro — y el
+    motivo del hueco dice cómo arreglarlo.
     """
     filas = (
         (
@@ -497,23 +533,33 @@ async def _productos_de(session: Any, institucion: str) -> dict[_ClaveCatalogo, 
         .scalars()
         .all()
     )
-    por_casilla: dict[_ClaveCatalogo, list[Producto]] = {}
-    for producto in filas:
-        por_casilla.setdefault(_clave(producto.tipo, producto.plazo_dias), []).append(producto)
 
-    catalogo: dict[_ClaveCatalogo, Producto] = {}
-    for casilla, productos in por_casilla.items():
+    por_nombre: dict[_ClaveGrupo, Producto] = {}
+    agrupados: dict[_ClaveCatalogo, list[Producto]] = {}
+    for producto in filas:
+        casilla = _clave(producto.tipo, producto.plazo_dias)
+        agrupados.setdefault(casilla, []).append(producto)
+        if producto.nombre_publicado:
+            por_nombre[(*casilla, _nombre(producto.nombre_publicado))] = producto
+
+    por_casilla: dict[_ClaveCatalogo, Producto] = {}
+    for casilla, productos in agrupados.items():
         if len(productos) > 1:
-            log.warning(
-                "catalogo_ambiguo",
-                institucion=institucion,
-                tipo=casilla[0],
-                plazo_dias=casilla[1],
-                slugs=[p.slug for p in productos],
-            )
+            # No es un error si los nombres los distinguen: `resolver` los
+            # encontrará por ahí. Se avisa igual de los que no lo declaran,
+            # porque ésos sí quedan inalcanzables.
+            sin_nombre = [p.slug for p in productos if not p.nombre_publicado]
+            if sin_nombre:
+                log.warning(
+                    "catalogo_ambiguo",
+                    institucion=institucion,
+                    tipo=casilla[0],
+                    plazo_dias=casilla[1],
+                    sin_nombre_publicado=sin_nombre,
+                )
             continue
-        catalogo[casilla] = productos[0]
-    return catalogo
+        por_casilla[casilla] = productos[0]
+    return _Catalogo(por_casilla=por_casilla, por_nombre=por_nombre)
 
 
 #: `(tipo, plazo)` identifica la casilla del **catálogo**; el nombre del

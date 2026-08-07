@@ -16,8 +16,15 @@ from sqlalchemy import select
 
 from cli.seed import run_seed
 from core.db import session_scope
-from domain.enums import EstadoJob, EstadoTasa, FuenteTasa
-from domain.orm import FuenteTasas, JobRun, Producto, Tasa
+from domain.enums import (
+    EstadoJob,
+    EstadoTasa,
+    FuenteTasa,
+    Liquidez,
+    TipoInstrumento,
+    TipoProducto,
+)
+from domain.orm import FuenteTasas, Institucion, JobRun, Producto, Tasa
 from llm.client import ClienteLLM
 from llm.providers.base import ErrorPresupuestoAgotado, ProveedorLLM, RespuestaLLM
 from rates_agent import pipeline
@@ -906,6 +913,105 @@ async def test_two_products_in_one_slot_never_become_a_ladder() -> None:
 
     async with session_scope() as session:
         assert (await session.execute(select(Tasa))).scalars().all() == []
+
+
+async def test_the_published_name_resolves_two_products_in_one_slot() -> None:
+    """Lo que desbloquea a Klar: «Cuenta» al 3 % e «Inversión Flexible» al 6 %.
+
+    Las dos son VISTA y sin plazo, así que la casilla `(tipo, plazo)` no las
+    distingue. Con `nombre_publicado` cada una encuentra su producto y salen
+    **dos observaciones**, no una escalera falsa ni dos huecos.
+    """
+    await _solo_una_fuente()
+    async with session_scope() as session:
+        finsus = await session.scalar(select(Institucion).where(Institucion.nombre == "Finsus"))
+        assert finsus is not None
+        for slug, nombre, publicado in (
+            ("finsus-cuenta", "Finsus Cuenta", "Cuenta"),
+            ("finsus-flexible", "Finsus Flexible", "Inversión Flexible"),
+        ):
+            session.add(
+                Producto(
+                    institucion_id=finsus.id,
+                    nombre=nombre,
+                    slug=slug,
+                    nombre_publicado=publicado,
+                    tipo=TipoProducto.VISTA,
+                    instrumento=TipoInstrumento.DEPOSITO_SOFIPO,
+                    monto_minimo=Decimal("0"),
+                    liquidez=Liquidez.INMEDIATA,
+                )
+            )
+
+    modelo = ModeloFalso(
+        tasas=[
+            {"producto": "Cuenta", "tipo": "VISTA", "tasa_nominal": "3.00"},
+            {"producto": "Inversión Flexible", "tipo": "VISTA", "tasa_nominal": "6.00"},
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.huecos_catalogo == []
+    assert reporte.en_revision == 2
+
+    async with session_scope() as session:
+        filas = (
+            (
+                await session.execute(
+                    select(Producto.slug, Tasa.tasa_nominal).join(Tasa).order_by(Producto.slug)
+                )
+            )
+            .tuples()
+            .all()
+        )
+    assert filas == [
+        ("finsus-cuenta", Decimal("3.00")),
+        ("finsus-flexible", Decimal("6.00")),
+    ]
+    # Y ninguna trae tramos: son dos productos, no una escalera.
+    async with session_scope() as session:
+        for tasa in (await session.execute(select(Tasa))).scalars():
+            assert tasa.tramos == []
+
+
+async def test_without_a_published_name_the_slot_stays_ambiguous() -> None:
+    """El arreglo anterior sigue en pie: sin nombre declarado, hueco.
+
+    Es lo que impide fabricar la escalera de Klar mientras el catálogo no sepa
+    cuál de los dos productos es cuál.
+    """
+    await _solo_una_fuente()
+    async with session_scope() as session:
+        finsus = await session.scalar(select(Institucion).where(Institucion.nombre == "Finsus"))
+        assert finsus is not None
+        session.add(
+            Producto(
+                institucion_id=finsus.id,
+                nombre="Finsus Cuenta",
+                slug="finsus-cuenta",
+                tipo=TipoProducto.VISTA,
+                instrumento=TipoInstrumento.DEPOSITO_SOFIPO,
+                monto_minimo=Decimal("0"),
+                liquidez=Liquidez.INMEDIATA,
+            )
+        )
+
+    modelo = ModeloFalso(
+        tasas=[
+            {"producto": "Cuenta", "tipo": "VISTA", "tasa_nominal": "3.00"},
+            {"producto": "Inversión Flexible", "tipo": "VISTA", "tasa_nominal": "6.00"},
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.en_revision == 0
+    assert {h["producto"] for h in reporte.huecos_catalogo} == {"Cuenta", "Inversión Flexible"}
 
 
 async def test_the_tiers_of_one_product_still_become_a_ladder() -> None:

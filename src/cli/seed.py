@@ -221,6 +221,7 @@ async def _seed_productos(
         clave = (institucion.id, entrada["nombre"], plazo)
         campos = {
             "slug": entrada["slug"],
+            "nombre_publicado": entrada.get("nombre_publicado"),
             "tipo": TipoProducto(entrada["tipo"]),
             "instrumento": TipoInstrumento(entrada["instrumento"]),
             "plazo_dias": plazo,
