@@ -1082,6 +1082,49 @@ async def test_the_tiers_of_one_product_still_become_a_ladder() -> None:
         ]
 
 
+async def test_membership_variants_publish_the_lowest_instead_of_a_gap() -> None:
+    """El caso Hey, tal como llegó de producción el 2026-08-07.
+
+    Dos entradas del mismo producto y plazo, 4.00 % como Cliente Hey y 7.50 %
+    siendo Fan Hey, sin montos que las separen. No son tramos, así que el grupo
+    entero se caía como hueco y Hey no publicaba nada.
+    """
+    await _solo_una_fuente()
+    modelo = ModeloFalso(
+        tasas=[
+            {
+                "producto": "Inversión Hey",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "7.50",
+                "condiciones": "Tasa exclusiva Fan Hey / Hey Pro",
+            },
+            {
+                "producto": "Inversión Hey",
+                "tipo": "PLAZO",
+                "plazo_dias": 364,
+                "tasa_nominal": "4.00",
+                "condiciones": "Cliente Hey",
+            },
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.huecos_catalogo == []
+    assert reporte.en_revision == 1
+
+    async with session_scope() as session:
+        tasa = (await session.execute(select(Tasa))).scalars().one()
+        # La más baja: nunca promete de más.
+        assert tasa.tasa_nominal == Decimal("4.00")
+        assert tasa.tramos == []
+        assert tasa.notas is not None
+        assert "7.50%: Tasa exclusiva Fan Hey / Hey Pro" in tasa.notas
+
+
 async def test_a_ladder_that_does_not_start_at_zero_is_a_catalogue_gap() -> None:
     """Una escalera que no cubre desde el primer peso tiene un tramo base que
     la página no declaró — y la regla 1 prohíbe inventarlo."""

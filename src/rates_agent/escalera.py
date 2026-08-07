@@ -106,6 +106,54 @@ def reconstruir_escalera(entradas: Sequence[TasaExtraida]) -> EscaleraExtraida |
     )
 
 
+def colapsar_por_condicion(entradas: Sequence[TasaExtraida]) -> TasaExtraida | None:
+    """N entradas del mismo producto **sin montos que las separen** → una.
+
+    Es el caso Hey, medido el 2026-08-07: la página publica 4.00 % como Cliente
+    Hey y 7.50 % siendo Fan Hey o Hey Pro, y el modelo devolvió las dos como
+    entradas del mismo producto y el mismo plazo. No son tramos —comparten
+    piso— así que `reconstruir_escalera` las declara irreconstruibles y el grupo
+    entero se caía como hueco.
+
+    La regla 5 del prompt ya dice qué hacer cuando no se puede distinguir:
+    «devuelve la más baja y explícalo en `condiciones`». Esto la aplica en
+    código, porque depender de que el modelo obedezca no funcionó: colapsó las
+    variantes en una corrida y no en la siguiente, con la misma página.
+
+    La más baja **nunca promete de más**, que es la misma dirección conservadora
+    con la que `metrics.tramos` trata el excedente de una escalera. Y baja la
+    confianza a `media` como mucho: la eligió el sistema, no la leyó nadie.
+
+    Sólo se aplica cuando **todas** comparten piso. Eso es la firma de que se
+    diferencian por algo que no es el monto. Si los pisos difieren pero la
+    escalera no cuadra —el tramo base que la página no declaró—, sigue siendo
+    hueco: ahí la regla 1 prohíbe inventar lo que falta.
+    """
+    if len(entradas) < 2:
+        return None
+    if len({e.monto_minimo or _CERO for e in entradas}) != 1:
+        return None
+
+    ordenadas = sorted(entradas, key=lambda e: e.tasa_nominal)
+    base, resto = ordenadas[0], ordenadas[1:]
+    peor = min((e.confianza for e in ordenadas), key=_ORDEN_CONFIANZA.__getitem__)
+
+    partes = [base.condiciones] if base.condiciones else []
+    partes += [_otra_condicion(e) for e in resto]
+    return base.model_copy(
+        update={
+            "confianza": peor if peor == "baja" else "media",
+            "condiciones": " · ".join(partes) or None,
+        }
+    )
+
+
+def _otra_condicion(entrada: TasaExtraida) -> str:
+    if entrada.condiciones:
+        return f"{entrada.tasa_nominal}%: {entrada.condiciones}"
+    return f"{entrada.tasa_nominal}% bajo una condición que la página no detalla"
+
+
 def render_escalera(tramos: Sequence[Tramo]) -> str:
     """La escalera en una frase, para motivos de revisión y logs.
 
@@ -138,4 +186,9 @@ def _condiciones(ordenadas: Sequence[TasaExtraida], tramos: Sequence[Tramo]) -> 
     return " · ".join(partes)
 
 
-__all__ = ["EscaleraExtraida", "reconstruir_escalera", "render_escalera"]
+__all__ = [
+    "EscaleraExtraida",
+    "colapsar_por_condicion",
+    "reconstruir_escalera",
+    "render_escalera",
+]

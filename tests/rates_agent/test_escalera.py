@@ -14,7 +14,11 @@ from pydantic import ValidationError
 
 from domain.enums import TipoProducto
 from metrics.tramos import Tramo
-from rates_agent.escalera import reconstruir_escalera, render_escalera
+from rates_agent.escalera import (
+    colapsar_por_condicion,
+    reconstruir_escalera,
+    render_escalera,
+)
 from rates_agent.extractor import TasaExtraida
 
 
@@ -176,6 +180,54 @@ def test_diverging_conditions_concatenate_by_tier() -> None:
     assert escalera.condiciones == (
         "$0–$30,000: Requiere nómina. · $30,000 en adelante: Sin requisitos."
     )
+
+
+def test_membership_variants_collapse_into_the_lowest() -> None:
+    """El caso Hey, medido el 2026-08-07.
+
+    Publica 4.00 % como Cliente Hey y 7.50 % siendo Fan Hey o Hey Pro, y el
+    modelo devolvió las dos como entradas del mismo producto y plazo. No son
+    tramos —comparten piso— así que el grupo entero se caía como hueco.
+    """
+    colapsada = colapsar_por_condicion(
+        [
+            _entrada("7.50", None, condiciones="Tasa exclusiva Fan Hey / Hey Pro"),
+            _entrada("4.00", None, condiciones="Cliente Hey"),
+        ]
+    )
+
+    assert colapsada is not None
+    assert colapsada.tasa_nominal == Decimal("4.00")
+    assert colapsada.condiciones == "Cliente Hey · 7.50%: Tasa exclusiva Fan Hey / Hey Pro"
+    # La eligió el sistema, no la leyó nadie: la confianza no puede ser alta.
+    assert colapsada.confianza == "media"
+
+
+def test_a_variant_without_conditions_still_says_there_is_one() -> None:
+    colapsada = colapsar_por_condicion([_entrada("7.50", "0"), _entrada("4.00", "0")])
+
+    assert colapsada is not None
+    assert colapsada.condiciones == "7.50% bajo una condición que la página no detalla"
+
+
+def test_distinct_floors_are_never_collapsed() -> None:
+    """Pisos distintos son tramos por monto, aunque la escalera no cuadre.
+
+    «13 % desde $1,000» y «6.30 % desde $30,000» tiene un tramo base que la
+    página no declaró, y la regla 1 prohíbe inventarlo: eso sigue siendo hueco,
+    no un colapso a la más baja.
+    """
+    assert colapsar_por_condicion([_entrada("13.00", "1000"), _entrada("6.30", "30000")]) is None
+    assert colapsar_por_condicion([_entrada("13.00", "0")]) is None
+
+
+def test_the_worst_confidence_survives_the_collapse() -> None:
+    colapsada = colapsar_por_condicion(
+        [_entrada("7.50", None, confianza="alta"), _entrada("4.00", None, confianza="baja")]
+    )
+
+    assert colapsada is not None
+    assert colapsada.confianza == "baja"
 
 
 def test_render_reads_in_one_terminal_line() -> None:

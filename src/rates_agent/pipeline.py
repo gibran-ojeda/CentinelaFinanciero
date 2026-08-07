@@ -42,7 +42,7 @@ from domain.enums import EstadoTasa, TipoProducto
 from domain.orm import FuenteTasas, Institucion, Producto
 from llm.client import ClienteLLM
 from llm.providers.base import ErrorPresupuestoAgotado, ErrorProveedor
-from rates_agent.escalera import reconstruir_escalera
+from rates_agent.escalera import colapsar_por_condicion, reconstruir_escalera
 from rates_agent.extractor import TasaExtraida, extraer
 from rates_agent.fetcher import CadenaAgotada, Fetcher, SinTransporteCapaz, una_linea
 from rates_agent.reviewer import Decision, HuecoCatalogo, revisar
@@ -391,7 +391,16 @@ async def _decidir(
             # prometía esa tasa sobre cualquier saldo. Sin tope sigue
             # devolviendo None y la observación viaja plana, como siempre.
             escalera = reconstruir_escalera(grupo) if producto is not None else None
-            if producto is None or (len(grupo) > 1 and escalera is None):
+            # No es escalera y el grupo trae varias: puede que se diferencien
+            # por condición y no por monto —Hey publica 4.00 % como Cliente Hey
+            # y 7.50 % siendo Fan Hey—. Ahí se colapsa en la más baja con el
+            # resto en `condiciones` en vez de tirar el grupo entero.
+            colapsada = (
+                colapsar_por_condicion(grupo)
+                if producto is not None and escalera is None and len(grupo) > 1
+                else None
+            )
+            if producto is None or (len(grupo) > 1 and escalera is None and colapsada is None):
                 motivo = (
                     "el catálogo no distingue los varios productos de esta casilla; "
                     "se arregla con `nombre_publicado` en seeds/productos.yaml"
@@ -421,7 +430,7 @@ async def _decidir(
                     )
                 continue
 
-            cabeza = escalera.cabeza if escalera is not None else grupo[0]
+            cabeza = escalera.cabeza if escalera is not None else (colapsada or grupo[0])
             candidata = vigentes.get(producto.id)
             vigente = candidata if candidata and candidata.estado is EstadoTasa.VIGENTE else None
             resultado = await revisar(
