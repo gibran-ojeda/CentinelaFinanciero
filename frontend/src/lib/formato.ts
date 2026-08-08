@@ -185,21 +185,27 @@ export function colorSerie(indice: number): string {
 }
 
 /**
- * El ciclo de color de los chips de condiciones — y de los segmentos de la
- * barra de escalera: mismo índice, mismo tono, para que el chip de un tramo
- * y su segmento se reconozcan como la misma cosa.
+ * El ciclo de color de los chips de condiciones.
  *
- * Cuatro tonos fríos de la paleta de series. Fuera quedan `--serie-8`
- * (idéntica a `--aviso`: un chip de condición se leería como advertencia),
- * `--serie-2` (idéntica a `--positivo`: se leería como «verificada»),
- * `--serie-5` (casi blanca, el tinte de fondo desaparece) y `--serie-4`
- * (demasiado oscura como color de texto a 11 px).
+ * Cuatro tonos fríos de la paleta de series, en el orden que maximiza la
+ * separación entre vecinos: el validador de paleta midió ΔE 8.0 a visión
+ * normal entre `--serie-1` y `--serie-3` juntas —por debajo del piso de 15—
+ * y este orden sube el peor vecindario a 11.8. Los tonos de serie no
+ * alcanzan el piso de un chart categórico se ordenen como se ordenen; los
+ * chips lo toleran porque su identidad viaja en el texto, no en el tinte.
+ * La barra de escalera, que sí es un chart, usa su rampa ordinal propia
+ * (`--rampa-saldo-*`).
+ *
+ * Fuera quedan `--serie-8` (idéntica a `--aviso`: un chip de condición se
+ * leería como advertencia), `--serie-2` (idéntica a `--positivo`: se leería
+ * como «verificada»), `--serie-5` (casi blanca, el tinte de fondo
+ * desaparece) y `--serie-4` (demasiado oscura como color de texto a 11 px).
  */
 export const COLORES_CHIP = [
   'var(--serie-1)',
-  'var(--serie-3)',
   'var(--serie-7)',
   'var(--serie-6)',
+  'var(--serie-3)',
 ];
 
 export function colorChip(indice: number): string {
