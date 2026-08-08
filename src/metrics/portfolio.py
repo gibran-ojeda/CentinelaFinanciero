@@ -675,6 +675,84 @@ def optimizar(
     )
 
 
+# ─── Referencias de comparación ───────────────────────────────
+
+
+def referencia_cetes(
+    candidatos: Sequence[Candidato],
+    *,
+    monto_total: Decimal,
+    horizonte_dias: int,
+    excluir_rojas: bool,
+) -> Candidato | None:
+    """El CETES contra el que comparar: el de mayor plazo que cabe.
+
+    Se elige del mismo pool de `elegibles` que usa el optimizador — así
+    respeta su mínimo de contratación y su plazo — y gana el de mayor
+    `plazo_dias` (la vista cuenta como 0); empate → menor `producto_id`. Sin
+    candidato, la referencia se omite: no se inventa un CETES que el catálogo
+    no tiene.
+    """
+    pool = [
+        c
+        for c in elegibles(
+            candidatos,
+            monto_total=monto_total,
+            horizonte_dias=horizonte_dias,
+            excluir_rojas=excluir_rojas,
+        )
+        if c.instrumento is TipoInstrumento.CETES
+    ]
+    if not pool:
+        return None
+    return min(pool, key=lambda c: (-(c.plazo_dias or 0), c.producto_id))
+
+
+def mejor_unico(
+    candidatos: Sequence[Candidato],
+    *,
+    monto_total: Decimal,
+    horizonte_dias: int,
+    inflacion_anual: Decimal,
+    params: ParametrosFiscales,
+    valor_udi: Decimal,
+    excluir_rojas: bool,
+) -> tuple[Candidato, Combinacion] | None:
+    """«Todo en un solo instrumento»: el elegible con mayor ganancia real.
+
+    Evalúa cada elegible con el monto entero y toma el argmax de
+    `ganancia_real`; empate → menor `producto_id`. Dos decisiones
+    deliberadas, que también documenta el schema de la API:
+
+    - **No se filtra por `respetar_seguro`**: la referencia lleva su propio
+      porcentaje protegido, y ocultar el instrumento de mayor ganancia
+      describiría mal el mercado. Que «todo en un IFPE» aparezca con
+      protegido 0 % junto a una combinación 100 % cubierta es el porqué de
+      diversificar, hecho visible.
+    - **Las escaleras crecientes sí entran**: son contratables y
+      `evaluar_reparto` las pondera bien; su exclusión es sólo del greedy.
+    """
+    pool = elegibles(
+        candidatos,
+        monto_total=monto_total,
+        horizonte_dias=horizonte_dias,
+        excluir_rojas=excluir_rojas,
+    )
+    mejor: tuple[Candidato, Combinacion] | None = None
+    for candidato in sorted(pool, key=lambda c: c.producto_id):
+        combinacion = evaluar_reparto(
+            [candidato],
+            [monto_total],
+            horizonte_dias=horizonte_dias,
+            inflacion_anual=inflacion_anual,
+            params=params,
+            valor_udi=valor_udi,
+        )
+        if mejor is None or combinacion.ganancia_real > mejor[1].ganancia_real:
+            mejor = (candidato, combinacion)
+    return mejor
+
+
 __all__ = [
     "CIEN",
     "PORCENTAJE_REPARTO",
@@ -687,6 +765,8 @@ __all__ = [
     "elegibles",
     "evaluar_combinacion",
     "evaluar_reparto",
+    "mejor_unico",
     "normalizar",
     "optimizar",
+    "referencia_cetes",
 ]
