@@ -1,6 +1,6 @@
 """Descarga de las páginas de tasas, con las cuatro capas de resiliencia.
 
-Portado de `backtesting/search_executor.py` de NarrativeAlpha, que lleva meses
+Portado del ejecutor de búsqueda de NA, que lleva meses
 resolviendo esta misma clase de problema en producción. Allí la cadena son
 buscadores; aquí son **transportes** para una URL que no se puede cambiar:
 
@@ -261,7 +261,7 @@ class Fetcher:
     """Descarga páginas con las cuatro capas. Una instancia por corrida.
 
     El estado del circuito vive en la instancia, así que se reinicia solo en
-    cada corrida nueva — lo mismo que hace NarrativeAlpha con el suyo.
+    cada corrida nueva — lo mismo que hace NA con el suyo.
     """
 
     def __init__(

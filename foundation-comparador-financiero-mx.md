@@ -419,7 +419,7 @@ Para mantener el enfoque, definir explícitamente lo que queda fuera del alcance
 
 # Parte II — Fundación Técnica
 
-> Esta parte define el stack, la arquitectura de servicios y la estrategia de obtención de datos con que se construye Centinela Financiero. La plantilla de referencia es el stack probado de NarrativeAlpha (Python 3.12 + FastAPI + PostgreSQL + Docker).
+> Esta parte define el stack, la arquitectura de servicios y la estrategia de obtención de datos con que se construye Centinela Financiero. La plantilla de referencia es el stack probado del proyecto vecino (NA: Python 3.12 + FastAPI + PostgreSQL + Docker).
 
 ---
 
@@ -427,7 +427,7 @@ Para mantener el enfoque, definir explícitamente lo que queda fuera del alcance
 
 | Capa | Tecnología | Justificación |
 |---|---|---|
-| Lenguaje | Python 3.12 | Ecosistema maduro para ETL, APIs async y LLM; mismo stack que NarrativeAlpha |
+| Lenguaje | Python 3.12 | Ecosistema maduro para ETL, APIs async y LLM; mismo stack que NA |
 | Empaquetado | `pyproject.toml` único con extras por módulo (`api`, `scheduler`, `ingest`, `llm`, `browser`, `mcp`, `dev`) | Sin zoo de `requirements-*.txt`; cada imagen Docker instala solo lo que necesita |
 | Layout | `src/` con paquetes planos; cada módulo ejecutable expone `__main__.py` (`python -m api`, `python -m scheduler`, `python -m cli`) | Servicios diferenciados solo por comando, una sola imagen |
 | API | FastAPI + uvicorn, patrón *application factory* (`create_app()`) | Async nativo, OpenAPI automático, validación pydantic |
@@ -438,11 +438,11 @@ Para mantener el enfoque, definir explícitamente lo que queda fuera del alcance
 | Observabilidad | structlog (JSON en prod, pretty en dev) + tabla `job_runs` | Trazabilidad de cada corrida de ingesta |
 | LLM | Cliente router con tiers y fallback; `OpenAICompatProvider` con **DeepSeek** como primario; `CostTracker` con límite diario; prompts como plantillas `.md` externas; parsers JSON robustos | Costo mínimo, proveedor intercambiable vía `base_url`, gasto acotado |
 | Frontend | **Astro SSR + islas React** (TanStack Query solo en calculadora y filtros) | Un comparador público vive del SEO; SSR para páginas indexables, interactividad como islas |
-| Edge | Caddy 2 (TLS automático), **compartido con NarrativeAlpha** en el mismo VPS | El navegador solo llega al servicio `web`; la API interna nunca se expone |
+| Edge | Caddy 2 (TLS automático), **compartido con NA** en el mismo VPS | El navegador solo llega al servicio `web`; la API interna nunca se expone |
 | Contenedores | Docker Compose (proyecto `centinela`, aislado); imagen única `python:3.12-slim` diferenciada por `command` | Build una vez, deploy N servicios; cero colisión con el stack vecino |
 | Calidad | pytest (`asyncio_mode=auto`) + respx + testcontainers; ruff + black + mypy strict; pre-commit; GitHub Actions | CI bloqueante en lint y tests |
 
-**Doble gate por módulo** (patrón heredado de NarrativeAlpha): cada job de ingesta tiene un flag *env-only* que decide si se registra en el scheduler (ej. `SCHEDULER_BANXICO_ENABLED`) y un kill-switch *caliente* en ConfigStore que lo hace no-operar sin reiniciar (ej. `BANXICO_SYNC_ENABLED`).
+**Doble gate por módulo** (patrón heredado de NA): cada job de ingesta tiene un flag *env-only* que decide si se registra en el scheduler (ej. `SCHEDULER_BANXICO_ENABLED`) y un kill-switch *caliente* en ConfigStore que lo hace no-operar sin reiniciar (ej. `BANXICO_SYNC_ENABLED`).
 
 ---
 
@@ -473,7 +473,7 @@ flowchart LR
 
 **Patrón BFF:** el navegador solo habla con `web`; `web` consume la API por red interna inyectando `X-API-Key`. La API nunca se expone a internet.
 
-**Co-hosting con NarrativeAlpha:** Centinela corre en el **mismo VPS** que NarrativeAlpha, como stack Docker independiente (proyecto `centinela`, base de datos, Redis e imagen propias — no se comparte estado). El **único recurso compartido es el Caddy del host**, que ya ocupa 80/443 en `network_mode: host`: Centinela no levanta su propio edge, se le añade un site block para `centinelafinanciero.lat` que apunta a `127.0.0.1:8011`. Todos los puertos de Centinela se publican solo en loopback y fuera del rango que NarrativeAlpha ya usa. El detalle operativo —incluida la restricción de `ufw` sobre el tráfico `docker0 → host`— está en [`docs/despliegue.md`](docs/despliegue.md).
+**Co-hosting con NA:** Centinela corre en el **mismo VPS** que NA, como stack Docker independiente (proyecto `centinela`, base de datos, Redis e imagen propias — no se comparte estado). El **único recurso compartido es el Caddy del host**, que ya ocupa 80/443 en `network_mode: host`: Centinela no levanta su propio edge, se le añade un site block para `centinelafinanciero.lat` que apunta a `127.0.0.1:8011`. Todos los puertos de Centinela se publican solo en loopback y fuera del rango que NA ya usa. El detalle operativo —incluida la restricción de `ufw` sobre el tráfico `docker0 → host`— está en [`docs/despliegue.md`](docs/despliegue.md).
 
 ---
 

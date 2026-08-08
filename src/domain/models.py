@@ -1,6 +1,6 @@
 """Modelos pydantic del dominio.
 
-Separación explícita respecto al ORM (patrón NarrativeAlpha): las clases de
+Separación explícita respecto al ORM (patrón NA): las clases de
 `orm.py` describen **cómo se persiste**, éstas describen **con qué trabaja la
 lógica de negocio**. El puente son los `from_orm_*` de este módulo.
 

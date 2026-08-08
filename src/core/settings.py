@@ -166,7 +166,7 @@ class Settings(BaseSettings):
     #: `deepseek-chat` y `deepseek-reasoner` los retiró DeepSeek el 2026-07-24.
     #: Se usa el económico: la extracción es leer una tabla, no razonar. Un
     #: razonador además gasta el presupuesto de tokens pensando y devuelve el
-    #: contenido vacío (visto en NarrativeAlpha).
+    #: contenido vacío (visto en NA).
     llm_modelo_extraccion: str = "deepseek-v4-flash"
     llm_timeout_seconds: float = 90.0
     #: Techo duro de gasto diario (D2). Red contra bucles, no presupuesto: lo
@@ -188,7 +188,7 @@ class Settings(BaseSettings):
     #: Errores duros por host antes de dejarlo para la siguiente corrida.
     fetch_umbral_circuito: int = 2
     #: Backoff temporal ante una cadena degradada por algo transitorio. Fue
-    #: `[300.0, 1200.0]`, heredado de NarrativeAlpha, donde la corrida es
+    #: `[300.0, 1200.0]`, heredado de NA, donde la corrida es
     #: espaciada y esperar veinticinco minutos para no perder el dato de la
     #: semana sale a cuenta. **Aquí la cadencia cambió y el backoff no**: desde
     #: que el job corre cada 4 horas, la siguiente oportunidad está a 4 horas,
