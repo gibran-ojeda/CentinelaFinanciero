@@ -141,12 +141,17 @@ async def test_hey_carries_its_pagares_and_no_sight_account() -> None:
 
 
 async def test_hey_declares_its_name_to_beat_the_business_product() -> None:
-    """Hey publica «Inversión Hey» y «Inversión Hey Negocios» al mismo plazo.
+    """Hey publica tres productos por plazo y sólo uno es el nuestro.
 
     Negocios queda fuera del catálogo a propósito, pero eso no lo quita de la
-    página: la casilla `(PLAZO, 28)` aloja dos productos publicados y sin el
-    nombre el pipeline no puede decidir cuál es el nuestro. La corrida del
-    2026-08-07 devolvió las cuatro tasas de Hey como hueco por esto.
+    página: la casilla `(PLAZO, 28)` aloja varios productos publicados y sin el
+    nombre el pipeline no puede decidir cuál es el nuestro.
+
+    El nombre es «Cliente Hey» y no «Inversión Hey», que es lo que decía hasta
+    la corrida del 2026-08-08: el modelo devuelve «Cliente Hey 28 días», «Hey
+    Pro / Fan Hey 28 días» e «Inversión Hey Negocios 28 días». «Inversión Hey»
+    no encabezaba ninguno de los dos primeros y sí encabeza el tercero, así que
+    se habría quedado justo con el producto de empresas.
     """
     await run_seed()
 
@@ -163,7 +168,7 @@ async def test_hey_declares_its_name_to_beat_the_business_product() -> None:
             .all()
         )
 
-    assert set(nombres) == {"Inversión Hey"}
+    assert set(nombres) == {"Cliente Hey"}
 
 
 async def test_no_institution_is_marked_as_demo() -> None:

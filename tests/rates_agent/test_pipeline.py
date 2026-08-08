@@ -1042,6 +1042,164 @@ async def test_without_a_published_name_the_slot_stays_ambiguous() -> None:
     assert {h["producto"] for h in reporte.huecos_catalogo} == {"Cuenta", "Inversión Flexible"}
 
 
+async def _pagare_a_siete_dias(nombre_publicado: str, slug: str = "finsus-plazo-7") -> None:
+    async with session_scope() as session:
+        finsus = await session.scalar(select(Institucion).where(Institucion.nombre == "Finsus"))
+        assert finsus is not None
+        session.add(
+            Producto(
+                institucion_id=finsus.id,
+                nombre=f"Finsus Pagaré 7 días ({slug})",
+                slug=slug,
+                nombre_publicado=nombre_publicado,
+                tipo=TipoProducto.PLAZO,
+                instrumento=TipoInstrumento.DEPOSITO_SOFIPO,
+                plazo_dias=7,
+                monto_minimo=Decimal("1000"),
+                liquidez=Liquidez.AL_VENCIMIENTO,
+            )
+        )
+
+
+async def test_the_published_name_matches_a_prefix_of_what_the_page_writes() -> None:
+    """El caso Hey, medido el 2026-08-08.
+
+    Hey publica un solo pagaré por plazo cuya tasa depende de la membresía, y
+    el modelo lo devuelve como tres productos con nombre propio desde que la
+    regla 4 le pide nombrar distinto lo que es distinto: el del cliente de a
+    pie, el de Fan/Pro y el de Negocios, que es banca de empresas y queda fuera
+    a propósito.
+
+    Son tres grupos en la casilla `(PLAZO, 7)` con un solo producto sembrado:
+    por igualdad de nombre no encajaba ninguno y los tres salían como hueco.
+    Por prefijo encaja el del cliente de a pie —la tasa que obtiene
+    cualquiera— y los otros dos siguen siendo hueco, que es lo que queremos.
+    """
+    await _solo_una_fuente()
+    await _pagare_a_siete_dias("Cliente Finsus")
+
+    modelo = ModeloFalso(
+        tasas=[
+            {
+                "producto": "Cliente Finsus 7 días",
+                "tipo": "PLAZO",
+                "plazo_dias": 7,
+                "tasa_nominal": "4.00",
+            },
+            {
+                "producto": "Fan Finsus 7 días",
+                "tipo": "PLAZO",
+                "plazo_dias": 7,
+                "tasa_nominal": "7.00",
+            },
+            {
+                "producto": "Finsus Negocios 7 días",
+                "tipo": "PLAZO",
+                "plazo_dias": 7,
+                "tasa_nominal": "7.00",
+            },
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.en_revision == 1
+    assert {h["producto"] for h in reporte.huecos_catalogo} == {
+        "Fan Finsus 7 días",
+        "Finsus Negocios 7 días",
+    }
+
+    async with session_scope() as session:
+        filas = (
+            (await session.execute(select(Producto.slug, Tasa.tasa_nominal).join(Tasa)))
+            .tuples()
+            .all()
+        )
+    assert filas == [("finsus-plazo-7", Decimal("4.00"))]
+
+
+async def test_a_declared_name_never_matches_mid_word() -> None:
+    """El prefijo corta en frontera de palabra: «Cuenta» no es «Cuentahorro».
+
+    Sin el espacio, un nombre declarado corto se quedaría con cualquier
+    producto que empiece por esas letras — justo la atribución silenciosa que
+    `nombre_publicado` existe para impedir. Con dos grupos en la casilla y
+    ninguno que el nombre resuelva, los dos salen como hueco.
+    """
+    await _solo_una_fuente()
+    await _pagare_a_siete_dias("Cuenta")
+
+    modelo = ModeloFalso(
+        tasas=[
+            {
+                "producto": "Cuentahorro",
+                "tipo": "PLAZO",
+                "plazo_dias": 7,
+                "tasa_nominal": "4.00",
+            },
+            {
+                "producto": "Pagaré Premium",
+                "tipo": "PLAZO",
+                "plazo_dias": 7,
+                "tasa_nominal": "7.00",
+            },
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.en_revision == 0
+    assert {h["producto"] for h in reporte.huecos_catalogo} == {"Cuentahorro", "Pagaré Premium"}
+
+
+async def test_the_longest_declared_name_wins() -> None:
+    """Con «Cliente» y «Cliente Plus» sembrados, «cliente plus 7 días» es del segundo."""
+    await _solo_una_fuente()
+    await _pagare_a_siete_dias("Cliente", slug="finsus-plazo-7")
+    await _pagare_a_siete_dias("Cliente Plus", slug="finsus-plazo-7-plus")
+
+    modelo = ModeloFalso(
+        tasas=[
+            {
+                "producto": "Cliente Plus 7 días",
+                "tipo": "PLAZO",
+                "plazo_dias": 7,
+                "tasa_nominal": "8.00",
+            },
+            {
+                "producto": "Cliente 7 días",
+                "tipo": "PLAZO",
+                "plazo_dias": 7,
+                "tasa_nominal": "4.00",
+            },
+        ]
+    )
+
+    reporte = await pipeline.correr(
+        fetcher=_fetcher(TransporteFalso("httpx", PAGINA)), cliente=ClienteLLM(modelo)
+    )
+
+    assert reporte.huecos_catalogo == []
+    async with session_scope() as session:
+        filas = (
+            (
+                await session.execute(
+                    select(Producto.slug, Tasa.tasa_nominal).join(Tasa).order_by(Producto.slug)
+                )
+            )
+            .tuples()
+            .all()
+        )
+    assert filas == [
+        ("finsus-plazo-7", Decimal("4.00")),
+        ("finsus-plazo-7-plus", Decimal("8.00")),
+    ]
+
+
 async def test_the_tiers_of_one_product_still_become_a_ladder() -> None:
     """Mismo nombre, montos distintos: eso sí es una escalera, y no se rompe."""
     await _solo_una_fuente()

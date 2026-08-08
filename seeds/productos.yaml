@@ -459,19 +459,27 @@ productos:
   # calculamos son los de una persona física.
   #
   # Pero dejarlo fuera no basta: Hey lo publica en la misma página y en el
-  # mismo plazo, así que su casilla `(PLAZO, 7)` y `(PLAZO, 28)` aloja dos
+  # mismo plazo, así que su casilla `(PLAZO, 7)` y `(PLAZO, 28)` aloja varios
   # productos publicados y el pipeline no puede decidir cuál es el nuestro.
-  # La corrida del 2026-08-07 lo demostró: las cuatro tasas de Hey salieron
-  # como hueco con ese motivo exacto. Por eso llevan `nombre_publicado`.
+  # Por eso llevan `nombre_publicado`.
   #
-  # Se había decidido no ponerlo porque Hey escribía su nombre distinto en cada
-  # corrida —«Inversión Hey a 7 días», «Cliente Hey 7 días»—, pero eso era el
-  # prompt viejo emitiendo una entrada por segmento. Con la regla 5 colapsando
-  # las variantes de membresía, el nombre que llega es estable: «Inversión Hey».
+  # El nombre es «Cliente Hey» y no «Inversión Hey», medido en la corrida del
+  # 2026-08-08: el modelo devuelve seis productos con nombre propio —«Cliente
+  # Hey 7 días», «Hey Pro / Fan Hey 7 días», «Inversión Hey Negocios 7 días» y
+  # los tres a 28— desde que la regla 4 le pide nombrar distinto lo que es
+  # distinto. Con «Inversión Hey» no encajaba ninguno y las seis salían como
+  # hueco; peor aún, ese nombre encabeza «Inversión Hey Negocios» y se habría
+  # quedado justo con el producto que queremos fuera.
+  #
+  # «Cliente Hey» encabeza sólo la tasa que obtiene cualquiera —el 4.00 % a los
+  # dos plazos— y no encabeza ni la de Fan/Pro ni la de Negocios, que siguen
+  # saliendo como hueco a propósito. El plazo no va en el nombre: lo distingue
+  # la casilla, y repetirlo aquí ataría la lectura a que el modelo escriba
+  # «7 días» con acento.
   - institucion: Hey Banco
     nombre: Hey Inversión 7 días
     slug: hey-plazo-7
-    nombre_publicado: Inversión Hey
+    nombre_publicado: Cliente Hey
     tipo: PLAZO
     instrumento: DEPOSITO_BANCARIO
     plazo_dias: 7
@@ -481,7 +489,7 @@ productos:
   - institucion: Hey Banco
     nombre: Hey Inversión 28 días
     slug: hey-plazo-28
-    nombre_publicado: Inversión Hey
+    nombre_publicado: Cliente Hey
     tipo: PLAZO
     instrumento: DEPOSITO_BANCARIO
     plazo_dias: 28
