@@ -120,14 +120,7 @@ const ESTILOS = `
 }
 .paso-fila::marker { color: var(--texto-tenue-2); font-size: 11px; }
 .paso-quien { font-weight: 600; color: var(--texto-fuerte); }
-.chip-tramo {
-  padding: 1px 8px;
-  border-radius: var(--radio-pastilla);
-  font-size: 11px;
-  color: var(--marca-200);
-  background: rgba(167, 224, 219, 0.1);
-  white-space: nowrap;
-}
+/* .chip-tramo la define la hoja del Combinador, que siempre está montada. */
 .paso-ten { font-size: 11px; }
 .paso-corte {
   padding: 1px 8px;
