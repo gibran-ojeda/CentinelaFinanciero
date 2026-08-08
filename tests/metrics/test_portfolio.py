@@ -15,7 +15,7 @@ from decimal import Decimal
 
 import pytest
 
-from domain.enums import TipoInstrumento, TipoSeguro
+from domain.enums import RazonCorte, RazonDescarte, TipoInstrumento, TipoSeguro
 from domain.models import ParametrosFiscales
 from metrics.coverage import LIMITE_IPAB_UDIS, LIMITE_PROSOFIPO_UDIS
 from metrics.portfolio import (
@@ -729,6 +729,190 @@ def test_a_rising_ladder_is_excluded_from_the_optimiser(
 
     assert creciente.producto_id not in {c.producto_id for c in reparto.candidatos}
     assert reparto.montos == [Decimal("100000.00")]
+
+
+# ─── Pasos y descartes: el porqué del reparto ────────────────
+
+
+def _razones(reparto) -> dict[int, RazonDescarte]:  # type: ignore[no-untyped-def]
+    return {d.producto_id: d.razon for d in reparto.descartes}
+
+
+def test_the_steps_add_up_to_the_allocations(fiscal_2026: ParametrosFiscales) -> None:
+    """La suma de los pasos de cada producto es su asignación, al centavo."""
+    monto = Decimal("5000000")
+    reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026, monto_total=monto)
+
+    por_producto: dict[int, Decimal] = {}
+    for paso in reparto.pasos:
+        por_producto[paso.producto_id] = (
+            por_producto.get(paso.producto_id, Decimal("0")) + paso.monto
+        )
+    assert por_producto == {c.producto_id: m for c, m in reparto.asignaciones}
+    assert sum(p.monto for p in reparto.pasos) == monto - reparto.monto_no_asignado
+
+
+def test_first_appearance_in_steps_follows_the_opening_order(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    """Los pasos y las asignaciones cuentan el mismo orden de apertura."""
+    reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026, monto_total=Decimal("5000000"))
+
+    vistos: list[int] = []
+    for paso in reparto.pasos:
+        if paso.producto_id not in vistos:
+            vistos.append(paso.producto_id)
+    assert vistos == [c.producto_id for c in reparto.candidatos]
+
+
+def test_a_funded_product_never_appears_in_the_discards(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    """El que llenó su tope cuenta su historia en el corte, no en descartes."""
+    reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026, monto_total=Decimal("5000000"))
+
+    fondeados = {c.producto_id for c in reparto.candidatos}
+    assert fondeados & {d.producto_id for d in reparto.descartes} == set()
+    ultimo_sofipo = [p for p in reparto.pasos if p.producto_id == SOFIPO_A.producto_id][-1]
+    assert ultimo_sofipo.razon_corte is RazonCorte.LIMITE_SEGURO
+
+
+def test_determinism_extends_to_steps_and_discards(fiscal_2026: ParametrosFiscales) -> None:
+    uno = _optimizar([CETES, BANCO, SOFIPO_A, RIESGOSA], fiscal_2026)
+    otro = _optimizar([CETES, BANCO, SOFIPO_A, RIESGOSA], fiscal_2026)
+
+    assert uno.pasos == otro.pasos
+    assert uno.descartes == otro.descartes
+
+
+def test_crossing_products_reports_a_filled_tier_then_exhaustion(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    """El caso Openbank: el tramo alto se llena y el final agota el monto."""
+    reparto = _optimizar([ESCALONADO, PLANO_MEDIO], fiscal_2026)
+
+    assert [p.razon_corte for p in reparto.pasos] == [
+        RazonCorte.TRAMO_LLENO,
+        RazonCorte.MONTO_AGOTADO,
+    ]
+    assert reparto.pasos[0].producto_id == ESCALONADO.producto_id
+    assert reparto.pasos[0].monto == Decimal("30000.00")
+    assert reparto.pasos[0].tramo.tasa_nominal == Decimal("13.00")
+    assert reparto.pasos[0].indice_tramo == 0
+
+
+def test_a_minimum_entry_is_traced_with_its_blended_ten(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    """La entrada con mínimo cruza tramos: COMPRA_MINIMO y la TEN ponderada.
+
+    Los números son los de `test_a_minimum_above_the_first_ceiling_buys_the
+    _lower_tier_too`: entrar cuesta $50,000 al 10.32 % nominal, cuya TEN es
+    9.42 % — eso, y no el 13 % del tramo alto, es lo que el paso enseña.
+    """
+    escalonado_con_minimo = Candidato(
+        producto_id=30,
+        institucion_id=3000,
+        tipo_seguro=TipoSeguro.IPAB,
+        instrumento=TipoInstrumento.DEPOSITO_BANCARIO,
+        tasa_nominal=Decimal("13.00"),
+        plazo_dias=None,
+        monto_minimo=Decimal("50000"),
+        tramos=ESCALERA_OPENBANK,
+    )
+    plano_diez = Candidato(
+        producto_id=31,
+        institucion_id=3100,
+        tipo_seguro=TipoSeguro.IPAB,
+        instrumento=TipoInstrumento.DEPOSITO_BANCARIO,
+        tasa_nominal=Decimal("10.00"),
+        plazo_dias=None,
+        monto_minimo=Decimal("0"),
+    )
+    reparto = _optimizar(
+        [escalonado_con_minimo, plano_diez], fiscal_2026, monto_total=Decimal("200000")
+    )
+
+    entrada = reparto.pasos[0]
+    assert entrada.producto_id == escalonado_con_minimo.producto_id
+    assert entrada.razon_corte is RazonCorte.COMPRA_MINIMO
+    assert entrada.compra_minimo is True
+    assert entrada.monto == Decimal("50000.00")
+    assert entrada.ten_marginal == Decimal("9.4200")
+
+
+def test_without_the_insurance_toggle_no_step_says_insurance(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    """Sin `respetar_seguro`, el tope ES el restante: el empate lo resuelve
+    la cadena de prioridad y jamás se reporta «límite de seguro»."""
+    reparto = _optimizar(
+        [IFPE, CETES, SOFIPO_A],
+        fiscal_2026,
+        monto_total=Decimal("5000000"),
+        respetar_seguro=False,
+    )
+
+    assert reparto.pasos
+    assert all(p.razon_corte is not RazonCorte.LIMITE_SEGURO for p in reparto.pasos)
+
+
+def test_each_discard_reason_names_what_actually_happened(
+    fiscal_2026: ParametrosFiscales,
+) -> None:
+    """Las razones de descarte, montadas sobre los escenarios ya probados."""
+    con_roja = _optimizar([RIESGOSA, CETES], fiscal_2026, excluir_rojas=True)
+    assert _razones(con_roja)[RIESGOSA.producto_id] is RazonDescarte.BANDERA_ROJA
+
+    corto = _optimizar([CETES, BANCO], fiscal_2026, horizonte_dias=91)
+    assert _razones(corto)[CETES.producto_id] is RazonDescarte.PLAZO_MAYOR_AL_HORIZONTE
+
+    chico = _optimizar(
+        [RIESGOSA, BANCO], fiscal_2026, monto_total=Decimal("5000"), excluir_rojas=False
+    )
+    assert _razones(chico)[RIESGOSA.producto_id] is RazonDescarte.MINIMO_SUPERA_MONTO
+
+    protegido = _optimizar([IFPE, CETES], fiscal_2026, respetar_seguro=True)
+    assert _razones(protegido)[IFPE.producto_id] is RazonDescarte.SIN_COBERTURA
+
+    creciente = Candidato(
+        producto_id=32,
+        institucion_id=3200,
+        tipo_seguro=TipoSeguro.IPAB,
+        instrumento=TipoInstrumento.DEPOSITO_BANCARIO,
+        tasa_nominal=Decimal("5.00"),
+        plazo_dias=None,
+        monto_minimo=Decimal("0"),
+        tramos=(
+            Tramo(desde=Decimal("0"), hasta=Decimal("30000"), tasa_nominal=Decimal("5.00")),
+            Tramo(desde=Decimal("30000"), hasta=None, tasa_nominal=Decimal("9.00")),
+        ),
+    )
+    subiendo = _optimizar([creciente, CETES], fiscal_2026)
+    assert _razones(subiendo)[creciente.producto_id] is RazonDescarte.ESCALERA_CRECIENTE
+
+    sofipo_llena = Candidato(
+        producto_id=33,
+        institucion_id=3300,
+        tipo_seguro=TipoSeguro.PROSOFIPO,
+        instrumento=TipoInstrumento.DEPOSITO_SOFIPO,
+        tasa_nominal=Decimal("12.00"),
+        plazo_dias=None,
+        monto_minimo=Decimal("0"),
+    )
+    banco_exigente = Candidato(
+        producto_id=34,
+        institucion_id=3400,
+        tipo_seguro=TipoSeguro.IPAB,
+        instrumento=TipoInstrumento.DEPOSITO_BANCARIO,
+        tasa_nominal=Decimal("11.00"),
+        plazo_dias=None,
+        monto_minimo=Decimal("80000"),
+    )
+    apretado = _optimizar(
+        [sofipo_llena, banco_exigente], fiscal_2026, monto_total=Decimal("300000")
+    )
+    assert _razones(apretado)[banco_exigente.producto_id] is RazonDescarte.MINIMO_INALCANZABLE
 
 
 def test_evaluar_reparto_blends_tiered_candidates(fiscal_2026: ParametrosFiscales) -> None:

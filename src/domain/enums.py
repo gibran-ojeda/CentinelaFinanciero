@@ -241,6 +241,45 @@ class EstadoJob(StrEnum):
     """El job no operó: kill-switch apagado o nada que hacer."""
 
 
+class RazonCorte(StrEnum):
+    """Qué detuvo un paso del optimizador (§10: heurística explicable).
+
+    Cuando varios topes coinciden al centavo se reporta el de consecuencia
+    más fuerte: quedarse sin monto termina el reparto entero, el límite de
+    seguro cierra el emisor, la compra del mínimo explica un sobrepaso del
+    tramo, y llenar el tramo es la continuación normal. La cadena exacta la
+    aplica `metrics.portfolio.optimizar`.
+    """
+
+    MONTO_AGOTADO = "MONTO_AGOTADO"
+    LIMITE_SEGURO = "LIMITE_SEGURO"
+    COMPRA_MINIMO = "COMPRA_MINIMO"
+    TRAMO_LLENO = "TRAMO_LLENO"
+
+
+class RazonDescarte(StrEnum):
+    """Por qué un producto quedó fuera del reparto automático.
+
+    Lista cerrada: los saltados por un hermano del mismo emisor no son
+    descartes (su institución sí está en el reparto), y los elegibles a los
+    que simplemente no les tocó turno antes de agotarse el monto tampoco.
+    """
+
+    PLAZO_MAYOR_AL_HORIZONTE = "PLAZO_MAYOR_AL_HORIZONTE"
+    MINIMO_SUPERA_MONTO = "MINIMO_SUPERA_MONTO"
+    BANDERA_ROJA = "BANDERA_ROJA"
+    ESCALERA_CRECIENTE = "ESCALERA_CRECIENTE"
+    SIN_COBERTURA = "SIN_COBERTURA"
+    """Emisor sin fondo de protección con los límites de seguro activos."""
+
+    EMISOR_LLENO = "EMISOR_LLENO"
+    """Hoy sólo alcanzable por un producto ya fondeado —que no se reporta—;
+    se conserva por si la regla de un producto por institución cambia."""
+
+    MINIMO_INALCANZABLE = "MINIMO_INALCANZABLE"
+    """El mínimo de contratación ya no cabía en lo restante o en el tope."""
+
+
 #: Cobertura de seguro por categoría regulatoria (§4.6). Vive aquí y no en la
 #: tabla de instituciones porque es una consecuencia de la figura, no un dato
 #: editable por institución.
