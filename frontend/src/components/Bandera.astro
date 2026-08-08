@@ -31,7 +31,11 @@ const ETIQUETAS: Record<string, string> = {
   COBERTURA_CARTERA: 'Cobertura de cartera',
   APALANCAMIENTO: 'Apalancamiento',
   NO_RECOMENDABLE: 'No recomendable',
-  RED_FLAG_TASA: 'Tasa sobre mercado',
+  // La compuesta de §5.2: tasa muy por encima de la mediana Y morosidad en
+  // alerta. La etiqueta cuenta las dos condiciones — «Tasa sobre mercado» a
+  // secas hacía parecer incoherente que una institución sana con tasa alta
+  // no la llevara, cuando eso es exactamente la regla funcionando.
+  RED_FLAG_TASA: 'Tasa alta + morosidad',
   GAT_INCONSISTENTE: 'GAT inconsistente',
   SIN_COBERTURA: 'Sin seguro de depósito',
   TASAS_AMBIGUAS: 'Tasas ambiguas',
