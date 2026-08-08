@@ -67,6 +67,24 @@ export function tramoEtiqueta(hasta: string | null): string {
   return hasta === null ? 'en adelante' : `hasta ${montoCorto(hasta)}`;
 }
 
+/**
+ * Un tramo como texto de chip: «15.00 % hasta $25 mil», «7.00 % $25 mil–$1 M»,
+ * «6.30 % en adelante». El tramo base y el abierto se explican con
+ * `tramoEtiqueta`; el intermedio acotado necesita sus dos fronteras — «hasta
+ * $1 M» a secas mentiría sobre dónde empieza.
+ */
+export function etiquetaChipTramo(tramo: {
+  desde: string;
+  hasta: string | null;
+  tasa_nominal: string;
+}): string {
+  const tasa = porcentaje(tramo.tasa_nominal);
+  if (Number(tramo.desde) === 0 || tramo.hasta === null) {
+    return `${tasa} ${tramoEtiqueta(tramo.hasta)}`;
+  }
+  return `${tasa} ${montoCorto(tramo.desde)}–${montoCorto(tramo.hasta)}`;
+}
+
 export function miles(valor: string | number | null | undefined): string {
   if (valor === null || valor === undefined || valor === '') return '';
   return MILES.format(Number(valor));
@@ -164,4 +182,32 @@ export const COLORES_SERIE = [
 
 export function colorSerie(indice: number): string {
   return COLORES_SERIE[indice % COLORES_SERIE.length];
+}
+
+/**
+ * El ciclo de color de los chips de condiciones.
+ *
+ * Cuatro tonos fríos de la paleta de series, en el orden que maximiza la
+ * separación entre vecinos: el validador de paleta midió ΔE 8.0 a visión
+ * normal entre `--serie-1` y `--serie-3` juntas —por debajo del piso de 15—
+ * y este orden sube el peor vecindario a 11.8. Los tonos de serie no
+ * alcanzan el piso de un chart categórico se ordenen como se ordenen; los
+ * chips lo toleran porque su identidad viaja en el texto, no en el tinte.
+ * La barra de escalera, que sí es un chart, usa su rampa ordinal propia
+ * (`--rampa-saldo-*`).
+ *
+ * Fuera quedan `--serie-8` (idéntica a `--aviso`: un chip de condición se
+ * leería como advertencia), `--serie-2` (idéntica a `--positivo`: se leería
+ * como «verificada»), `--serie-5` (casi blanca, el tinte de fondo
+ * desaparece) y `--serie-4` (demasiado oscura como color de texto a 11 px).
+ */
+export const COLORES_CHIP = [
+  'var(--serie-1)',
+  'var(--serie-7)',
+  'var(--serie-6)',
+  'var(--serie-3)',
+];
+
+export function colorChip(indice: number): string {
+  return COLORES_CHIP[indice % COLORES_CHIP.length];
 }

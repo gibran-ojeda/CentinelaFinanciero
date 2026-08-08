@@ -8,19 +8,14 @@
  * hasta aquí quiere esa historia.
  */
 import Avatar from '~/components/Avatar.astro';
+import BarraEscalera from '~/components/BarraEscalera.astro';
+import ChipsCondiciones from '~/components/ChipsCondiciones.astro';
+import ComparativaProductos from '~/components/ComparativaProductos.astro';
+import FechaDato from '~/components/FechaDato.astro';
 import Icono from '~/components/Icono.astro';
-import MarcaDato from '~/components/MarcaDato.astro';
 import Base from '~/layouts/Base.astro';
 import { ApiError, api } from '~/lib/api';
-import {
-  dinero,
-  dineroCompacto,
-  fecha,
-  periodo,
-  plazoLargo,
-  porcentaje,
-  tramoEtiqueta,
-} from '~/lib/formato';
+import { dinero, dineroCompacto, periodo, plazoLargo, porcentaje } from '~/lib/formato';
 import type { EstadoIndicador, IndicadorEvaluado } from '~/lib/tipos';
 
 const { slug } = Astro.params;
@@ -244,55 +239,55 @@ const jsonLd = {
     </div>
 
     <h2 class="etiqueta seccion">Productos y tasas</h2>
+    {conTasa.length >= 2 && <ComparativaProductos productos={conTasa} />}
     <div class="productos">
       {
         conTasa.map((producto) => (
           <div class="producto">
-            <span class="producto-nombre">{producto.nombre}</span>
-            <span class="tenue-2 producto-plazo">
-              {plazoLargo(producto.plazo_dias, producto.tipo)}
-            </span>
-            <span class="tenue">
-              Nominal <strong class="claro num">{porcentaje(producto.tasa_nominal)}</strong>
-            </span>
-            <span class="ten">
-              TEN <strong class="num">{porcentaje(producto.ten)}</strong>
-            </span>
-            <span class="tenue">
-              GAT <strong class="claro num">{porcentaje(producto.gat?.nominal)}</strong>
-              {producto.gat?.es_calculada && <span class="tenue-2 equiv">(equiv.)</span>}
-            </span>
-            <span class="tenue-2 producto-fuente">
-              {/*
-                El enlace a la página de la que se leyó la tasa. La API lo lleva
-                desde la fase 4 y aquí sólo se pintaba el nombre de la fuente,
-                que deja «verifícalo tú mismo» en una frase sin destino.
-                `nofollow` porque no es un respaldo editorial a esa página.
-              */}
-              {producto.procedencia?.fuente_url ? (
-                <a
-                  href={producto.procedencia.fuente_url}
-                  target="_blank"
-                  rel="nofollow noopener"
-                  title="Ver esta tasa en la fuente"
-                >
-                  {producto.procedencia.fuente}
-                </a>
-              ) : (
-                producto.procedencia?.fuente
-              )}
-              {' · '}
-              {fecha(producto.procedencia?.fecha_dato)}
-              <MarcaDato verificada={producto.procedencia?.verificada ?? true} />
-            </span>
-            {producto.escalonada && (
-              <span class="tenue-2 producto-escalera">
-                Escalonada por saldo:{' '}
-                {producto.tramos
-                  .map((tramo) => `${porcentaje(tramo.tasa_nominal)} ${tramoEtiqueta(tramo.hasta)}`)
-                  .join(' · ')}
+            <div class="producto-linea">
+              <span class="producto-nombre">{producto.nombre}</span>
+              <span class="tenue-2 producto-plazo">
+                {plazoLargo(producto.plazo_dias, producto.tipo)}
               </span>
+              {producto.procedencia && (
+                <span class="producto-fuente">
+                  <FechaDato procedencia={producto.procedencia} />
+                </span>
+              )}
+            </div>
+            {/* La revelación regulada con sus nombres de verdad: GAT Nominal y
+                GAT Real (CONDUSEF). La TEN vive en la calculadora, que es donde
+                se explican las ganancias netas. */}
+            <div class="producto-metricas">
+              <span class="tenue">
+                Nominal <strong class="claro num">{porcentaje(producto.tasa_nominal)}</strong>
+              </span>
+              {producto.gat && (
+                <span class="tenue">
+                  GAT Nominal <strong class="claro num">{porcentaje(producto.gat.nominal)}</strong>
+                </span>
+              )}
+              {producto.gat && (
+                <span class="tenue">
+                  GAT Real <strong class="claro num">{porcentaje(producto.gat.real)}</strong>
+                  {producto.gat.es_calculada && (
+                    <span
+                      class="tenue-2 equiv"
+                      title="GAT estimada por Centinela para poder comparar; la institución no la publica"
+                    >
+                      (equiv.)
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+            {(producto.escalonada || producto.condiciones) && (
+              <ChipsCondiciones
+                tramos={producto.escalonada ? producto.tramos : []}
+                condiciones={producto.condiciones}
+              />
             )}
+            {producto.escalonada && <BarraEscalera tramos={producto.tramos} />}
           </div>
         ))
       }
@@ -511,9 +506,8 @@ const jsonLd = {
   }
   .producto {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 8px 18px;
+    flex-direction: column;
+    gap: 8px;
     padding: 12px 16px;
     border-bottom: 1px solid var(--linea-suave);
     font-size: 13px;
@@ -521,45 +515,35 @@ const jsonLd = {
   .producto:last-child {
     border-bottom: none;
   }
+  .producto-linea {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 14px;
+  }
   .producto-nombre {
-    min-width: 150px;
     font-family: var(--fuente-titulo);
     font-weight: 600;
     font-size: 15px;
     color: var(--texto-fuerte);
   }
   .producto-plazo {
-    min-width: 70px;
     font-size: 12px;
+  }
+  .producto-metricas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
   }
   .claro {
     color: var(--texto-fuerte);
-  }
-  .ten {
-    color: var(--positivo);
   }
   .equiv {
     font-size: 10px;
   }
   .producto-fuente {
-    display: flex;
-    align-items: center;
-    gap: 6px;
     margin-left: auto;
     font-size: 11px;
-  }
-  .producto-escalera {
-    flex-basis: 100%;
-    font-size: 11px;
-  }
-  .producto-fuente a {
-    color: inherit;
-    text-decoration: underline dotted;
-    text-underline-offset: 2px;
-  }
-  .producto-fuente a:hover,
-  .producto-fuente a:focus-visible {
-    color: var(--marca-200);
   }
   .sin-productos {
     margin: 0;

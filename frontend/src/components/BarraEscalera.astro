@@ -1,0 +1,108 @@
+---
+/**
+ * La escalera de saldo como barra segmentada esquemática.
+ *
+ * Ancho uniforme por tramo, no proporcional: el último tramo puede ser
+ * abierto (`hasta: null`) y ningún ancho proporcional —lineal, raíz o
+ * logarítmico— define un segmento sin techo; el 0 del primer piso ni
+ * siquiera admite logaritmo. Cada frontera lleva su cifra real, como un
+ * mapa de metro: la geometría es esquema, los números son datos.
+ *
+ * Los segmentos van sobre una rampa ordinal de un solo matiz
+ * (`--rampa-saldo-*`), no sobre colores categóricos: los tramos son rangos
+ * ordenados de UN producto —más saldo, más profundo— y el validador de
+ * paleta rechazó los tonos de serie como categorías adyacentes.
+ *
+ * `aria-hidden`: los chips de condiciones, justo encima, ya dicen lo mismo
+ * en texto.
+ */
+import { montoCorto, porcentaje } from '~/lib/formato';
+import type { TramoTasa } from '~/lib/tipos';
+
+interface Props {
+  tramos: TramoTasa[];
+}
+const { tramos } = Astro.props;
+
+const PASOS = 3;
+const paso = (indice: number): number => Math.min(indice + 1, PASOS);
+
+const cortes = [
+  '$0',
+  ...tramos.map((tramo) => (tramo.hasta === null ? 'en adelante' : montoCorto(tramo.hasta))),
+];
+---
+
+<div class="escalera" aria-hidden="true">
+  <div class="segmentos">
+    {
+      tramos.map((tramo, indice) => (
+        <div class="segmento" style={`background: var(--rampa-saldo-${paso(indice)})`}>
+          {porcentaje(tramo.tasa_nominal)}
+        </div>
+      ))
+    }
+  </div>
+  <div class="cortes">
+    {
+      cortes.map((corte, k) => (
+        <span
+          class:list={['corte', k === 0 && 'inicio', k === tramos.length && 'fin']}
+          style={`--pos: ${((k / tramos.length) * 100).toFixed(2)}%`}
+        >
+          {corte}
+        </span>
+      ))
+    }
+  </div>
+</div>
+
+<style>
+  .escalera {
+    max-width: 520px;
+  }
+  /* El hueco de 2px entre segmentos es la separación que el color no puede
+     garantizar por sí solo: deja ver la superficie, como entre barras. */
+  .segmentos {
+    display: flex;
+    gap: 2px;
+  }
+  .segmento {
+    flex: 1;
+    padding: 6px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--fondo);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .segmento:first-child {
+    border-radius: 6px 0 0 6px;
+  }
+  .segmento:last-child {
+    border-radius: 0 6px 6px 0;
+  }
+  .cortes {
+    position: relative;
+    height: 15px;
+    margin-top: 3px;
+    font-size: 10px;
+    color: var(--texto-tenue-2);
+  }
+  .corte {
+    position: absolute;
+    top: 0;
+    left: var(--pos);
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+  .corte.inicio {
+    transform: none;
+  }
+  .corte.fin {
+    right: 0;
+    left: auto;
+    transform: none;
+  }
+</style>
