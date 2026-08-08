@@ -490,6 +490,16 @@ def _nombre(producto: str) -> str:
     return " ".join(producto.split()).casefold()
 
 
+def _encabeza(declarado: str, leido: str) -> bool:
+    """El nombre declarado en el catálogo encabeza al que trajo la página.
+
+    Los dos vienen ya normalizados por `_nombre`, así que comparar en crudo
+    basta. El espacio del prefijo no es adorno: sin él «Cuenta» se quedaría con
+    «Cuentahorro».
+    """
+    return leido == declarado or leido.startswith(f"{declarado} ")
+
+
 @dataclass(frozen=True, slots=True)
 class _Catalogo:
     """Los productos de una institución, con las dos formas de encontrarlos.
@@ -515,11 +525,40 @@ class _Catalogo:
         dice cuál de los publicados es, y dárselo a los dos es exactamente lo
         que fabricó la escalera de Klar.
         """
-        if (por_nombre := self.por_nombre.get(clave)) is not None:
+        if (por_nombre := self._por_nombre(clave)) is not None:
             return por_nombre
         if grupos_en_la_casilla > 1:
             return None
         return self.por_casilla.get(clave[:2])
+
+    def _por_nombre(self, clave: _ClaveGrupo) -> Producto | None:
+        """El producto cuyo `nombre_publicado` **encabeza** el nombre leído.
+
+        Por prefijo y no por igualdad porque la página cuelga el plazo del
+        nombre. Hey publica el mismo pagaré como «Cliente Hey 7 días» y
+        «Cliente Hey 28 días», y el catálogo ya distingue esos dos por la
+        casilla: pedirle además un `nombre_publicado` por plazo sería repetir
+        en el nombre lo que el plazo ya dice, y bastaría con que el modelo
+        escribiera «7 dias» sin acento para perderlo todo.
+
+        El corte es en frontera de palabra —el leído es el declarado, o el
+        declarado seguido de un espacio— para que «Cuenta» no se quede con
+        «Cuentahorro», que sería otro producto.
+
+        Gana el declarado más largo: con «Cliente Hey» y «Cliente Hey Plus» en
+        el catálogo, «cliente hey plus 7 días» es del segundo. No hace falta
+        desempatar: dos nombres declarados distintos no pueden encabezar el
+        mismo leído con la misma longitud, serían el mismo nombre.
+        """
+        casilla, leido = clave[:2], clave[2]
+        candidatos = [
+            (clave_catalogo[2], producto)
+            for clave_catalogo, producto in self.por_nombre.items()
+            if clave_catalogo[:2] == casilla and _encabeza(clave_catalogo[2], leido)
+        ]
+        if not candidatos:
+            return None
+        return max(candidatos, key=lambda par: len(par[0]))[1]
 
     def todos(self) -> list[Producto]:
         vistos = {p.id: p for p in self.por_casilla.values()}
