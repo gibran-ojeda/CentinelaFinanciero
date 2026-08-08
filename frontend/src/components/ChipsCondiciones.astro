@@ -26,17 +26,17 @@ const { tramos = [], condiciones = null, max, hrefMas = null } = Astro.props;
 
 interface Chip {
   texto: string;
-  /** El texto completo cuando el chip lo trunca; los de tramo nunca. */
-  titulo: string | null;
+  /** Los de tramo son cortos y no parten; la letra pequeña fluye en líneas. */
+  clase: 'tramo' | 'texto';
 }
 
 const chips: Chip[] = [
-  ...tramos.map((tramo) => ({ texto: etiquetaChipTramo(tramo), titulo: null })),
+  ...tramos.map((tramo) => ({ texto: etiquetaChipTramo(tramo), clase: 'tramo' as const })),
   ...(condiciones ?? '')
     .split(' · ')
     .map((parte) => parte.trim())
     .filter(Boolean)
-    .map((parte) => ({ texto: parte, titulo: parte })),
+    .map((parte) => ({ texto: parte, clase: 'texto' as const })),
 ];
 
 const visibles = max === undefined ? chips : chips.slice(0, max);
@@ -48,7 +48,7 @@ const ocultos = chips.length - visibles.length;
   chips.length > 0 && (
     <span class="chips">
       {visibles.map((chip, indice) => (
-        <span class="chip" style={`--chip: ${colorChip(indice)}`} title={chip.titulo}>
+        <span class:list={['chip', chip.clase]} style={`--chip: ${colorChip(indice)}`}>
           {chip.texto}
         </span>
       ))}
@@ -81,8 +81,15 @@ const ocultos = chips.length - visibles.length;
     color: var(--chip);
     background: color-mix(in srgb, var(--chip) 13%, transparent);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  }
+  /* La letra pequeña no se trunca: se leyó de la página para poderse leer
+     aquí. Fluye en líneas dentro del chip, con esquinas más contenidas para
+     que un párrafo no parezca una píldora estirada. */
+  .texto {
+    white-space: normal;
+    border-radius: 10px;
+    line-height: 1.45;
+    text-wrap: pretty;
   }
   .mas {
     color: var(--texto-tenue);
