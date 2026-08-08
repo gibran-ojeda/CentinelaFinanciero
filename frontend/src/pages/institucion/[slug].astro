@@ -10,6 +10,7 @@
 import Avatar from '~/components/Avatar.astro';
 import BarraEscalera from '~/components/BarraEscalera.astro';
 import ChipsCondiciones from '~/components/ChipsCondiciones.astro';
+import ComparativaProductos from '~/components/ComparativaProductos.astro';
 import FechaDato from '~/components/FechaDato.astro';
 import Icono from '~/components/Icono.astro';
 import Base from '~/layouts/Base.astro';
@@ -238,6 +239,7 @@ const jsonLd = {
     </div>
 
     <h2 class="etiqueta seccion">Productos y tasas</h2>
+    {conTasa.length >= 2 && <ComparativaProductos productos={conTasa} />}
     <div class="productos">
       {
         conTasa.map((producto) => (

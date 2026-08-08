@@ -1,0 +1,144 @@
+---
+/**
+ * Los productos de la casa, comparados entre sí de un vistazo.
+ *
+ * Una barra por producto, largo proporcional a la tasa nominal titular con
+ * base en 0. Es UNA serie —la misma medida en todos— así que un solo tono:
+ * variar el color por barra diría que son cosas distintas cuando son la
+ * misma cosa medida siete veces.
+ *
+ * Dos grupos: «A la vista» por tasa descendente, y «A plazo» por plazo
+ * ascendente — la curva de plazos, que es el eje natural de un pagaré. En
+ * Klar eso rinde: Cuenta 3 %, Flexible 6 %, y las Fijas subiendo de 6.10 %
+ * a 6.50 % conforme el plazo crece.
+ *
+ * El nombre y la cifra son texto real (lo que lee un lector de pantalla);
+ * la barra es geometría y va `aria-hidden`. En los escalonados la cifra
+ * lleva su marca de alcance —«hasta $25 mil»— igual que en la tabla: la
+ * titular sin su tope prometería de más.
+ */
+import { montoCorto, plazoCorto, porcentaje } from '~/lib/formato';
+import type { ProductoDetalle } from '~/lib/tipos';
+
+interface Props {
+  productos: ProductoDetalle[];
+}
+const { productos } = Astro.props;
+
+const conTasa = productos.filter((p) => p.tasa_nominal !== null);
+const maxima = Math.max(...conTasa.map((p) => Number(p.tasa_nominal)));
+
+const vista = conTasa
+  .filter((p) => p.tipo === 'VISTA')
+  .sort((a, b) => Number(b.tasa_nominal) - Number(a.tasa_nominal));
+const plazo = conTasa
+  .filter((p) => p.tipo === 'PLAZO')
+  .sort((a, b) => (a.plazo_dias ?? 0) - (b.plazo_dias ?? 0));
+
+const grupos: [string, ProductoDetalle[]][] = [
+  ['A la vista', vista],
+  ['A plazo', plazo],
+].filter((par): par is [string, ProductoDetalle[]] => (par[1] as ProductoDetalle[]).length > 0);
+
+/** Con base en 0 y un mínimo visible: una tasa diminuta sigue siendo una barra. */
+function ancho(producto: ProductoDetalle): string {
+  return `${Math.max(2, (Number(producto.tasa_nominal) / maxima) * 100).toFixed(1)}%`;
+}
+
+function marcaTramo(producto: ProductoDetalle): string | null {
+  if (!producto.escalonada) return null;
+  const primero = producto.tramos[0];
+  return primero?.hasta ? `hasta ${montoCorto(primero.hasta)}` : null;
+}
+---
+
+{
+  conTasa.length >= 2 && (
+    <div class="comparativa">
+      <p class="etiqueta titulo">Tasa nominal por producto</p>
+      {grupos.map(([nombre, filas]) => (
+        <div class="grupo">
+          {grupos.length > 1 && <p class="tenue-2 grupo-nombre">{nombre}</p>}
+          {filas.map((producto) => (
+            <div class="fila-barra">
+              <span class="nombre tenue" title={producto.nombre}>
+                {producto.nombre}
+                <span class="tenue-2 plazo"> {plazoCorto(producto.plazo_dias, producto.tipo)}</span>
+              </span>
+              <span class="pista" aria-hidden="true">
+                <span class="barra" style={`width: ${ancho(producto)}`} />
+              </span>
+              <span class="cifra valor">
+                {porcentaje(producto.tasa_nominal)}
+                {marcaTramo(producto) && (
+                  <span class="tenue-2 alcance">{marcaTramo(producto)}</span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+<style>
+  .comparativa {
+    margin-bottom: 14px;
+    padding: 14px 16px;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-tarjeta);
+    background: var(--gradiente-panel);
+  }
+  .titulo {
+    margin: 0 0 10px;
+  }
+  .grupo + .grupo {
+    margin-top: 10px;
+  }
+  .grupo-nombre {
+    margin: 0 0 4px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .fila-barra {
+    display: grid;
+    grid-template-columns: minmax(90px, 180px) 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 3px 0;
+  }
+  .nombre {
+    overflow: hidden;
+    font-size: 12px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .plazo {
+    font-size: 11px;
+  }
+  .pista {
+    min-width: 0;
+  }
+  /* Barra fina con el extremo del dato redondeado, anclada a la base: la
+     forma estándar de una comparación de una sola serie. Un solo tono. */
+  .barra {
+    display: block;
+    height: 10px;
+    border-radius: 0 4px 4px 0;
+    background: var(--marca-300);
+  }
+  .valor {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    justify-content: flex-end;
+    min-width: 64px;
+    font-size: 13px;
+    color: var(--texto-fuerte);
+  }
+  .alcance {
+    font-size: 10px;
+  }
+</style>
