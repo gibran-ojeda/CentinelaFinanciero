@@ -134,6 +134,15 @@
   --serie-6: #8ed0c6;
   --serie-7: #b9a7e0;
   --serie-8: #e7c36a;
+
+  /* La rampa de saldo: un solo matiz —el de --marca-300— en tres pasos, para
+     los segmentos ordenados de una escalera. Más saldo, más profundo. Pasó el
+     validador ordinal contra --panel: L monótona, saltos >= 0.06, el paso
+     hondo a 3.9:1 de la superficie y 7 grados de dispersión de matiz. La
+     tinta de dentro de un segmento es --fondo: rinde >= 4.6:1 sobre los tres. */
+  --rampa-saldo-1: #8ccadd;
+  --rampa-saldo-2: #5fb0c9;
+  --rampa-saldo-3: #4b8ca6;
 }
 
 *,

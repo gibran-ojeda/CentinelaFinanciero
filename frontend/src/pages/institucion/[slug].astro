@@ -8,6 +8,7 @@
  * hasta aquí quiere esa historia.
  */
 import Avatar from '~/components/Avatar.astro';
+import BarraEscalera from '~/components/BarraEscalera.astro';
 import ChipsCondiciones from '~/components/ChipsCondiciones.astro';
 import FechaDato from '~/components/FechaDato.astro';
 import Icono from '~/components/Icono.astro';
@@ -284,6 +285,7 @@ const jsonLd = {
                 condiciones={producto.condiciones}
               />
             )}
+            {producto.escalonada && <BarraEscalera tramos={producto.tramos} />}
           </div>
         ))
       }
