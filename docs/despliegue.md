@@ -1,6 +1,6 @@
 # Despliegue
 
-> Centinela vive en el **mismo VPS que NarrativeAlpha**, como stack Docker independiente. Lo único compartido es el Caddy del host. Todo lo de aquí asume esa restricción; el porqué está en [§14 del foundation](../foundation-comparador-financiero-mx.md) y en la [fase 06 del plan](../plan-de-implementacion/06-fase-6-despliegue-mvp.md).
+> Centinela vive en el **mismo VPS que NarrativeAlpha**, como stack Docker independiente. Lo único compartido es el Caddy del host. Todo lo de aquí asume esa restricción; el porqué está en [§14 del foundation](../foundation-comparador-financiero-mx.md), y este documento es la referencia operativa completa.
 
 ## Lo que ocupa Centinela
 

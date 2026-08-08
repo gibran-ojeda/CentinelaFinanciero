@@ -1,6 +1,6 @@
 # Criterios de redacción
 
-> Cierre de la decisión **D5** del [plan](../plan-de-implementacion/00-overview.md). Aplica a todo texto que llegue a un usuario: banderas, disclaimers, copy de la interfaz, respuestas de la API y cualquier página futura.
+> Cierre de la decisión **D5** del plan de implementación (retirado del repo al completarse el MVP; vive en el historial de git). Aplica a todo texto que llegue a un usuario: banderas, disclaimers, copy de la interfaz, respuestas de la API y cualquier página futura.
 
 ## El principio
 

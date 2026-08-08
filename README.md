@@ -117,8 +117,6 @@ romper.
 
 - `foundation-comparador-financiero-mx.md` — el documento de producto: qué se
   compara, cómo se calcula cada métrica y qué reglas rigen las banderas
-- `plan-de-implementacion/` — las diez fases, con entregables y criterios de
-  aceptación por fase
 - `docs/` — despliegue, runbook operativo y criterios de redacción de lo que
   el sitio afirma
 

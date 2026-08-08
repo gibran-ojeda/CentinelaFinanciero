@@ -1,8 +1,9 @@
 /* Tokens de Centinela Financiero.
  *
- * Salen del prototipo aprobado (`referencia-diseno/`), que los tenía en un
- * bloque <style> y repetidos inline en cada elemento. Aquí viven una sola vez:
- * retocar la marca es tocar este archivo, no doscientos atributos `style`.
+ * Salen del prototipo de diseño aprobado (retirado del repo; vive en el
+ * historial de git), que los tenía en un bloque <style> y repetidos inline en
+ * cada elemento. Aquí viven una sola vez: retocar la marca es tocar este
+ * archivo, no doscientos atributos `style`.
  *
  * La paleta es obligatoria y no se improvisa:
  *   #E3F6F5  #A7E0DB  #5FB0C9  #3E6D9C  #2A2F63
