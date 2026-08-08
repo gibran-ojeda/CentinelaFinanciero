@@ -119,15 +119,16 @@ const jsonLd = mercado
           )
         }
         <span class="tenue-2 aviso-texto">
-          Cada tasa muestra su fecha y su fuente.
+          {/* Los colores también van escritos con su nombre: la leyenda tiene
+              que leerse igual sin distinguirlos. */}
+          Cada tasa muestra su fecha, coloreada por procedencia:{' '}
+          <strong class="leyenda-verde">verde</strong>, verificada contra la página oficial;{' '}
+          <strong class="leyenda-azul">azul</strong>, capturada a mano;{' '}
+          <strong class="leyenda-ambar">ámbar</strong>, leída de un agregador y aún{' '}
+          <strong>sin verificar</strong>.
           {
             hayNoVerificadas && (
-              <>
-                {' '}
-                Las tasas marcadas <strong>sin verificar</strong> se leyeron de un agregador de
-                terceros y aún no se confirman con la institución; cada una se sustituye en
-                cuanto llega su lectura oficial.
-              </>
+              <> Cada tasa sin verificar se sustituye en cuanto llega su lectura oficial.</>
             )
           }
         </span>
@@ -247,6 +248,17 @@ const jsonLd = mercado
   }
   .aviso-texto {
     max-width: 70ch;
+  }
+  /* Los mismos tokens que usa FechaDato: la leyenda es una muestra, no una
+     paleta aparte. */
+  .leyenda-verde {
+    color: var(--positivo);
+  }
+  .leyenda-azul {
+    color: var(--marca-300);
+  }
+  .leyenda-ambar {
+    color: var(--aviso);
   }
   .error {
     padding: 18px;

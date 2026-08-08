@@ -10,8 +10,8 @@
 import Avatar from '~/components/Avatar.astro';
 import Bandera from '~/components/Bandera.astro';
 import BotonAgregar from '~/components/BotonAgregar.astro';
-import MarcaDato from '~/components/MarcaDato.astro';
-import { fecha, montoCorto, plazoCorto, plazoLargo, porcentaje, tramoEtiqueta } from '~/lib/formato';
+import FechaDato from '~/components/FechaDato.astro';
+import { montoCorto, plazoCorto, plazoLargo, porcentaje, tramoEtiqueta } from '~/lib/formato';
 import type { FilaComparador } from '~/lib/tipos';
 
 interface Props {
@@ -103,27 +103,8 @@ function escaleraTexto(fila: FilaComparador): string {
             ))}
             {fila.banderas.length === 0 && <span class="tenue-2">—</span>}
           </span>
-          <span class="fecha tenue-2" role="cell">
-            {/*
-              La fecha enlaza a la página de la que se leyó la tasa. No añade
-              columna ni cambia el layout: es el mismo texto, con destino.
-            */}
-            {fila.procedencia.fuente_url ? (
-              <a
-                href={fila.procedencia.fuente_url}
-                target="_blank"
-                rel="nofollow noopener"
-                title="Ver esta tasa en la fuente"
-              >
-                {fecha(fila.procedencia.fecha_dato)}
-              </a>
-            ) : (
-              fecha(fila.procedencia.fecha_dato)
-            )}
-            {/* La fuente como texto, no como title=: en táctil no hay hover y
-               la procedencia es parte del dato, igual que en la ficha. */}
-            <span class="fuente-dato">{fila.procedencia.fuente}</span>
-            <MarcaDato verificada={fila.procedencia.verificada} />
+          <span class="fecha" role="cell">
+            <FechaDato procedencia={fila.procedencia} />
           </span>
         </div>
       ))
@@ -172,24 +153,7 @@ function escaleraTexto(fila: FilaComparador): string {
         {fila.condiciones && <div class="escalera-tarjeta tenue-2">{fila.condiciones}</div>}
 
         <div class="tarjeta-pie">
-          <span class="tenue-2 tarjeta-fecha">
-            dato:{' '}
-            {fila.procedencia.fuente_url ? (
-              <a
-                href={fila.procedencia.fuente_url}
-                target="_blank"
-                rel="nofollow noopener"
-                title="Ver esta tasa en la fuente"
-              >
-                {fecha(fila.procedencia.fecha_dato)}
-              </a>
-            ) : (
-              fecha(fila.procedencia.fecha_dato)
-            )}
-            {' · '}
-            {fila.procedencia.fuente}
-            <MarcaDato verificada={fila.procedencia.verificada} />
-          </span>
+          <FechaDato procedencia={fila.procedencia} prefijo="dato al" />
         </div>
       </article>
     ))
@@ -305,29 +269,7 @@ function escaleraTexto(fila: FilaComparador): string {
     gap: 5px;
   }
   .fecha {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    align-items: flex-start;
     font-size: 12px;
-  }
-  .fuente-dato {
-    font-size: 10px;
-    letter-spacing: 0.04em;
-  }
-  /* Enlace discreto: subrayado punteado en vez de color, para no competir con
-     los datos de la fila. Se declara el color en :hover y no antes. */
-  .fecha a,
-  .tarjeta-fecha a {
-    color: inherit;
-    text-decoration: underline dotted;
-    text-underline-offset: 2px;
-  }
-  .fecha a:hover,
-  .tarjeta-fecha a:hover,
-  .fecha a:focus-visible,
-  .tarjeta-fecha a:focus-visible {
-    color: var(--marca-200);
   }
 
   /* ── Tarjetas ── */
@@ -389,17 +331,8 @@ function escaleraTexto(fila: FilaComparador): string {
     color: var(--texto-fuerte);
   }
   .tarjeta-pie {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
     margin-top: 10px;
     font-size: 11px;
-  }
-  .tarjeta-fecha {
-    display: flex;
-    align-items: center;
-    gap: 6px;
   }
 
   @media (min-width: 720px) {

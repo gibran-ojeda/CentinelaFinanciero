@@ -1,0 +1,107 @@
+---
+/**
+ * La fecha de un dato, coloreada por su procedencia.
+ *
+ * Verde: verificada contra la fuente oficial. Azul: capturada a mano.
+ * Ámbar: leída de un agregador y aún sin verificar. Sustituye al trío
+ * fecha + enum crudo + pastilla que pintaba `FETCH_DIRIGIDO` tal cual al
+ * usuario.
+ *
+ * El color nunca viaja solo: el mismo texto va en el `title` y en
+ * `.solo-lectores`, y el estado crítico —sin verificar— conserva además la
+ * pastilla visible de `MarcaDato`, porque en táctil no hay hover y esa es
+ * la marca que el usuario debe notar.
+ */
+import MarcaDato from '~/components/MarcaDato.astro';
+import { fecha } from '~/lib/formato';
+import type { Procedencia } from '~/lib/tipos';
+
+interface Props {
+  procedencia: Procedencia;
+  /** Texto tenue delante de la fecha («dato al»), para tarjeta y ficha. */
+  prefijo?: string;
+}
+const { procedencia, prefijo } = Astro.props;
+
+/** El enum de la API en palabras. */
+const FUENTES: Record<string, string> = {
+  MANUAL: 'captura manual',
+  AGREGADOR: 'agregador de terceros',
+  BANXICO_API: 'API de Banxico',
+  CNBV: 'CNBV',
+  FETCH_DIRIGIDO: 'página oficial de la institución',
+  LLM_RESEARCH: 'investigación verificada',
+};
+const fuenteHumana = FUENTES[procedencia.fuente] ?? procedencia.fuente;
+
+// El orden importa: una manual sin verificar no existe (MANUAL entra VIGENTE),
+// pero si existiera, «sin verificar» es lo que el usuario necesita saber.
+const estado = !procedencia.verificada
+  ? 'ambar'
+  : procedencia.fuente === 'MANUAL'
+    ? 'azul'
+    : 'verde';
+
+const DESCRIPCION: Record<string, string> = {
+  ambar: 'Dato de un agregador de terceros, aún sin confirmar con la institución',
+  azul: 'Dato capturado a mano de la publicación de la institución',
+  verde: `Dato verificado contra la fuente oficial · ${fuenteHumana}`,
+};
+const descripcion = DESCRIPCION[estado];
+const titulo = procedencia.fuente_url ? `${descripcion} — la fecha abre la fuente` : descripcion;
+---
+
+<span class="fecha-dato">
+  {prefijo && <span class="tenue-2 prefijo">{prefijo}</span>}
+  {
+    procedencia.fuente_url ? (
+      <a
+        class={estado}
+        href={procedencia.fuente_url}
+        target="_blank"
+        rel="nofollow noopener"
+        title={titulo}
+      >
+        {fecha(procedencia.fecha_dato)}
+      </a>
+    ) : (
+      <span class={estado} title={titulo}>
+        {fecha(procedencia.fecha_dato)}
+      </span>
+    )
+  }
+  <span class="solo-lectores">Procedencia: {descripcion}.</span>
+  <MarcaDato verificada={procedencia.verificada} />
+</span>
+
+<style>
+  .fecha-dato {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    align-items: baseline;
+  }
+  .prefijo {
+    font-size: 0.92em;
+  }
+  .verde {
+    color: var(--positivo);
+  }
+  .azul {
+    color: var(--marca-300);
+  }
+  .ambar {
+    color: var(--aviso);
+  }
+  /* Enlace discreto, como siempre: el subrayado punteado es la seña de que
+     hay destino. Al pasar, se aviva el mismo tono en vez de cambiar de color
+     — el matiz ES el dato. */
+  a {
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+  }
+  a:hover,
+  a:focus-visible {
+    filter: brightness(1.25);
+  }
+</style>
