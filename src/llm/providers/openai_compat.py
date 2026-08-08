@@ -27,7 +27,7 @@ log = get_logger(__name__)
 
 #: USD por millón de tokens, `(entrada, salida)`. Verificado contra
 #: platform.deepseek.com/pricing y contra el uso en producción de
-#: NarrativeAlpha, que corre estos mismos modelos.
+#: NA, que corre estos mismos modelos.
 #:
 #: **`deepseek-chat` y `deepseek-reasoner` los retiró DeepSeek el 2026-07-24.**
 #: Se conservan aquí sólo para que un costo histórico se pueda recalcular; no

@@ -2,7 +2,7 @@
 #
 # Convive con otro stack en el mismo VPS, así que todo lleva prefijo propio
 # y puertos fuera del rango que ese stack ya ocupa. Ver §14 del foundation y
-# la fase 06 del plan.
+# docs/despliegue.md.
 #
 #   COMPOSE_PROJECT_NAME=centinela   →  contenedores y volúmenes `centinela-*`
 #   Todo publicado sólo en 127.0.0.1: Caddy (compartido, en network_mode host)
@@ -175,7 +175,7 @@ services:
       # compartido; a internet no se expone nada directamente (§14).
       #
       # 8011 no es arbitrario: es la asignación verificada contra los puertos
-      # que NarrativeAlpha ya ocupa, y el que apunta su site block
+      # que NA ya ocupa, y el que apunta su site block
       # (`reverse_proxy 127.0.0.1:8011`). Cambiarlo aquí rompe el edge.
       - "127.0.0.1:8011:3000"
     depends_on:

@@ -39,6 +39,5 @@ frontend/dist
 
 tests
 docs
-plan-de-implementacion
 *.md
 !README.md

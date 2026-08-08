@@ -28,7 +28,7 @@ coverage.xml
 htmlcov/
 .hypothesis/
 
-# ─── Node / Astro (frontend, fase 5) ─────────────────────────
+# ─── Node / Astro (frontend) ─────────────────────────────────
 node_modules/
 .astro/
 frontend/dist/

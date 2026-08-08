@@ -404,22 +404,22 @@ Para mantener el enfoque, definir explícitamente lo que queda fuera del alcance
 
 ## 12. Próximos Pasos (Roadmap Conceptual)
 
-| Fase | Descripción | Plan de implementación |
+| Fase | Descripción | Estado |
 |---|---|---|
-| **Fase 1 – MVP** | CETES + BONDDIA + Top 10 SOFIPOs + Top 5 bancos digitales. Comparación por plazo. TEN calculada. Datos manuales actualizados semanalmente. | Fases [01](plan-de-implementacion/01-fase-1-scaffold-e-infraestructura.md)–[06](plan-de-implementacion/06-fase-6-despliegue-mvp.md) |
-| **Fase 2 – Banderas** | Integrar IMOR, ICAP, NICAP y cobertura de cartera vencida por institución. Sistema de banderas 🟡🔴 visible en la vista principal. Fuente: reportes CNBV. | Fases [03](plan-de-implementacion/03-fase-3-motor-de-metricas.md) y [08](plan-de-implementacion/08-fase-8-ingesta-cnbv-y-banderas.md) |
-| **Fase 3 – Calculadora** | Calculadora de ganancia real con desglose: bruto → ISR → inflación → neto. Tratamiento fiscal correcto por instrumento. | Fases [03](plan-de-implementacion/03-fase-3-motor-de-metricas.md), [04](plan-de-implementacion/04-fase-4-api-publica.md) y [05](plan-de-implementacion/05-fase-5-frontend-mvp.md) |
-| **Fase 4 – Datos vivos** | Integración con fuentes oficiales (Banxico API, cetesdirecto, CNBV) para actualización automática de tasas y datos de salud institucional. | Fases [07](plan-de-implementacion/07-fase-7-ingesta-banxico.md), [08](plan-de-implementacion/08-fase-8-ingesta-cnbv-y-banderas.md) y [09](plan-de-implementacion/09-fase-9-agente-llm-de-tasas.md) |
-| **Fase 5 – Cobertura completa** | Agregar BONOS M, UDIBONOS, BONDES D, bancos tradicionales con PRLV. | Fase [10](plan-de-implementacion/10-fase-10-extensiones.md) |
-| **Fase 6 – Contexto avanzado** | Histórico de tasas, tendencia de IMOR por institución, alertas de cambio de tasa o de bandera, simulador de cartera diversificada. | Fase [10](plan-de-implementacion/10-fase-10-extensiones.md) |
+| **Fase 1 – MVP** | CETES + BONDDIA + Top 10 SOFIPOs + Top 5 bancos digitales. Comparación por plazo. TEN calculada. Datos manuales actualizados semanalmente. | En producción |
+| **Fase 2 – Banderas** | Integrar IMOR, ICAP, NICAP y cobertura de cartera vencida por institución. Sistema de banderas 🟡🔴 visible en la vista principal. Fuente: reportes CNBV. | En producción |
+| **Fase 3 – Calculadora** | Calculadora de ganancia real con desglose: bruto → ISR → inflación → neto. Tratamiento fiscal correcto por instrumento. | En producción |
+| **Fase 4 – Datos vivos** | Integración con fuentes oficiales (Banxico API, cetesdirecto, CNBV) para actualización automática de tasas y datos de salud institucional. | En producción |
+| **Fase 5 – Cobertura completa** | Agregar BONOS M, UDIBONOS, BONDES D, bancos tradicionales con PRLV. | Pendiente |
+| **Fase 6 – Contexto avanzado** | Histórico de tasas, tendencia de IMOR por institución, alertas de cambio de tasa o de bandera, simulador de cartera diversificada. | Pendiente |
 
-> **Nota:** el orden ejecutable del plan difiere del roadmap conceptual. El motor de métricas (que habilita TEN y calculadora) se construye antes que la API y el frontend porque es prerequisito de ambos, y el MVP sale a producción con carga manual de datos **antes** de automatizar las ingestas. El razonamiento completo está en [`plan-de-implementacion/00-overview.md`](plan-de-implementacion/00-overview.md).
+> **Nota:** el plan ejecutable, fase por fase, se retiró del repo al completarse el MVP (2026-08-08); vive en el historial de git. Su orden difería del roadmap conceptual: el motor de métricas se construyó antes que la API y el frontend porque era prerequisito de ambos, y el MVP salió a producción con carga manual de datos **antes** de automatizar las ingestas.
 
 ---
 
 # Parte II — Fundación Técnica
 
-> Esta parte define el stack, la arquitectura de servicios y la estrategia de obtención de datos con que se construye Centinela Financiero. La plantilla de referencia es el stack probado de NarrativeAlpha (Python 3.12 + FastAPI + PostgreSQL + Docker). El plan ejecutable, fase por fase, vive en [`plan-de-implementacion/`](plan-de-implementacion/00-overview.md).
+> Esta parte define el stack, la arquitectura de servicios y la estrategia de obtención de datos con que se construye Centinela Financiero. La plantilla de referencia es el stack probado del proyecto vecino (NA: Python 3.12 + FastAPI + PostgreSQL + Docker).
 
 ---
 
@@ -427,7 +427,7 @@ Para mantener el enfoque, definir explícitamente lo que queda fuera del alcance
 
 | Capa | Tecnología | Justificación |
 |---|---|---|
-| Lenguaje | Python 3.12 | Ecosistema maduro para ETL, APIs async y LLM; mismo stack que NarrativeAlpha |
+| Lenguaje | Python 3.12 | Ecosistema maduro para ETL, APIs async y LLM; mismo stack que NA |
 | Empaquetado | `pyproject.toml` único con extras por módulo (`api`, `scheduler`, `ingest`, `llm`, `browser`, `mcp`, `dev`) | Sin zoo de `requirements-*.txt`; cada imagen Docker instala solo lo que necesita |
 | Layout | `src/` con paquetes planos; cada módulo ejecutable expone `__main__.py` (`python -m api`, `python -m scheduler`, `python -m cli`) | Servicios diferenciados solo por comando, una sola imagen |
 | API | FastAPI + uvicorn, patrón *application factory* (`create_app()`) | Async nativo, OpenAPI automático, validación pydantic |
@@ -438,11 +438,11 @@ Para mantener el enfoque, definir explícitamente lo que queda fuera del alcance
 | Observabilidad | structlog (JSON en prod, pretty en dev) + tabla `job_runs` | Trazabilidad de cada corrida de ingesta |
 | LLM | Cliente router con tiers y fallback; `OpenAICompatProvider` con **DeepSeek** como primario; `CostTracker` con límite diario; prompts como plantillas `.md` externas; parsers JSON robustos | Costo mínimo, proveedor intercambiable vía `base_url`, gasto acotado |
 | Frontend | **Astro SSR + islas React** (TanStack Query solo en calculadora y filtros) | Un comparador público vive del SEO; SSR para páginas indexables, interactividad como islas |
-| Edge | Caddy 2 (TLS automático), **compartido con NarrativeAlpha** en el mismo VPS | El navegador solo llega al servicio `web`; la API interna nunca se expone |
+| Edge | Caddy 2 (TLS automático), **compartido con NA** en el mismo VPS | El navegador solo llega al servicio `web`; la API interna nunca se expone |
 | Contenedores | Docker Compose (proyecto `centinela`, aislado); imagen única `python:3.12-slim` diferenciada por `command` | Build una vez, deploy N servicios; cero colisión con el stack vecino |
 | Calidad | pytest (`asyncio_mode=auto`) + respx + testcontainers; ruff + black + mypy strict; pre-commit; GitHub Actions | CI bloqueante en lint y tests |
 
-**Doble gate por módulo** (patrón heredado de NarrativeAlpha): cada job de ingesta tiene un flag *env-only* que decide si se registra en el scheduler (ej. `SCHEDULER_BANXICO_ENABLED`) y un kill-switch *caliente* en ConfigStore que lo hace no-operar sin reiniciar (ej. `BANXICO_SYNC_ENABLED`).
+**Doble gate por módulo** (patrón heredado de NA): cada job de ingesta tiene un flag *env-only* que decide si se registra en el scheduler (ej. `SCHEDULER_BANXICO_ENABLED`) y un kill-switch *caliente* en ConfigStore que lo hace no-operar sin reiniciar (ej. `BANXICO_SYNC_ENABLED`).
 
 ---
 
@@ -473,7 +473,7 @@ flowchart LR
 
 **Patrón BFF:** el navegador solo habla con `web`; `web` consume la API por red interna inyectando `X-API-Key`. La API nunca se expone a internet.
 
-**Co-hosting con NarrativeAlpha:** Centinela corre en el **mismo VPS** que NarrativeAlpha, como stack Docker independiente (proyecto `centinela`, base de datos, Redis e imagen propias — no se comparte estado). El **único recurso compartido es el Caddy del host**, que ya ocupa 80/443 en `network_mode: host`: Centinela no levanta su propio edge, se le añade un site block para `centinelafinanciero.lat` que apunta a `127.0.0.1:8011`. Todos los puertos de Centinela se publican solo en loopback y fuera del rango que NarrativeAlpha ya usa. El detalle operativo —incluida la restricción de `ufw` sobre el tráfico `docker0 → host`— está en la [fase 06 del plan](plan-de-implementacion/06-fase-6-despliegue-mvp.md).
+**Co-hosting con NA:** Centinela corre en el **mismo VPS** que NA, como stack Docker independiente (proyecto `centinela`, base de datos, Redis e imagen propias — no se comparte estado). El **único recurso compartido es el Caddy del host**, que ya ocupa 80/443 en `network_mode: host`: Centinela no levanta su propio edge, se le añade un site block para `centinelafinanciero.lat` que apunta a `127.0.0.1:8011`. Todos los puertos de Centinela se publican solo en loopback y fuera del rango que NA ya usa. El detalle operativo —incluida la restricción de `ufw` sobre el tráfico `docker0 → host`— está en [`docs/despliegue.md`](docs/despliegue.md).
 
 ---
 
@@ -531,7 +531,6 @@ Cada fuente tiene un **SLA de frescura**; si se excede, `frescura_check` genera 
 ```
 centinela-financiero/
 ├── foundation-comparador-financiero-mx.md
-├── plan-de-implementacion/        # este plan, fase por fase
 ├── pyproject.toml                 # único, con extras por módulo
 ├── docker-compose.yml
 ├── docker/                        # Dockerfiles (app, web) — el edge Caddy es compartido, ver §14
@@ -577,7 +576,7 @@ centinela-financiero/
 
 ---
 
-*El plan ejecutable de esta fundación vive en [`plan-de-implementacion/`](plan-de-implementacion/00-overview.md).*
+*El plan ejecutable de esta fundación se retiró del repo al completarse el MVP (2026-08-08); vive en el historial de git.*
 
 *Versión 1.5 — Correcciones fiscales verificadas contra fuente primaria durante la implementación de las fases 1–4: retención al **0.90%** (art. 24 LIF 2026, DOF 7-nov-2025), base de prorrateo de **360 días** (RMF), los fondos de deuda retienen **sobre capital** (art. 87 LISR → régimen del art. 54), y actualización del estatus de Nu México. Los ejemplos numéricos de §4.5 y §6 se recalcularon en consecuencia.*
 

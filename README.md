@@ -1,60 +1,99 @@
 # Centinela Financiero
 
-[![test](https://github.com/gibran-ojeda/centinela-financiero/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/gibran-ojeda/centinela-financiero/actions/workflows/test.yml)
+[![test](https://github.com/gibran-ojeda/brujula-financiera/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/gibran-ojeda/brujula-financiera/actions/workflows/test.yml)
 
-Comparador informativo de instrumentos de ahorro en México: CETES, SOFIPOs y
-bancos digitales con **tasa efectiva neta** después de ISR, **cobertura de
-seguro de depósito** y **banderas de salud institucional**.
+Comparador informativo de instrumentos de ahorro en México — CETES, SOFIPOs y
+bancos digitales — que muestra **la tasa tal como la publica cada
+institución**, con sus condiciones, la procedencia de cada dato y señales de
+salud de quien la ofrece.
 
 **En producción: <https://centinelafinanciero.lat>**
 
 No es asesoría de inversión, no recibe dinero, no intermedia contrataciones y
-no cobra a las instituciones listadas. Cada tasa se muestra con su fecha y su
-fuente.
+no cobra a las instituciones listadas.
 
 ## Qué resuelve
 
-Una tasa anunciada no es lo que acabas ganando. Entre el número del anuncio y
-tu bolsillo están la retención de ISR, la inflación y —si la institución
-quiebra— el límite del fondo de protección. Centinela hace visibles esos tres
-descuentos y el riesgo del emisor, con los mismos datos que publican Banxico y
-la CNBV.
+Una tasa anunciada no es lo que acabas ganando. Entre el anuncio y tu bolsillo
+están la letra pequeña (montos, membresías, promociones), la retención de ISR,
+la inflación y —si la institución quiebra— el límite del seguro de depósito.
+Centinela pone todo eso junto y a la vista, con los mismos datos que publican
+las instituciones, Banxico y la CNBV.
 
-## Estado del proyecto
+## De dónde sale cada número
 
-MVP en producción con las ingestas automatizadas:
+La regla de origen del proyecto: un número publicado sale de **quien lo ofrece
+o de quien lo regula** — nunca de otro comparador. Y nada de lo que lee una
+máquina se publica solo: la primera lectura de cada producto, y cualquier
+cambio fuera de tolerancia, los aprueba una persona.
 
-- **Banxico SIE** a diario: CETES, TIIE, UDI, INPC.
-- **Boletines CNBV** al mes: indicadores de salud (IMOR, ICAP, NICAP…) que
-  alimentan las banderas.
-- **Lectura de tasas** a la semana: fetch dirigido de las páginas oficiales
-  (Chromium para las que renderizan por JavaScript) con extracción por LLM, y
-  un researcher de búsqueda abierta para descubrimiento. Nada de lo que toca
-  un LLM se publica solo: la primera lectura y cualquier cambio fuera de
-  tolerancia pasan por una cola de revisión humana.
+```mermaid
+flowchart LR
+    B["API de Banxico<br>CETES, UDI, inflación"] -->|dato oficial| PUB
+    C["Boletines de la CNBV<br>salud institucional"] -->|dato oficial| PUB
+    P["Páginas oficiales<br>de cada institución"] --> L["Lectura automática<br>cada 30 min / cada 8 h"]
+    L --> D{"¿Primera lectura<br>o cambio grande?"}
+    D -->|sí| H["Revisión humana<br>cola de aprobación"]
+    D -->|"no, coincide"| PUB
+    H -->|aprobada| PUB["Se publica con<br>fecha, fuente y color"]
+```
 
-Política de transición del catálogo: las lecturas provenientes de agregadores
-se publican **etiquetadas «sin verificar»** hasta que la lectura oficial de
-cada producto las sustituye.
+- **API de Banxico** — deuda gubernamental, UDI e inflación, a diario.
+- **Boletines de la CNBV** — indicadores de salud de cada institución, con la
+  cadencia mensual de la propia CNBV.
+- **Páginas oficiales** — las tasas de SOFIPOs y bancos digitales se leen de
+  la página de cada institución: cada 30 minutos las de texto plano, cada 8
+  horas las que necesitan un navegador para renderizar.
 
-## Arquitectura
+Las lecturas heredadas de agregadores se publican etiquetadas **«sin
+verificar»** hasta que la lectura oficial de cada producto las sustituye.
 
-Cinco servicios en un solo compose, imagen Python única para los tres del
-backend:
+## Cómo leer el sitio
 
-| Servicio | Qué hace |
+La fecha de cada tasa lleva un color, y el color es la procedencia:
+
+| Fecha | Qué significa |
 |---|---|
-| `web` | Astro SSR. El único servicio que ve el navegador (patrón BFF) |
-| `api` | FastAPI interna. Comparador, detalle de institución, calculadora. Nunca se expone a internet |
-| `scheduler` | APScheduler con lock distribuido en Redis. Ingesta y recomputo de banderas |
-| `db` | PostgreSQL 16. Esquema versionado con Alembic |
-| `redis` | Cache L2, locks distribuidos y guarda de disparos del scheduler |
+| 🟢 **Verde** | Verificada contra la fuente oficial |
+| 🔵 **Azul** | Capturada a mano de la publicación de la institución |
+| 🟡 **Ámbar** | Leída de un agregador de terceros, aún **sin verificar** |
 
-`Decimal` de punta a punta para dinero y tasas. El motor de métricas
-(`src/metrics/`) son funciones puras sin infraestructura: los umbrales entran
-como argumento, nunca importando configuración.
+Junto a cada tasa van sus **condiciones** en etiquetas —los tramos por saldo
+(«15.00 % hasta $25 mil») y la letra pequeña que la condiciona— y las
+**banderas**, amarillas o rojas, cuando los datos públicos de la CNBV muestran
+algo que conviene mirar. Una bandera es señal, no dictamen.
 
-## Arranque
+```mermaid
+flowchart LR
+    M["<b>Mercado</b><br>todas las tasas, con condiciones,<br>banderas y procedencia"]
+    F["<b>Ficha de institución</b><br>salud CNBV, cobertura,<br>GAT Nominal y GAT Real,<br>escalera por saldo"]
+    K["<b>Calculadora</b><br>reparte tu monto y desglosa<br>la ganancia real"]
+    M --> F
+    M --> K
+    F --> K
+```
+
+## Los conceptos que sí hay que conocer
+
+- **GAT Nominal y GAT Real** — la Ganancia Anual Total que la regulación
+  mexicana obliga a revelar, antes de impuestos; la Real descuenta la
+  inflación esperada. Viven en la ficha de cada institución.
+- **TEN (tasa efectiva neta)** — lo que queda después de la retención de ISR.
+  Vive en la calculadora, que es donde se responde «¿cuánto gano de verdad?».
+- **Cobertura (IPAB / PROSOFIPO)** — el seguro que responde por tu depósito si
+  la institución quiebra, con su límite convertido a pesos al valor de la UDI.
+- **Ganancia real** — bruto − ISR − inflación. La calculadora la desglosa paso
+  a paso y, si repartes entre varias instituciones, respeta el límite de
+  seguro de cada una.
+
+## Lo que NO es
+
+- No recomienda dónde invertir: describe y compara; la decisión es tuya.
+- No intermedia: no hay botón de contratar, ni comisiones, ni afiliados.
+- Las banderas no son dictámenes de solvencia: son señales calculadas con
+  datos públicos, con su periodo y su fuente a la vista.
+
+## Levántalo
 
 ```bash
 cp .env.example .env   # y pon una POSTGRES_PASSWORD
@@ -64,64 +103,22 @@ docker compose exec api python -m cli tasas import seeds/tasas.csv
 ```
 
 El sitio queda en `http://127.0.0.1:8011` y la API en `http://127.0.0.1:8010`
-— `/docs` para el contrato completo.
-
-## Desarrollo
-
-```bash
-pip install -e ".[app,dev]"
-pre-commit install
-pytest
-pre-commit run --all-files
-```
-
-`pre-commit install` es el paso fácil de saltarse: sin él los hooks sólo corren
-cuando se les llama a mano, y mypy —que en CI es informativo por doctrina— se
-queda sin ninguna red.
-
-Córrelo **desde el entorno en el que commiteas**. El hook que genera apunta al
-intérprete que lo instaló, así que uno instalado desde WSL aborta los commits
-hechos desde Windows (PyCharm, Git Bash) con un `pre-commit not found`. Si
-trabajas partido —herramientas en WSL, git en Windows— instala `pre-commit`
-también en el Python de ese lado: el hook lo busca en el `PATH` como segundo
-camino y entonces sirve a los dos.
-
-Los tests que necesitan infraestructura real usan testcontainers y se **saltan**
-si no hay un daemon de Docker, así que `pytest` pasa en una máquina sin el stack
-levantado.
-
-## Fuentes de datos
-
-La regla de origen del proyecto: un número publicado sale de **quien lo ofrece
-o de quien lo regula** — nunca de otro comparador.
-
-- **[SIE de Banxico](https://www.banxico.org.mx/SieAPIRest/service/v1/)** —
-  deuda gubernamental, TIIE, UDI e inflación (token gratuito).
-- **[Portafolio de Información de la CNBV](https://portafolioinfo.cnbv.gob.mx/)**
-  — indicadores mensuales de salud institucional.
-- **Páginas oficiales de cada institución** — tasas de SOFIPOs y bancos
-  digitales, leídas de la fuente y enlazadas desde cada dato del sitio.
-
-Los datos pertenecen a sus fuentes; este proyecto los recopila, calcula sobre
-ellos y los atribuye.
-
-## Contribuir
-
-Las guías están en [CONTRIBUTING.md](CONTRIBUTING.md); la convivencia, en el
-[Código de Conducta](CODE_OF_CONDUCT.md); las vulnerabilidades, por el canal
-privado de [SECURITY.md](SECURITY.md). En corto: el código habla español, los
-títulos de commit van en inglés, y los datos tienen reglas que ningún PR puede
-romper.
+(`/docs` para el contrato). Para desarrollar —entorno, suite, estilo y las
+reglas de datos que ningún PR puede romper— está
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentación
 
-- `foundation-comparador-financiero-mx.md` — el documento de producto: qué se
-  compara, cómo se calcula cada métrica y qué reglas rigen las banderas
-- `plan-de-implementacion/` — las diez fases, con entregables y criterios de
-  aceptación por fase
-- `docs/` — despliegue, runbook operativo y criterios de redacción de lo que
-  el sitio afirma
+- [`foundation-comparador-financiero-mx.md`](foundation-comparador-financiero-mx.md)
+  — el documento de producto: qué se compara, cómo se calcula cada métrica y
+  qué reglas rigen las banderas
+- [`docs/`](docs/) — despliegue, runbook operativo y los criterios de
+  redacción de lo que el sitio afirma
+
+La convivencia se rige por el [Código de Conducta](CODE_OF_CONDUCT.md); las
+vulnerabilidades van por el canal privado de [SECURITY.md](SECURITY.md).
 
 ## Licencia
 
-MIT — ver [LICENSE](LICENSE). © 2026 Gibran Ojeda
+MIT © 2026 Gibran Ojeda. Los datos pertenecen a sus fuentes; este proyecto los
+recopila, calcula sobre ellos y los atribuye.

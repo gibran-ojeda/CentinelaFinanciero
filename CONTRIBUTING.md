@@ -8,8 +8,8 @@ que un PR no puede romper. Al participar aceptas el
 ## Setup local
 
 ```bash
-git clone https://github.com/gibran-ojeda/centinela-financiero.git
-cd centinela-financiero
+git clone https://github.com/gibran-ojeda/brujula-financiera.git
+cd brujula-financiera
 cp .env.example .env        # y pon una POSTGRES_PASSWORD
 pip install -e ".[app,dev]"
 pre-commit install
@@ -19,9 +19,16 @@ docker compose exec api python -m cli tasas import seeds/tasas.csv
 ```
 
 El sitio queda en `http://127.0.0.1:8011` y la API en `http://127.0.0.1:8010`
-(`/docs` para el contrato). Sobre `pre-commit install` hay una trampa si
-trabajas con las herramientas en WSL y git en Windows — está explicada en la
-[sección de desarrollo del README](README.md#desarrollo).
+(`/docs` para el contrato).
+
+`pre-commit install` es el paso fácil de saltarse: sin él los hooks sólo
+corren cuando se les llama a mano, y mypy —que en CI es informativo por
+doctrina— se queda sin ninguna red. Y córrelo **desde el entorno en el que
+commiteas**: el hook que genera apunta al intérprete que lo instaló, así que
+uno instalado desde WSL aborta los commits hechos desde Windows (PyCharm, Git
+Bash) con un `pre-commit not found`. Si trabajas partido —herramientas en WSL,
+git en Windows— instala `pre-commit` también en el Python de ese lado: el hook
+lo busca en el `PATH` como segundo camino y entonces sirve a los dos.
 
 ## Correr la suite
 

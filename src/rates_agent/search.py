@@ -7,7 +7,7 @@ plausible. Aquí se ejecuta la búsqueda, se guardan las URLs que volvieron, y
 después se descarta todo hallazgo cuya URL no esté en ese conjunto.
 
 Las cuatro capas son las mismas del fetcher, y por la misma razón: llevan meses
-funcionando en NarrativeAlpha contra esta misma clase de problema.
+funcionando en NA contra esta misma clase de problema.
 
 1. **Reintento dentro del motor**, con backoff exponencial y jitter.
 2. **Cadena de motores** — `duckduckgo → google → brave` a través de `ddgs`.

@@ -1,8 +1,7 @@
 """Alta manual de tasas desde CSV.
 
-Es la vía de carga del MVP: la fase conceptual F1 opera con datos manuales
-actualizados semanalmente. Cuando lleguen las ingestas automáticas (fases 7-9)
-seguirá siendo la vía de corrección y de alta de instituciones nuevas.
+Fue la vía de carga del MVP; con las ingestas automáticas en marcha sigue
+siendo la vía de corrección y de alta de instituciones nuevas.
 
 Semántica **append-only**: cada fila del CSV es una observación. Nunca se
 modifica ni se borra una tasa anterior — la vigente de un producto es la más

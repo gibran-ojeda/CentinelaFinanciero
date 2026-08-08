@@ -1,6 +1,6 @@
 # Despliegue
 
-> Centinela vive en el **mismo VPS que NarrativeAlpha**, como stack Docker independiente. Lo único compartido es el Caddy del host. Todo lo de aquí asume esa restricción; el porqué está en [§14 del foundation](../foundation-comparador-financiero-mx.md) y en la [fase 06 del plan](../plan-de-implementacion/06-fase-6-despliegue-mvp.md).
+> Centinela vive en el **mismo VPS que el stack vecino (NA)**, como stack Docker independiente. Lo único compartido es el Caddy del host. Todo lo de aquí asume esa restricción; el porqué está en [§14 del foundation](../foundation-comparador-financiero-mx.md), y este documento es la referencia operativa completa.
 
 ## Lo que ocupa Centinela
 
@@ -28,10 +28,10 @@ El overlay de producción reserva ~2.0 GB de techo entre los cinco servicios (db
 
 **2. Dominio.** `centinelafinanciero.lat` (D1b), con un registro A al VPS. Activar también el reenvío de `contacto@centinelafinanciero.lat` — es el canal que publica el [aviso legal](../frontend/src/pages/aviso-legal.astro) y tiene que existir el día que el sitio sea público.
 
-**3. Directorio propio en el VPS**, nunca el de NarrativeAlpha:
+**3. Directorio propio en el VPS**, nunca el de NA:
 
 ```bash
-git clone https://github.com/gibran-ojeda/centinela-financiero.git ~/centinela-financiero
+git clone https://github.com/gibran-ojeda/brujula-financiera.git ~/centinela-financiero
 ```
 
 **4. Secretos en GitHub** (Settings → Secrets → Actions):
@@ -163,7 +163,7 @@ Cron diario en el VPS:
 15 3 * * * /home/<usuario>/centinela-financiero/scripts/respaldar.sh >> /home/<usuario>/centinela-financiero/backups/respaldo.log 2>&1
 ```
 
-Retención de 14 días, nombre con prefijo propio para no pisarse con los de NarrativeAlpha. El volcado se escribe a un temporal y sólo se renombra al terminar: un corte a la mitad no deja un `.sql.gz` truncado con pinta de respaldo bueno. La rotación va **después** del volcado, nunca antes.
+Retención de 14 días, nombre con prefijo propio para no pisarse con los de NA. El volcado se escribe a un temporal y sólo se renombra al terminar: un corte a la mitad no deja un `.sql.gz` truncado con pinta de respaldo bueno. La rotación va **después** del volcado, nunca antes.
 
 **Copia fuera del VPS** — semanal, desde la máquina local, junto con el ciclo del [runbook](runbook-actualizacion-manual.md):
 
@@ -203,13 +203,16 @@ subió a **768M** en el overlay. La pasada semanal desde la laptop deja de ser
 un modo de operación; los flags `--solo-navegador` / `--sin-navegador` de la
 CLI quedan como filtros de depuración.
 
-> **Cadencia (2026-08-01):** el job corre **cada 4 horas** (rejilla ..:45)
-> para probar el ciclo completo; el destino es bajarlo a diario editando el
-> trigger en `src/scheduler/registry.py`. Chromium levanta ahora seis veces
-> al día en vez de una a la semana — vigilar `free -h` (`available`) los
-> primeros días. El costo LLM no se multiplica: el cortocircuito por hash
-> hace gratis las corridas sin cambios, y el techo `llm_cost_daily_limit_usd`
-> es diario y compartido (agotado ⇒ OMITIDO, no FALLIDO).
+> **Cadencia (2026-08-08):** la lectura corre en dos carriles, definidos en
+> `src/scheduler/registry.py`: la **pasada rápida** (httpx, sin navegador)
+> cada 30 minutos (rejilla :05/:35), y la **pasada con navegador** cada 8
+> horas (rejilla :20) para las fuentes que renderizan por JavaScript. El
+> researcher de búsqueda abierta corre cada 4 horas (rejilla :15). Chromium
+> levanta tres veces al día — vigilar `free -h` (`available`) tras cualquier
+> cambio de cadencia. El costo LLM no se multiplica: el cortocircuito por
+> hash hace gratis las corridas sin cambios, y el techo
+> `llm_cost_daily_limit_usd` es diario y compartido (agotado ⇒ OMITIDO, no
+> FALLIDO).
 
 **El repliegue, en dos niveles:**
 
@@ -243,7 +246,7 @@ aplicar el repliegue de arriba.
 ## Cosas que muerden en este VPS
 
 - **`ufw` dropea `docker0 → host`.** Un contenedor de Centinela en bridge no alcanza nada publicado en el loopback del host. Si algún día Centinela necesita consumir un servicio del vecino, la vía es adjuntar el contenedor a la red bridge del vecino como red externa, nunca pasar por la gateway de Docker.
-- **Centinela no levanta Caddy.** 80/443 los tiene el de NarrativeAlpha en `network_mode: host`.
+- **Centinela no levanta Caddy.** 80/443 los tiene el de NA en `network_mode: host`.
 - **`SITE_URL` es obligatoria en producción.** El overlay falla si no está, a propósito: sin ella la canónica y el `sitemap.xml` anunciarían el loopback y el fallo sería invisible hasta que el índice estuviera hecho.
 - **La política de transición del lanzamiento** publica las tasas en
   `PENDIENTE_REVISION` etiquetadas «sin verificar» hasta que su lectura oficial

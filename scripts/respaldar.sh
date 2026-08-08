@@ -5,7 +5,7 @@
 #               /home/<usuario>/centinela-financiero/backups/respaldo.log 2>&1
 #
 # Nombre con prefijo propio y directorio propio: en este VPS también respalda
-# NarrativeAlpha, y dos rotaciones que se pisen borran lo que no es suyo.
+# NA, y dos rotaciones que se pisen borran lo que no es suyo.
 set -euo pipefail
 
 DIRECTORIO=${DIRECTORIO:-$HOME/centinela-financiero}

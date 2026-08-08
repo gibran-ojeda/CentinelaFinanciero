@@ -8,7 +8,7 @@ cosas que ninguna extracción debería repetir por su cuenta:
 2. **Reintenta lo transitorio y sólo lo transitorio.** Un 429 o un timeout
    merecen otro intento con espera; un 401 no mejora esperando. Es la misma
    distinción que el fetcher hace entre vacío y error duro, y el backoff es el
-   mismo de NarrativeAlpha: exponencial con jitter, `min(base·2ⁿ, tope)` por
+   mismo de NA: exponencial con jitter, `min(base·2ⁿ, tope)` por
    `uniform(0.75, 1.25)`. El jitter importa porque sin él dos extracciones que
    chocan con el mismo 429 vuelven a chocar exactamente a la vez.
 3. **Devuelve JSON ya parseado**, con el canal de razonamiento como respaldo.
