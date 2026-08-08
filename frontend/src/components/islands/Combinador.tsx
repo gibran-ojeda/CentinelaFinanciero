@@ -14,6 +14,7 @@
 
 import { useStore } from '@nanostores/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ComparativaAlternativas from '~/components/islands/ComparativaAlternativas';
 import ExplicacionOptimizador from '~/components/islands/ExplicacionOptimizador';
 import { colorSerie, dinero, miles, porcentaje, soloDigitos, tramoEtiqueta } from '~/lib/formato';
 import { limpiar, quitar, repartoInicial, seleccion } from '~/lib/seleccion';
@@ -387,6 +388,8 @@ export default function Combinador() {
               </div>
 
               <Cascada datos={resultado} />
+
+              <ComparativaAlternativas resultado={resultado} />
 
               <p className="narrativa">{resultado.narrativa}</p>
 
