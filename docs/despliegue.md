@@ -31,7 +31,7 @@ El overlay de producción reserva ~2.0 GB de techo entre los cinco servicios (db
 **3. Directorio propio en el VPS**, nunca el de NA:
 
 ```bash
-git clone https://github.com/gibran-ojeda/centinela-financiero.git ~/centinela-financiero
+git clone https://github.com/gibran-ojeda/brujula-financiera.git ~/centinela-financiero
 ```
 
 **4. Secretos en GitHub** (Settings → Secrets → Actions):
@@ -203,13 +203,16 @@ subió a **768M** en el overlay. La pasada semanal desde la laptop deja de ser
 un modo de operación; los flags `--solo-navegador` / `--sin-navegador` de la
 CLI quedan como filtros de depuración.
 
-> **Cadencia (2026-08-01):** el job corre **cada 4 horas** (rejilla ..:45)
-> para probar el ciclo completo; el destino es bajarlo a diario editando el
-> trigger en `src/scheduler/registry.py`. Chromium levanta ahora seis veces
-> al día en vez de una a la semana — vigilar `free -h` (`available`) los
-> primeros días. El costo LLM no se multiplica: el cortocircuito por hash
-> hace gratis las corridas sin cambios, y el techo `llm_cost_daily_limit_usd`
-> es diario y compartido (agotado ⇒ OMITIDO, no FALLIDO).
+> **Cadencia (2026-08-08):** la lectura corre en dos carriles, definidos en
+> `src/scheduler/registry.py`: la **pasada rápida** (httpx, sin navegador)
+> cada 30 minutos (rejilla :05/:35), y la **pasada con navegador** cada 8
+> horas (rejilla :20) para las fuentes que renderizan por JavaScript. El
+> researcher de búsqueda abierta corre cada 4 horas (rejilla :15). Chromium
+> levanta tres veces al día — vigilar `free -h` (`available`) tras cualquier
+> cambio de cadencia. El costo LLM no se multiplica: el cortocircuito por
+> hash hace gratis las corridas sin cambios, y el techo
+> `llm_cost_daily_limit_usd` es diario y compartido (agotado ⇒ OMITIDO, no
+> FALLIDO).
 
 **El repliegue, en dos niveles:**
 

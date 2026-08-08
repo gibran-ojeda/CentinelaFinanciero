@@ -122,8 +122,8 @@ dev = [
 
 [project.urls]
 Homepage = "https://centinelafinanciero.lat"
-Repository = "https://github.com/gibran-ojeda/centinela-financiero"
-Issues = "https://github.com/gibran-ojeda/centinela-financiero/issues"
+Repository = "https://github.com/gibran-ojeda/brujula-financiera"
+Issues = "https://github.com/gibran-ojeda/brujula-financiera/issues"
 
 [build-system]
 requires = ["setuptools>=69"]
