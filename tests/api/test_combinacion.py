@@ -262,6 +262,103 @@ async def test_the_optimiser_leaves_out_uncovered_issuers(api_lectura: AsyncClie
     assert "mercado-pago-vista" not in {a["producto_slug"] for a in cuerpo["asignaciones"]}
 
 
+# ─── Pasos, descartes y alternativas ──────────────────────────
+
+
+async def test_a_manual_mix_has_alternatives_but_no_steps(api_lectura: AsyncClient) -> None:
+    """Una mezcla manual no tiene pasos que explicar, pero sí referencias."""
+    cetes = await _producto_id(api_lectura, "cetes-364")
+
+    cuerpo = (
+        await api_lectura.post(
+            COMBINACION,
+            json={
+                "monto_total": "100000",
+                "horizonte_dias": 364,
+                "items": [{"producto_id": cetes, "porcentaje": "100"}],
+            },
+        )
+    ).json()
+
+    assert cuerpo["pasos_optimizador"] == []
+    assert cuerpo["descartes_optimizador"] == []
+    assert {a["clave"] for a in cuerpo["alternativas"]} == {"todo_cetes", "mejor_unico"}
+    for alternativa in cuerpo["alternativas"]:
+        assert alternativa["etiqueta"]
+        assert "ganancia_real" in alternativa
+        assert "porcentaje_protegido" in alternativa
+
+
+async def test_the_optimiser_steps_add_up_and_belong_to_the_allocations(
+    api_lectura: AsyncClient,
+) -> None:
+    """Los pasos cuadran con el monto y no nombran a nadie fuera del reparto."""
+    cuerpo = (
+        await api_lectura.post(
+            OPTIMIZAR,
+            json={"monto_total": "250000", "horizonte_dias": 364, "respetar_seguro": True},
+        )
+    ).json()
+
+    assert cuerpo["pasos_optimizador"], "el optimizador siempre explica su reparto"
+    suma = sum(Decimal(p["monto"]) for p in cuerpo["pasos_optimizador"])
+    assert suma == Decimal("250000") - Decimal(cuerpo["monto_no_asignado"])
+
+    asignados = {a["producto_id"] for a in cuerpo["asignaciones"]}
+    assert {p["producto_id"] for p in cuerpo["pasos_optimizador"]} <= asignados
+    for paso in cuerpo["pasos_optimizador"]:
+        assert paso["razon_corte"] in {
+            "MONTO_AGOTADO",
+            "LIMITE_SEGURO",
+            "COMPRA_MINIMO",
+            "TRAMO_LLENO",
+        }
+        assert "tramo" in paso and "ten_marginal" in paso
+
+
+async def test_the_uncovered_issuer_is_discarded_with_its_reason(
+    api_lectura: AsyncClient,
+) -> None:
+    """El complemento del test de ausencia: ahora la ausencia se explica."""
+    cuerpo = (
+        await api_lectura.post(
+            OPTIMIZAR,
+            json={"monto_total": "250000", "horizonte_dias": 364, "respetar_seguro": True},
+        )
+    ).json()
+
+    descartes = {d["producto_id"]: d for d in cuerpo["descartes_optimizador"]}
+    mercado_pago = await _producto_id(api_lectura, "mercado-pago-vista")
+    assert mercado_pago in descartes
+    assert descartes[mercado_pago]["razon"] == "SIN_COBERTURA"
+    assert descartes[mercado_pago]["institucion"]
+    assert descartes[mercado_pago]["producto"]
+
+
+async def test_both_endpoints_agree_on_the_alternatives(api_lectura: AsyncClient) -> None:
+    """Mismo monto y horizonte ⇒ las mismas referencias, en ambos caminos."""
+    cetes = await _producto_id(api_lectura, "cetes-364")
+
+    manual = (
+        await api_lectura.post(
+            COMBINACION,
+            json={
+                "monto_total": "100000",
+                "horizonte_dias": 364,
+                "items": [{"producto_id": cetes, "porcentaje": "100"}],
+            },
+        )
+    ).json()
+    optimo = (
+        await api_lectura.post(
+            OPTIMIZAR,
+            json={"monto_total": "100000", "horizonte_dias": 364, "excluir_rojas": True},
+        )
+    ).json()
+
+    assert manual["alternativas"] == optimo["alternativas"]
+
+
 # ─── Tramos por saldo ─────────────────────────────────────────
 
 

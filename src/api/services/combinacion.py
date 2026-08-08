@@ -21,11 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.dependencies import ContextoMercado
+from api.schemas import AlternativaSchema
 from api.services.mappers import tramos_de
 from api.services.tasas_vigentes import tasas_vigentes_por_producto
 from domain.enums import Severidad
+from domain.models import ParametrosFiscales
 from domain.orm import Bandera, Institucion, Producto, Tasa
-from metrics.portfolio import Candidato
+from metrics.portfolio import Candidato, evaluar_reparto, mejor_unico, referencia_cetes
 
 
 class Catalogo:
@@ -125,6 +127,80 @@ async def cargar_catalogo(session: AsyncSession, contexto: ContextoMercado) -> C
     )
 
 
+def alternativas_de(
+    catalogo: Catalogo,
+    *,
+    monto_total: Decimal,
+    horizonte_dias: int,
+    inflacion_anual: Decimal,
+    params: ParametrosFiscales,
+    valor_udi: Decimal,
+    excluir_rojas: bool,
+) -> list[AlternativaSchema]:
+    """Las referencias contra las que se compara un reparto.
+
+    Se calculan sobre el catálogo ya cargado: cero consultas nuevas por
+    request. La etiqueta es descriptiva — el adjetivo «mejor» no viaja en
+    ella; el criterio de selección lo documenta el schema (criterio 4 de los
+    criterios de redacción: el número con su criterio a la vista).
+    """
+    alternativas: list[AlternativaSchema] = []
+
+    cetes = referencia_cetes(
+        catalogo.candidatos,
+        monto_total=monto_total,
+        horizonte_dias=horizonte_dias,
+        excluir_rojas=excluir_rojas,
+    )
+    if cetes is not None:
+        evaluado = evaluar_reparto(
+            [cetes],
+            [monto_total],
+            horizonte_dias=horizonte_dias,
+            inflacion_anual=inflacion_anual,
+            params=params,
+            valor_udi=valor_udi,
+        )
+        etiqueta = (
+            f"Todo en CETES a {cetes.plazo_dias} días"
+            if cetes.plazo_dias is not None
+            else "Todo en CETES"
+        )
+        alternativas.append(
+            AlternativaSchema(
+                clave="todo_cetes",
+                etiqueta=etiqueta,
+                ten_ponderada=evaluado.ten_ponderada,
+                ganancia_real=evaluado.ganancia_real,
+                porcentaje_protegido=evaluado.porcentaje_protegido,
+            )
+        )
+
+    unico = mejor_unico(
+        catalogo.candidatos,
+        monto_total=monto_total,
+        horizonte_dias=horizonte_dias,
+        inflacion_anual=inflacion_anual,
+        params=params,
+        valor_udi=valor_udi,
+        excluir_rojas=excluir_rojas,
+    )
+    if unico is not None:
+        candidato, evaluado = unico
+        producto = catalogo.productos[candidato.producto_id]
+        alternativas.append(
+            AlternativaSchema(
+                clave="mejor_unico",
+                etiqueta=f"Todo en {producto.institucion.nombre} — {producto.nombre}",
+                ten_ponderada=evaluado.ten_ponderada,
+                ganancia_real=evaluado.ganancia_real,
+                porcentaje_protegido=evaluado.porcentaje_protegido,
+            )
+        )
+
+    return alternativas
+
+
 def narrativa(
     bruto: Decimal, isr: Decimal, inflacion: Decimal, real: Decimal, *, instrumentos: int
 ) -> str:
@@ -151,4 +227,4 @@ def narrativa(
     )
 
 
-__all__ = ["Catalogo", "cargar_catalogo", "narrativa"]
+__all__ = ["Catalogo", "alternativas_de", "cargar_catalogo", "narrativa"]

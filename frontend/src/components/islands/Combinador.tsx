@@ -14,6 +14,8 @@
 
 import { useStore } from '@nanostores/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ComparativaAlternativas from '~/components/islands/ComparativaAlternativas';
+import ExplicacionOptimizador from '~/components/islands/ExplicacionOptimizador';
 import { colorSerie, dinero, miles, porcentaje, soloDigitos, tramoEtiqueta } from '~/lib/formato';
 import { limpiar, quitar, repartoInicial, seleccion } from '~/lib/seleccion';
 import type { RespuestaCombinacion } from '~/lib/tipos';
@@ -68,11 +70,28 @@ export default function Combinador() {
   // Evita disparar una petición por tecla mientras se escribe el monto.
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // La huella de la última propuesta del optimizador. Optimizar reescribe la
+  // selección y los pesos, y eso re-dispara el recálculo automático ~300 ms
+  // después: sin esto, el POST a /api/combinacion pisaba el resultado y
+  // mataba lo que sólo el optimizador devuelve (pasos, descartes,
+  // monto_no_asignado). Si la entrada actual ES la propuesta, no hay nada
+  // que recalcular; en cuanto el usuario edita algo, la huella deja de
+  // coincidir y el flujo normal continúa.
+  const huellaOptimizador = useRef<string | null>(null);
+
   const calcular = useCallback(async () => {
     if (instrumentos.length === 0 || !monto || Number(monto) <= 0) {
       setResultado(null);
       return;
     }
+    const huellaActual = JSON.stringify([
+      monto,
+      horizonte,
+      instrumentos.map((i) => i.productoId),
+      instrumentos.map((i) => pesos[i.productoId] ?? '0'),
+    ]);
+    if (huellaOptimizador.current === huellaActual) return;
+    huellaOptimizador.current = null;
     setCargando(true);
     setError(null);
     try {
@@ -141,6 +160,15 @@ export default function Combinador() {
         Object.fromEntries(propuesta.asignaciones.map((a) => [a.producto_id, a.porcentaje])),
       );
       setResultado(propuesta);
+      // Construida desde la propuesta, en el mismo orden en que quedará la
+      // selección: el recálculo que estos set van a disparar la comparará y
+      // se saltará el fetch, conservando la respuesta exacta del optimizador.
+      huellaOptimizador.current = JSON.stringify([
+        monto,
+        horizonte,
+        propuesta.asignaciones.map((a) => a.producto_id),
+        propuesta.asignaciones.map((a) => a.porcentaje),
+      ]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo optimizar');
     } finally {
@@ -335,6 +363,7 @@ export default function Combinador() {
                   >
                     {protegido} %
                   </div>
+                  <div className="tenue-2 stat-sub">{dinero(resultado.monto_protegido)}</div>
                 </div>
               </div>
 
@@ -361,6 +390,8 @@ export default function Combinador() {
 
               <Cascada datos={resultado} />
 
+              <ComparativaAlternativas resultado={resultado} />
+
               <p className="narrativa">{resultado.narrativa}</p>
 
               {Number(resultado.monto_no_asignado) > 0 && (
@@ -379,23 +410,15 @@ export default function Combinador() {
                   <div key={a.producto_id} className="detalle-fila">
                     <i className="punto" style={{ background: colorSerie(indice) }} aria-hidden="true" />
                     <span className="detalle-nombre">{a.institucion.nombre}</span>
+                    {/* La fila dice QUÉ producto es y lleva a su ficha: antes
+                        solo nombraba a la institución. */}
+                    <a className="detalle-producto tenue" href={`/institucion/${a.institucion.slug}`}>
+                      {a.producto}
+                    </a>
                     <span className="tenue">
                       {dinero(a.monto)} ({Number(a.porcentaje).toFixed(1)}%)
                     </span>
                     <span className="positivo">TEN {porcentaje(a.ten)}</span>
-                    {a.escalonada && (
-                      /* La TEN de al lado ya es la efectiva del monto asignado
-                         (la calcula la API); esto solo dice por qué y enseña
-                         la escalera al pasar el cursor. */
-                      <span
-                        className="tenue-2"
-                        title={a.tramos
-                          .map((t) => `${porcentaje(t.tasa_nominal)} ${tramoEtiqueta(t.hasta)}`)
-                          .join(' · ')}
-                      >
-                        escalonada
-                      </span>
-                    )}
                     <span className="tenue">real {dinero(a.cascada.ganancia_real)}</span>
                     <span
                       className="cobertura"
@@ -405,15 +428,32 @@ export default function Combinador() {
                         ? `Cubierto (${a.cobertura.tipo === 'SOBERANO' ? 'soberano' : a.cobertura.tipo})`
                         : `Excede cobertura ${dinero(a.monto_expuesto)}`}
                     </span>
-                    {a.advertencia_liquidez && (
-                      <span className="aviso-liquidez" title={a.advertencia_liquidez}>
-                        vence después del horizonte
+                    {a.escalonada && (
+                      /* La TEN de arriba ya es la efectiva del monto asignado
+                         (la calcula la API); los chips enseñan la escalera
+                         que la explica — visibles, no en un title que el
+                         táctil no puede abrir. */
+                      <span className="detalle-tramos">
+                        {a.tramos.map((t) => (
+                          <span key={t.desde} className="chip-tramo">
+                            {porcentaje(t.tasa_nominal)} {tramoEtiqueta(t.hasta)}
+                          </span>
+                        ))}
                       </span>
+                    )}
+                    {a.advertencia_liquidez && (
+                      <span className="aviso-liquidez">{a.advertencia_liquidez}</span>
                     )}
                   </div>
                 ))}
               </div>
             </div>
+
+            <ExplicacionOptimizador
+              pasos={resultado.pasos_optimizador}
+              descartes={resultado.descartes_optimizador}
+              asignaciones={resultado.asignaciones}
+            />
 
             <div className="avisos">
               <div className="aviso-caja">
@@ -463,7 +503,10 @@ function Cascada({ datos }: { datos: RespuestaCombinacion }) {
       ancho: ancho(isr),
       color: 'var(--aviso)',
       texto: 'var(--aviso)',
-      sub: `Retención ${porcentaje(datos.asignaciones[0]?.cascada.ten ? Number(datos.asignaciones[0].cascada.tasa_nominal) - Number(datos.asignaciones[0].cascada.ten) : 0)} anual sobre el capital`,
+      // Antes derivaba la tasa restando nominal − TEN **del primer
+      // instrumento** y la presentaba como global: en una mezcla heterogénea
+      // describía a uno solo. La tasa exacta ya viaja en la nota fiscal.
+      sub: 'Retención de ISR sobre el capital invertido; la tasa exacta está en la nota fiscal.',
     },
     {
       etiqueta: 'Efecto inflación',
@@ -630,6 +673,7 @@ const ESTILOS = `
     color: var(--texto-tenue-2);
   }
   .stat-valor { font-size: clamp(20px, 3vw, 30px); }
+  .stat-sub { margin-top: 2px; font-size: 11px; }
   .positivo { color: var(--positivo); }
 
   .asignacion { margin-bottom: 16px; }
@@ -684,10 +728,23 @@ const ESTILOS = `
     min-width: 130px; font-family: var(--fuente-titulo); font-weight: 600;
     font-size: 13px; color: var(--texto-fuerte);
   }
+  .detalle-producto {
+    color: inherit; text-decoration: underline dotted; text-underline-offset: 2px;
+  }
+  .detalle-producto:hover, .detalle-producto:focus-visible { color: var(--marca-200); }
+  .detalle-tramos { display: flex; flex-wrap: wrap; gap: 5px; flex-basis: 100%; }
+  /* Compartido con el panel de explicación: su hoja sólo se monta cuando hay
+     pasos, y estos chips también aparecen en mezclas manuales. */
+  .chip-tramo {
+    padding: 1px 8px; border-radius: var(--radio-pastilla); font-size: 11px;
+    color: var(--marca-200); background: rgba(167, 224, 219, 0.1);
+    white-space: nowrap;
+  }
   .cobertura { margin-left: auto; }
   .aviso-liquidez {
-    padding: 1px 8px; border-radius: var(--radio-pastilla);
+    flex-basis: 100%; padding: 4px 10px; border-radius: var(--radio-sub);
     background: var(--aviso-fondo); color: var(--aviso); font-size: 11px;
+    line-height: 1.4;
   }
 
   .avisos { display: grid; gap: 10px; margin-top: 14px; }
