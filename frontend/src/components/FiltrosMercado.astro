@@ -36,21 +36,15 @@ const PLAZOS = [
  * Sin IFPE este filtro no podía llegar a Mercado Pago; sin BANCO_TRADICIONAL
  * a propósito — cero instituciones en el catálogo, sería un filtro que
  * garantiza vacío. El seguro de depósito ya no es un control: se deriva por
- * completo de la categoría, la columna Cobertura lo dice fila por fila, y el
- * saneador de la página conserva `?seguro=` por las URLs ya indexadas.
+ * completo de la categoría, la bandera «Sin seguro de depósito» lo marca fila
+ * por fila, y el saneador de la página conserva `?seguro=` por las URLs ya
+ * indexadas.
  */
 const CATEGORIAS = [
   ['GOBIERNO', 'Gobierno'],
   ['BANCO_DIGITAL', 'Banco digital'],
   ['SOFIPO', 'SOFIPO'],
   ['IFPE', 'IFPE (sin seguro)'],
-];
-
-const ORDENES = [
-  ['ten', 'Mejor TEN'],
-  ['tasa_nominal', 'Tasa nominal'],
-  ['gat', 'GAT'],
-  ['cobertura', 'Cobertura'],
 ];
 ---
 
@@ -99,19 +93,13 @@ const ORDENES = [
     />
   </div>
 
-  <div class="campo">
-    <label for="f-orden">Ordenar por</label>
-    <select id="f-orden" name="orden" class="control">
-      {
-        ORDENES.map(([valor, etiqueta]) => (
-          <option value={valor} selected={filtros.orden === valor}>
-            {etiqueta}
-          </option>
-        ))
-      }
-    </select>
-  </div>
-
+  {
+    /* «Ordenar por» dejó de ser un control cuando la tabla se quedó con una
+       sola columna de tasa: TEN ordena igual que la nominal (toda la base
+       fiscal del catálogo es CAPITAL) y GAT o cobertura ordenarían por
+       columnas que ya no se ven. El saneador de la página conserva `?orden=`
+       por las URLs ya indexadas: siguen respondiendo con ese orden aplicado. */
+  }
   <label class="toggle" data-toggle>
     <input type="checkbox" name="sin_banderas" value="true" checked={filtros.sinBanderas} />
     <span>Solo sin banderas</span>

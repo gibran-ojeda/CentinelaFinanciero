@@ -23,31 +23,13 @@ interface Props {
 }
 const { filas, hayFiltros = false, monto = null } = Astro.props;
 
-const ETIQUETA_SEGURO: Record<string, string> = {
-  SOBERANO: 'Soberano',
-  IPAB: 'IPAB',
-  PROSOFIPO: 'PROSOFIPO',
-  NINGUNO: 'Sin cobertura',
-};
-
-function coberturaCorta(fila: FilaComparador): string {
-  const { cobertura } = fila;
-  if (cobertura.sin_limite) return 'Sin límite';
-  if (cobertura.sin_cobertura) return 'Sin protección';
-  const n = Number(cobertura.limite_mxn);
-  return n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)} M` : `$${Math.round(n / 1_000)} mil`;
-}
-
 /**
- * Con monto consultado, las cifras son las efectivas de ESE monto — un «13%
+ * Con monto consultado, la cifra es la efectiva de ESE monto — un «13%
  * hasta $30 mil» no puede presumirle 13% a quien invierte medio millón. Sin
- * monto, las titulares (el primer tramo), con su marca de alcance al lado.
+ * monto, la titular (el primer tramo), con su marca de alcance al lado.
  */
 function tasaMostrada(fila: FilaComparador): string {
   return monto ? (fila.tasa_efectiva ?? fila.tasa_nominal) : fila.tasa_nominal;
-}
-function tenMostrada(fila: FilaComparador): string {
-  return monto ? (fila.ten_efectiva ?? fila.ten) : fila.ten;
 }
 function marcaTramo(fila: FilaComparador): string | null {
   if (!fila.escalonada) return null;
@@ -84,9 +66,6 @@ function escaleraTexto(fila: FilaComparador): string {
       <span role="columnheader">Producto</span>
       <span role="columnheader">Plazo</span>
       <span role="columnheader" class="der">Nominal</span>
-      <span role="columnheader" class="der acento">TEN</span>
-      <span role="columnheader" class="der">GAT</span>
-      <span role="columnheader">Cobertura</span>
       <span role="columnheader">Banderas</span>
       <span role="columnheader">Dato al</span>
     </div>
@@ -117,17 +96,6 @@ function escaleraTexto(fila: FilaComparador): string {
           <span class="der num" role="cell">
             {porcentaje(tasaMostrada(fila))}
             {fila.escalonada && <span class="marca-tramo tenue-2">{marcaTramo(fila)}</span>}
-          </span>
-          <span class="der ten cifra" role="cell">
-            {porcentaje(tenMostrada(fila))}
-            {fila.escalonada && <span class="marca-tramo tenue-2">{marcaTramo(fila)}</span>}
-          </span>
-          <span class="der num" role="cell">
-            {porcentaje(fila.gat.nominal)}
-            {fila.gat.es_calculada && <span class="equiv tenue-2">(equiv.)</span>}
-          </span>
-          <span class="cobertura tenue" role="cell">
-            {ETIQUETA_SEGURO[fila.cobertura.tipo]} · {coberturaCorta(fila)}
           </span>
           <span class="banderas" role="cell">
             {fila.banderas.map((bandera) => (
@@ -194,20 +162,9 @@ function escaleraTexto(fila: FilaComparador): string {
 
         <div class="tarjeta-cifras">
           <div>
-            <div class="etiqueta-cifra">TEN</div>
-            <div class="cifra grande ten">{porcentaje(tenMostrada(fila))}</div>
-            {fila.escalonada && <div class="marca-tramo tenue-2">{marcaTramo(fila)}</div>}
-          </div>
-          <div>
-            <div class="etiqueta-cifra">Nominal</div>
+            <div class="etiqueta-cifra">Tasa</div>
             <div class="cifra grande">{porcentaje(tasaMostrada(fila))}</div>
-          </div>
-          <div>
-            <div class="etiqueta-cifra">GAT</div>
-            <div class="cifra grande">
-              {porcentaje(fila.gat.nominal)}
-              {fila.gat.es_calculada && <span class="equiv tenue-2">(equiv.)</span>}
-            </div>
+            {fila.escalonada && <div class="marca-tramo tenue-2">{marcaTramo(fila)}</div>}
           </div>
         </div>
 
@@ -215,9 +172,6 @@ function escaleraTexto(fila: FilaComparador): string {
         {fila.condiciones && <div class="escalera-tarjeta tenue-2">{fila.condiciones}</div>}
 
         <div class="tarjeta-pie">
-          <span class="tenue">
-            {ETIQUETA_SEGURO[fila.cobertura.tipo]} · {coberturaCorta(fila)}
-          </span>
           <span class="tenue-2 tarjeta-fecha">
             dato:{' '}
             {fila.procedencia.fuente_url ? (
@@ -262,7 +216,7 @@ function escaleraTexto(fila: FilaComparador): string {
     box-shadow: var(--sombra-md);
   }
   .tabla {
-    --cols: 46px 1.4fr 1.35fr 0.55fr 0.75fr 0.75fr 0.95fr 1.05fr 1.15fr 0.7fr;
+    --cols: 46px 1.5fr 1.9fr 0.55fr 0.85fr 1.2fr 0.75fr;
   }
   .cabecera-tabla,
   .fila {
@@ -345,22 +299,6 @@ function escaleraTexto(fila: FilaComparador): string {
   .der {
     text-align: right;
   }
-  .acento {
-    color: var(--marca-200);
-  }
-  .ten {
-    color: var(--positivo);
-  }
-  .fila .ten {
-    font-size: 15px;
-  }
-  .equiv {
-    font-size: 10px;
-    font-weight: 400;
-  }
-  .cobertura {
-    font-size: 12px;
-  }
   .banderas {
     display: flex;
     flex-wrap: wrap;
@@ -437,9 +375,6 @@ function escaleraTexto(fila: FilaComparador): string {
     margin-bottom: 10px;
   }
   .tarjeta-cifras {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
     padding-top: 10px;
     border-top: 1px solid var(--linea);
   }
