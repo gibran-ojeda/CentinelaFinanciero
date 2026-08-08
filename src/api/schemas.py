@@ -27,6 +27,8 @@ from domain.enums import (
     FuenteTasa,
     Liquidez,
     NivelCapitalizacion,
+    RazonCorte,
+    RazonDescarte,
     Severidad,
     TipoBandera,
     TipoInstrumento,
@@ -403,6 +405,57 @@ class AsignacionSchema(Esquema):
     procedencia: Procedencia
 
 
+class PasoOptimizadorSchema(Esquema):
+    """Una vuelta del water-filling: dónde fue el dinero y qué lo detuvo."""
+
+    producto_id: int
+    indice_tramo: int
+    tramo: TramoSchema
+    ten_marginal: Decimal = Field(
+        description=(
+            "La oferta que ganó la vuelta. En una apertura con mínimo es la TEN "
+            "de la ponderada del mínimo — el costo real de entrar, no el del "
+            "tramo alto."
+        )
+    )
+    monto: Decimal
+    razon_corte: RazonCorte
+    compra_minimo: bool = Field(
+        description="La apertura compró el mínimo del producto, cruzando tramos"
+    )
+
+
+class DescarteSchema(Esquema):
+    """Un producto que el optimizador dejó fuera, con su porqué.
+
+    Lleva los nombres resueltos: un descarte no está en `asignaciones` y el
+    cliente no tendría con qué mostrarlo.
+    """
+
+    producto_id: int
+    producto: str
+    institucion: str
+    razon: RazonDescarte
+
+
+class AlternativaSchema(Esquema):
+    """Una referencia de comparación evaluada con el monto completo.
+
+    `todo_cetes` es el CETES de mayor plazo que cabe en el horizonte y en el
+    capital; `mejor_unico` es el elegible con mayor ganancia real a monto
+    completo (empates al menor id). Ninguna se filtra por el toggle de
+    seguro: cada una lleva su propio porcentaje protegido, y ocultar el
+    instrumento de mayor ganancia describiría mal el mercado. Las banderas
+    rojas sí se excluyen cuando la solicitud lo pide.
+    """
+
+    clave: str = Field(description='"todo_cetes" o "mejor_unico"')
+    etiqueta: str
+    ten_ponderada: Decimal
+    ganancia_real: Decimal
+    porcentaje_protegido: Decimal
+
+
 class RespuestaCombinacion(Esquema):
     monto_total: Decimal = Field(description="Lo efectivamente repartido")
     monto_no_asignado: Decimal = Field(
@@ -428,6 +481,26 @@ class RespuestaCombinacion(Esquema):
     )
 
     asignaciones: list[AsignacionSchema]
+    pasos_optimizador: list[PasoOptimizadorSchema] = Field(
+        default_factory=list,
+        description=(
+            "El llenado del optimizador, vuelta a vuelta: es la explicación del "
+            "reparto. Vacío en /combinacion — una mezcla manual no tiene pasos."
+        ),
+    )
+    descartes_optimizador: list[DescarteSchema] = Field(
+        default_factory=list,
+        description=(
+            "Qué quedó fuera del reparto automático y por qué. Vacío en " "/combinacion."
+        ),
+    )
+    alternativas: list[AlternativaSchema] = Field(
+        default_factory=list,
+        description=(
+            "Referencias de comparación evaluadas en el mismo contexto. Las "
+            "devuelven los dos endpoints."
+        ),
+    )
     narrativa: str
     nota_fiscal: str
 
@@ -523,7 +596,9 @@ __all__ = [
     "AsignacionSchema",
     "BanderaSchema",
     "CascadaSchema",
+    "AlternativaSchema",
     "CoberturaSchema",
+    "DescarteSchema",
     "DetalleInstitucion",
     "FilaComparador",
     "FrescuraFuente",
@@ -532,6 +607,7 @@ __all__ = [
     "IndicadoresSchema",
     "InstitucionResumen",
     "ItemCombinacion",
+    "PasoOptimizadorSchema",
     "Procedencia",
     "ProductoDetalle",
     "ResolucionRevision",

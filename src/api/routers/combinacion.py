@@ -16,6 +16,7 @@ directamente recibe la misma advertencia que quien mira la página.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -23,14 +24,17 @@ from fastapi import APIRouter
 
 from api.dependencies import ContextoDep, LecturaDep, SessionDep
 from api.schemas import (
+    AlternativaSchema,
     AsignacionSchema,
     CascadaSchema,
+    DescarteSchema,
+    PasoOptimizadorSchema,
     RespuestaCombinacion,
     SolicitudCombinacion,
     SolicitudOptimizador,
     TramoSchema,
 )
-from api.services.combinacion import Catalogo, cargar_catalogo, narrativa
+from api.services.combinacion import Catalogo, alternativas_de, cargar_catalogo, narrativa
 from api.services.mappers import (
     bandera_desde_orm,
     cobertura_schema,
@@ -40,6 +44,8 @@ from api.services.mappers import (
 from metrics.portfolio import (
     Asignacion,
     Combinacion,
+    Descarte,
+    PasoOptimizacion,
     evaluar_combinacion,
     evaluar_reparto,
     optimizar,
@@ -77,6 +83,32 @@ def _asignacion_schema(asignacion: Asignacion, catalogo: Catalogo) -> Asignacion
     )
 
 
+def _paso_schema(paso: PasoOptimizacion) -> PasoOptimizadorSchema:
+    return PasoOptimizadorSchema(
+        producto_id=paso.producto_id,
+        indice_tramo=paso.indice_tramo,
+        tramo=TramoSchema(
+            desde=paso.tramo.desde, hasta=paso.tramo.hasta, tasa_nominal=paso.tramo.tasa_nominal
+        ),
+        ten_marginal=paso.ten_marginal,
+        monto=paso.monto,
+        razon_corte=paso.razon_corte,
+        compra_minimo=paso.compra_minimo,
+    )
+
+
+def _descarte_schema(descarte: Descarte, catalogo: Catalogo) -> DescarteSchema:
+    # Todo descarte proviene de `catalogo.candidatos`, así que su producto
+    # siempre está en el índice del catálogo.
+    producto = catalogo.productos[descarte.producto_id]
+    return DescarteSchema(
+        producto_id=descarte.producto_id,
+        producto=producto.nombre,
+        institucion=producto.institucion.nombre,
+        razon=descarte.razon,
+    )
+
+
 def _respuesta(
     combinacion: Combinacion,
     catalogo: Catalogo,
@@ -85,6 +117,9 @@ def _respuesta(
     valor_udi: Decimal,
     nota_fiscal: str,
     monto_no_asignado: Decimal = Decimal("0.00"),
+    pasos: Sequence[PasoOptimizadorSchema] = (),
+    descartes: Sequence[DescarteSchema] = (),
+    alternativas: Sequence[AlternativaSchema] = (),
 ) -> RespuestaCombinacion:
     return RespuestaCombinacion(
         monto_total=combinacion.monto_total,
@@ -99,6 +134,9 @@ def _respuesta(
         monto_protegido=combinacion.monto_protegido,
         porcentaje_protegido=combinacion.porcentaje_protegido,
         asignaciones=[_asignacion_schema(a, catalogo) for a in combinacion.asignaciones],
+        pasos_optimizador=list(pasos),
+        descartes_optimizador=list(descartes),
+        alternativas=list(alternativas),
         narrativa=narrativa(
             combinacion.rendimiento_bruto,
             combinacion.isr_retenido,
@@ -120,6 +158,9 @@ def _armar(
     *,
     inflacion: Decimal,
     monto_no_asignado: Decimal = Decimal("0.00"),
+    pasos: Sequence[PasoOptimizadorSchema] = (),
+    descartes: Sequence[DescarteSchema] = (),
+    alternativas: Sequence[AlternativaSchema] = (),
 ) -> RespuestaCombinacion:
     # La nota fiscal sale de la primera asignación porque el tratamiento es el
     # mismo para todo el catálogo actual (retención sobre capital, §4.2). Si la
@@ -137,6 +178,9 @@ def _armar(
         valor_udi=contexto.valor_udi,
         nota_fiscal=nota,
         monto_no_asignado=monto_no_asignado,
+        pasos=pasos,
+        descartes=descartes,
+        alternativas=alternativas,
     )
 
 
@@ -176,6 +220,18 @@ async def combinacion(
         catalogo,
         contexto,
         inflacion=inflacion,
+        # `excluir_rojas=True` fijo: esta solicitud no trae el toggle, y una
+        # referencia con bandera roja compararía contra lo que el defecto
+        # seguro del optimizador excluye.
+        alternativas=alternativas_de(
+            catalogo,
+            monto_total=solicitud.monto_total,
+            horizonte_dias=solicitud.horizonte_dias,
+            inflacion_anual=inflacion,
+            params=contexto.params_fiscales,
+            valor_udi=contexto.valor_udi,
+            excluir_rojas=True,
+        ),
     )
 
 
@@ -230,6 +286,17 @@ async def optimizador(
         contexto,
         inflacion=inflacion,
         monto_no_asignado=reparto.monto_no_asignado,
+        pasos=[_paso_schema(p) for p in reparto.pasos],
+        descartes=[_descarte_schema(d, catalogo) for d in reparto.descartes],
+        alternativas=alternativas_de(
+            catalogo,
+            monto_total=solicitud.monto_total,
+            horizonte_dias=solicitud.horizonte_dias,
+            inflacion_anual=inflacion,
+            params=contexto.params_fiscales,
+            valor_udi=contexto.valor_udi,
+            excluir_rojas=solicitud.excluir_rojas,
+        ),
     )
 
 
