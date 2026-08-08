@@ -202,6 +202,27 @@ async def test_products_without_a_rate_still_appear(api_lectura: AsyncClient) ->
     assert {p["plazo_dias"] for p in cuerpo["productos"]} == {28, 91, 182, 364}
 
 
+async def test_the_detail_carries_the_rate_small_print(api_lectura: AsyncClient) -> None:
+    """La ficha es la capa de profundidad: no puede decir menos que la tabla.
+
+    El comparador lleva `condiciones` (Tasa.notas) en cada fila desde los
+    topes de saldo; `ProductoDetalle` no lo exponía, y la letra pequeña de
+    Revolut —la membresía que condiciona su 15 %— desaparecía justo en la
+    vista que existe para contarlo todo.
+    """
+    cuerpo = (await api_lectura.get(f"/api/v1/instituciones/{await _id_de('Revolut')}")).json()
+
+    vista = next(p for p in cuerpo["productos"] if p["slug"] == "revolut-vista")
+    assert vista["condiciones"] is not None
+    assert vista["condiciones"].startswith("Tasa mejorada de 30 dias")
+
+    # Sin tasa no hay observación de la que copiar letra pequeña.
+    hey = (await api_lectura.get(f"/api/v1/instituciones/{await _id_de('Hey Banco')}")).json()
+    sin_tasa = [p for p in hey["productos"] if p["procedencia"] is None]
+    assert sin_tasa, "el seed deja los pagarés de Hey sin tasa publicable"
+    assert all(p["condiciones"] is None for p in sin_tasa)
+
+
 async def test_cetes_get_a_computed_gat(api_lectura: AsyncClient) -> None:
     """§4.4: CETES no publica GAT, así que se calcula y se marca como tal."""
     cuerpo = (

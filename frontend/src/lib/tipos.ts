@@ -157,6 +157,8 @@ export interface ProductoDetalle {
   ten: string | null;
   gat: Gat | null;
   procedencia: Procedencia | null;
+  /** La letra pequeña de la observación, igual que en la fila del comparador. */
+  condiciones: string | null;
   escalonada: boolean;
   tramos: TramoTasa[];
 }

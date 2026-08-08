@@ -125,6 +125,7 @@ async def detalle(
                 ),
                 gat=gat_schema(gat) if gat else None,
                 procedencia=procedencia(tasa) if tasa else None,
+                condiciones=tasa.notas if tasa else None,
                 escalonada=bool(tasa.tramos) if tasa else False,
                 tramos=tramos_schema(tasa) if tasa else [],
             )

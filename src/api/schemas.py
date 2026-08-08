@@ -240,6 +240,14 @@ class ProductoDetalle(Esquema):
     procedencia: Procedencia | None = Field(
         description="null si el producto no tiene todavía una tasa publicable"
     )
+    condiciones: str | None = Field(
+        default=None,
+        description=(
+            "La letra pequeña de esta observación, igual que en la fila del "
+            "comparador. La ficha es la capa de profundidad: no puede decir "
+            "menos que la tabla."
+        ),
+    )
     escalonada: bool = False
     tramos: list[TramoSchema] = Field(default_factory=list)
 
