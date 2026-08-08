@@ -63,7 +63,12 @@ function marcaTramo(producto: ProductoDetalle): string | null {
             <div class="fila-barra">
               <span class="nombre tenue" title={producto.nombre}>
                 {producto.nombre}
-                <span class="tenue-2 plazo"> {plazoCorto(producto.plazo_dias, producto.tipo)}</span>
+                {/* Separador explícito: el espacio de un nodo de texto se
+                    colapsa al compilar y el sufijo quedaba pegado al nombre
+                    («…28 días28 d»). El sufijo se queda aunque parezca
+                    redundante: productos como «Cuenta» no traen el plazo en
+                    el nombre. */}
+                <span class="tenue-2 plazo">{' · '}{plazoCorto(producto.plazo_dias, producto.tipo)}</span>
               </span>
               <span class="pista" aria-hidden="true">
                 <span class="barra" style={`width: ${ancho(producto)}`} />
