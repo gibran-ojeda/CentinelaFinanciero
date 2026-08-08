@@ -1,0 +1,98 @@
+---
+/**
+ * Las condiciones de una tasa como chips.
+ *
+ * Primero los tramos de la escalera —son la estructura de la tasa—, después
+ * la letra pequeña partida por « · », el separador que produce la ingesta
+ * (`rates_agent/escalera.py`). Una carga manual sin separador es un solo
+ * chip truncado con el texto completo en `title` y en el DOM, donde sí lo
+ * leen los lectores de pantalla.
+ *
+ * Formato pastilla como las banderas, pero sin punto de severidad y con un
+ * ciclo de color propio sin los tonos de alarma: una condición no es un
+ * aviso, y pintarla de ámbar la convertiría en uno.
+ */
+import { colorChip, etiquetaChipTramo } from '~/lib/formato';
+import type { TramoTasa } from '~/lib/tipos';
+
+interface Props {
+  tramos?: TramoTasa[];
+  condiciones?: string | null;
+  /** Tope de chips visibles; el resto se pliega en «+N más» hacia `hrefMas`. */
+  max?: number;
+  hrefMas?: string | null;
+}
+const { tramos = [], condiciones = null, max, hrefMas = null } = Astro.props;
+
+interface Chip {
+  texto: string;
+  /** El texto completo cuando el chip lo trunca; los de tramo nunca. */
+  titulo: string | null;
+}
+
+const chips: Chip[] = [
+  ...tramos.map((tramo) => ({ texto: etiquetaChipTramo(tramo), titulo: null })),
+  ...(condiciones ?? '')
+    .split(' · ')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+    .map((parte) => ({ texto: parte, titulo: parte })),
+];
+
+const visibles = max === undefined ? chips : chips.slice(0, max);
+const ocultos = chips.length - visibles.length;
+---
+
+{chips.length === 0 && <span class="tenue-2">—</span>}
+{
+  chips.length > 0 && (
+    <span class="chips">
+      {visibles.map((chip, indice) => (
+        <span class="chip" style={`--chip: ${colorChip(indice)}`} title={chip.titulo}>
+          {chip.texto}
+        </span>
+      ))}
+      {ocultos > 0 &&
+        (hrefMas ? (
+          <a class="chip mas" href={hrefMas} title="Ver todas las condiciones en la ficha">
+            +{ocultos} más
+          </a>
+        ) : (
+          <span class="chip mas">+{ocultos} más</span>
+        ))}
+    </span>
+  )
+}
+
+<style>
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-width: 0;
+  }
+  .chip {
+    display: inline-block;
+    max-width: 100%;
+    padding: 2px 9px;
+    border-radius: var(--radio-pastilla);
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--chip);
+    background: color-mix(in srgb, var(--chip) 13%, transparent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mas {
+    color: var(--texto-tenue);
+    background: transparent;
+    border: 1px dashed var(--linea-fuerte);
+    text-decoration: none;
+  }
+  a.mas:hover,
+  a.mas:focus-visible {
+    color: var(--texto);
+    border-color: var(--marca-300);
+  }
+</style>
