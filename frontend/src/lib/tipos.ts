@@ -218,6 +218,46 @@ export interface Asignacion {
   procedencia: Procedencia;
 }
 
+export type RazonCorte = 'MONTO_AGOTADO' | 'LIMITE_SEGURO' | 'COMPRA_MINIMO' | 'TRAMO_LLENO';
+
+export type RazonDescarte =
+  | 'PLAZO_MAYOR_AL_HORIZONTE'
+  | 'MINIMO_SUPERA_MONTO'
+  | 'BANDERA_ROJA'
+  | 'ESCALERA_CRECIENTE'
+  | 'SIN_COBERTURA'
+  | 'EMISOR_LLENO'
+  | 'MINIMO_INALCANZABLE';
+
+/** Una vuelta del water-filling: dónde fue el dinero y qué lo detuvo. */
+export interface PasoOptimizador {
+  producto_id: number;
+  indice_tramo: number;
+  tramo: TramoTasa;
+  /** En una apertura con mínimo, la TEN de la ponderada del mínimo. */
+  ten_marginal: string;
+  monto: string;
+  razon_corte: RazonCorte;
+  compra_minimo: boolean;
+}
+
+/** Un producto que el optimizador dejó fuera, con nombres ya resueltos. */
+export interface DescarteOptimizador {
+  producto_id: number;
+  producto: string;
+  institucion: string;
+  razon: RazonDescarte;
+}
+
+/** Una referencia de comparación evaluada con el monto completo. */
+export interface Alternativa {
+  clave: 'todo_cetes' | 'mejor_unico' | (string & {});
+  etiqueta: string;
+  ten_ponderada: string;
+  ganancia_real: string;
+  porcentaje_protegido: string;
+}
+
 export interface RespuestaCombinacion {
   monto_total: string;
   monto_no_asignado: string;
@@ -231,6 +271,12 @@ export interface RespuestaCombinacion {
   monto_protegido: string;
   porcentaje_protegido: string;
   asignaciones: Asignacion[];
+  /** El llenado del optimizador, vuelta a vuelta. Vacío en /combinacion. */
+  pasos_optimizador: PasoOptimizador[];
+  /** Qué quedó fuera del reparto automático. Vacío en /combinacion. */
+  descartes_optimizador: DescarteOptimizador[];
+  /** Referencias de comparación; las devuelven los dos endpoints. */
+  alternativas: Alternativa[];
   narrativa: string;
   nota_fiscal: string;
   inflacion_anual: string;

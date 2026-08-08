@@ -14,6 +14,7 @@
 
 import { useStore } from '@nanostores/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ExplicacionOptimizador from '~/components/islands/ExplicacionOptimizador';
 import { colorSerie, dinero, miles, porcentaje, soloDigitos, tramoEtiqueta } from '~/lib/formato';
 import { limpiar, quitar, repartoInicial, seleccion } from '~/lib/seleccion';
 import type { RespuestaCombinacion } from '~/lib/tipos';
@@ -68,11 +69,28 @@ export default function Combinador() {
   // Evita disparar una petición por tecla mientras se escribe el monto.
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // La huella de la última propuesta del optimizador. Optimizar reescribe la
+  // selección y los pesos, y eso re-dispara el recálculo automático ~300 ms
+  // después: sin esto, el POST a /api/combinacion pisaba el resultado y
+  // mataba lo que sólo el optimizador devuelve (pasos, descartes,
+  // monto_no_asignado). Si la entrada actual ES la propuesta, no hay nada
+  // que recalcular; en cuanto el usuario edita algo, la huella deja de
+  // coincidir y el flujo normal continúa.
+  const huellaOptimizador = useRef<string | null>(null);
+
   const calcular = useCallback(async () => {
     if (instrumentos.length === 0 || !monto || Number(monto) <= 0) {
       setResultado(null);
       return;
     }
+    const huellaActual = JSON.stringify([
+      monto,
+      horizonte,
+      instrumentos.map((i) => i.productoId),
+      instrumentos.map((i) => pesos[i.productoId] ?? '0'),
+    ]);
+    if (huellaOptimizador.current === huellaActual) return;
+    huellaOptimizador.current = null;
     setCargando(true);
     setError(null);
     try {
@@ -141,6 +159,15 @@ export default function Combinador() {
         Object.fromEntries(propuesta.asignaciones.map((a) => [a.producto_id, a.porcentaje])),
       );
       setResultado(propuesta);
+      // Construida desde la propuesta, en el mismo orden en que quedará la
+      // selección: el recálculo que estos set van a disparar la comparará y
+      // se saltará el fetch, conservando la respuesta exacta del optimizador.
+      huellaOptimizador.current = JSON.stringify([
+        monto,
+        horizonte,
+        propuesta.asignaciones.map((a) => a.producto_id),
+        propuesta.asignaciones.map((a) => a.porcentaje),
+      ]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo optimizar');
     } finally {
@@ -414,6 +441,12 @@ export default function Combinador() {
                 ))}
               </div>
             </div>
+
+            <ExplicacionOptimizador
+              pasos={resultado.pasos_optimizador}
+              descartes={resultado.descartes_optimizador}
+              asignaciones={resultado.asignaciones}
+            />
 
             <div className="avisos">
               <div className="aviso-caja">
