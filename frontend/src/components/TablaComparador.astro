@@ -196,6 +196,13 @@ function marcaTramo(fila: FilaComparador): string | null {
     gap: 10px;
     align-items: center;
   }
+  /* Un hijo de grid no encoge por debajo de su min-content, y un chip con
+     nowrap puede medir más que su pista entera: sin esto, la celda de
+     condiciones empuja la fila más allá del contenedor y el overflow:hidden
+     del envoltorio recorta columnas en silencio. */
+  .fila > * {
+    min-width: 0;
+  }
   .cabecera-tabla {
     padding: 12px 18px;
     border-bottom: 1px solid var(--linea);
@@ -265,6 +272,7 @@ function marcaTramo(fila: FilaComparador): string | null {
     gap: 14px;
   }
   .tarjeta {
+    min-width: 0;
     padding: 16px;
     border: 1px solid var(--linea);
     border-radius: var(--radio-tarjeta);
