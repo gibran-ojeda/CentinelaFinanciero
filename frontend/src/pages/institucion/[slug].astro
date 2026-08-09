@@ -288,6 +288,11 @@ const jsonLd = {
               />
             )}
             {producto.escalonada && <BarraEscalera tramos={producto.tramos} />}
+            {producto.penalizacion_retiro && (
+              <p class="producto-retiro">
+                <strong>Al retirar:</strong> {producto.penalizacion_retiro}
+              </p>
+            )}
           </div>
         ))
       }
@@ -534,6 +539,15 @@ const jsonLd = {
     display: flex;
     flex-wrap: wrap;
     gap: 4px 18px;
+  }
+  /* La letra pequeña del retiro: prosa secundaria al pie de la tarjeta. */
+  .producto-retiro {
+    margin: 0;
+    font-size: 12px;
+    color: var(--texto-tenue);
+  }
+  .producto-retiro strong {
+    color: var(--texto);
   }
   .claro {
     color: var(--texto-fuerte);
