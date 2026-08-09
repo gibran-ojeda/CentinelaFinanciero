@@ -257,6 +257,7 @@ async def optimizador(
         valor_udi=contexto.valor_udi,
         respetar_seguro=solicitud.respetar_seguro,
         excluir_rojas=solicitud.excluir_rojas,
+        solo_vista=solicitud.solo_vista,
     )
 
     inflacion = (
@@ -296,6 +297,7 @@ async def optimizador(
             params=contexto.params_fiscales,
             valor_udi=contexto.valor_udi,
             excluir_rojas=solicitud.excluir_rojas,
+            solo_vista=solicitud.solo_vista,
         ),
     )
 

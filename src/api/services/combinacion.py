@@ -136,13 +136,17 @@ def alternativas_de(
     params: ParametrosFiscales,
     valor_udi: Decimal,
     excluir_rojas: bool,
+    solo_vista: bool = False,
 ) -> list[AlternativaSchema]:
     """Las referencias contra las que se compara un reparto.
 
     Se calculan sobre el catálogo ya cargado: cero consultas nuevas por
     request. La etiqueta es descriptiva — el adjetivo «mejor» no viaja en
     ella; el criterio de selección lo documenta el schema (criterio 4 de los
-    criterios de redacción: el número con su criterio a la vista).
+    criterios de redacción: el número con su criterio a la vista). Con
+    `solo_vista`, las referencias juegan con la misma restricción que el
+    reparto: la de CETES desaparece (todo CETES es a plazo) y el único pasa a
+    ser el mejor a la vista.
     """
     alternativas: list[AlternativaSchema] = []
 
@@ -151,6 +155,7 @@ def alternativas_de(
         monto_total=monto_total,
         horizonte_dias=horizonte_dias,
         excluir_rojas=excluir_rojas,
+        solo_vista=solo_vista,
     )
     if cetes is not None:
         evaluado = evaluar_reparto(
@@ -184,6 +189,7 @@ def alternativas_de(
         params=params,
         valor_udi=valor_udi,
         excluir_rojas=excluir_rojas,
+        solo_vista=solo_vista,
     )
     if unico is not None:
         candidato, evaluado = unico

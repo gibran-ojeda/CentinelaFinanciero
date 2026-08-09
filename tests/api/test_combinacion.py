@@ -335,6 +335,36 @@ async def test_the_uncovered_issuer_is_discarded_with_its_reason(
     assert descartes[mercado_pago]["producto"]
 
 
+async def test_the_sight_only_optimiser_allocates_only_sight_products(
+    api_lectura: AsyncClient,
+) -> None:
+    """Con `solo_vista` nada a plazo entra, y CETES deja de ser referencia."""
+    cuerpo = (
+        await api_lectura.post(
+            OPTIMIZAR,
+            json={"monto_total": "250000", "horizonte_dias": 364, "solo_vista": True},
+        )
+    ).json()
+
+    assert cuerpo["asignaciones"], "hay productos a la vista en el catálogo de prueba"
+    assert all(a["plazo_dias"] is None for a in cuerpo["asignaciones"])
+
+    descartes = {d["producto_id"]: d["razon"] for d in cuerpo["descartes_optimizador"]}
+    cetes = await _producto_id(api_lectura, "cetes-364")
+    assert descartes[cetes] == "TIENE_PLAZO"
+    assert "todo_cetes" not in {a["clave"] for a in cuerpo["alternativas"]}
+
+
+async def test_the_sight_flag_defaults_off(api_lectura: AsyncClient) -> None:
+    """Sin la llave nueva, el contrato responde exactamente como siempre."""
+    cuerpo = (
+        await api_lectura.post(OPTIMIZAR, json={"monto_total": "250000", "horizonte_dias": 364})
+    ).json()
+
+    assert all(d["razon"] != "TIENE_PLAZO" for d in cuerpo["descartes_optimizador"])
+    assert "todo_cetes" in {a["clave"] for a in cuerpo["alternativas"]}
+
+
 async def test_both_endpoints_agree_on_the_alternatives(api_lectura: AsyncClient) -> None:
     """Mismo monto y horizonte ⇒ las mismas referencias, en ambos caminos."""
     cetes = await _producto_id(api_lectura, "cetes-364")

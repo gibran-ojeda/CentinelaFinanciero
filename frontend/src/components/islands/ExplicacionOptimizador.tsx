@@ -25,6 +25,7 @@ const CORTES: Record<string, string> = {
 };
 
 const DESCARTES: Record<string, string> = {
+  TIENE_PLAZO: 'es a plazo: el reparto se pidió sólo con liquidez inmediata',
   PLAZO_MAYOR_AL_HORIZONTE: 'vence después del horizonte',
   MINIMO_SUPERA_MONTO: 'el mínimo supera tu monto',
   BANDERA_ROJA: 'bandera roja activa',

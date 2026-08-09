@@ -144,6 +144,12 @@
   --rampa-saldo-1: #8ccadd;
   --rampa-saldo-2: #5fb0c9;
   --rampa-saldo-3: #4b8ca6;
+
+  /* El paso de inflación de la cascada: un frío neutro deliberado — ni marca
+     ni semáforo, porque la inflación es contexto del cálculo, no un fallo.
+     La tinta es su pareja clara para el texto de la fila. */
+  --cascada-inflacion: #8fa0c9;
+  --cascada-inflacion-tinta: #b9cff0;
 }
 
 *,

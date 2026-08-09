@@ -917,6 +917,28 @@ def test_each_discard_reason_names_what_actually_happened(
     assert _razones(apretado)[banco_exigente.producto_id] is RazonDescarte.MINIMO_INALCANZABLE
 
 
+def test_sight_only_keeps_only_sight_products_eligible() -> None:
+    pool = elegibles(
+        [CETES, BANCO, SOFIPO_A, SOFIPO_A_BIS],
+        monto_total=Decimal("100000"),
+        horizonte_dias=HORIZONTE,
+        excluir_rojas=True,
+        solo_vista=True,
+    )
+
+    assert {c.producto_id for c in pool} == {BANCO.producto_id, SOFIPO_A_BIS.producto_id}
+
+
+def test_sight_only_discards_terms_as_tiene_plazo(fiscal_2026: ParametrosFiscales) -> None:
+    """La razón es tener plazo, no excederse de él: 364 cabe en 364."""
+    reparto = _optimizar([CETES, BANCO, SOFIPO_A], fiscal_2026, solo_vista=True)
+
+    razones = _razones(reparto)
+    assert razones[CETES.producto_id] is RazonDescarte.TIENE_PLAZO
+    assert razones[SOFIPO_A.producto_id] is RazonDescarte.TIENE_PLAZO
+    assert all(c.es_a_la_vista for c in reparto.candidatos)
+
+
 # ─── Referencias de comparación ───────────────────────────────
 
 
@@ -964,6 +986,20 @@ def test_the_cetes_reference_is_the_longest_term_that_fits() -> None:
     )
 
 
+def test_sight_only_removes_the_cetes_reference() -> None:
+    """Todo CETES es a plazo: comparar contra él describiría mal el modo."""
+    assert (
+        referencia_cetes(
+            [CETES, CETES_CORTO, BANCO],
+            monto_total=Decimal("100000"),
+            horizonte_dias=364,
+            excluir_rojas=True,
+            solo_vista=True,
+        )
+        is None
+    )
+
+
 def test_the_single_best_is_the_argmax_of_real_gain(fiscal_2026: ParametrosFiscales) -> None:
     resultado = _mejor_unico([CETES, BANCO, SOFIPO_A], fiscal_2026)
 
@@ -993,6 +1029,15 @@ def test_the_single_best_respects_the_red_flag_toggle(
 
     assert con is not None and con[0].producto_id == RIESGOSA.producto_id
     assert sin is not None and sin[0].producto_id == CETES.producto_id
+
+
+def test_sight_only_best_single_is_a_sight_product(fiscal_2026: ParametrosFiscales) -> None:
+    """El único de referencia juega con la misma restricción que el reparto."""
+    resultado = _mejor_unico([CETES, IFPE, SOFIPO_A], fiscal_2026, solo_vista=True)
+
+    assert resultado is not None
+    assert resultado[0].producto_id == IFPE.producto_id
+    assert resultado[0].es_a_la_vista
 
 
 def test_a_rising_ladder_can_be_the_single_best(fiscal_2026: ParametrosFiscales) -> None:

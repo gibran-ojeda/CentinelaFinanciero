@@ -15,7 +15,8 @@ la URL de la página donde se publica.
 
 2. **Prefiere la página de la propia institución.** Un comparador ajeno, un
    blog o una nota de prensa no son fuente: repiten lo que leyeron. Si sólo
-   encuentras eso, dilo en `notas` y baja la confianza.
+   encuentras eso, baja la confianza y explícalo en las `notas` de la
+   **respuesta** — nunca en las del hallazgo, que se publican junto a la tasa.
 
 3. **«Sin datos» es una respuesta válida y frecuente.** Si las búsquedas no
    dan una tasa publicada por la institución, devuelve la lista vacía. No
@@ -24,7 +25,9 @@ la URL de la página donde se publica.
 
 4. **No conviertas ni calcules.** Copia el número tal como está publicado. Si
    la página dice «hasta 15%», eso es un máximo promocional y no la tasa del
-   producto: no lo publiques como tasa — descríbelo en `notas`.
+   producto: no lo publiques como tasa — descríbelo en las `notas` del
+   hallazgo como condición, tal como la leería el usuario («la tasa anunciada
+   de hasta 15% es un máximo promocional»), no como apunte de investigación.
 
 5. **Cuando la tasa depende de quién eres, la condición viaja con ella.** La
    diferencia puede marcarla una membresía, la nómina, el gasto del mes, la
@@ -41,7 +44,8 @@ la URL de la página donde se publica.
    Devolver varios del mismo producto no los publica todos: aguas abajo sólo
    sobrevive el primero y el resto se descarta en silencio, así que elegir mal
    aquí es elegir al azar allá. Si no puedes distinguir cuál es la
-   incondicional, entrega la más baja y dilo en `notas`.
+   incondicional, entrega la más baja; la duda va en las `notas` de la
+   respuesta, no en las del hallazgo.
 
 6. **Fíjate en la fecha.** Una tasa de hace más de tres meses no sirve. Si no
    puedes establecer que la página está vigente, baja la confianza a `baja`.
@@ -69,7 +73,7 @@ Un único objeto JSON, sin texto alrededor y sin bloques de código:
       "gat_real": 9.6,
       "url": "https://...",
       "confianza": "alta",
-      "notas": "Publicada en la página de tasas, actualizada el 2026-07-28"
+      "notas": "Requiere contratar desde la app; la tasa aplica a saldos de hasta $25,000"
     }}
   ],
   "sin_datos": false,
@@ -80,4 +84,10 @@ Un único objeto JSON, sin texto alrededor y sin bloques de código:
 - `tipo` es `VISTA` o `PLAZO`. `VISTA` no lleva `plazo_dias`; `PLAZO` lo exige.
 - `gat_nominal`, `gat_real` y `notas` son opcionales; omítelos si no los sabes.
 - `confianza` es `alta`, `media` o `baja`.
+- Las `notas` de cada **hallazgo** se publican junto a la tasa: sólo
+  condiciones del producto, escritas para quien decide dónde poner su dinero
+  (promociones, membresías, topes de saldo, requisitos, vigencias). Qué
+  buscaste, contra qué no pudiste verificar o por qué elegiste una cifra es
+  contabilidad de investigación: va en `confianza` y en las `notas` de la
+  **respuesta**, que no se publican.
 - Si no encontraste nada, `hallazgos` va vacío y `sin_datos` en `true`.
