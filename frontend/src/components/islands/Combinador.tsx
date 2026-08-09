@@ -32,7 +32,15 @@ const HORIZONTES = [28, 91, 182, 364];
 const PASO_MONTO = 1_000;
 
 export default function Combinador() {
-  const instrumentos = useStore(seleccion);
+  // La selección persiste en localStorage, que el servidor no tiene: si el
+  // primer render del cliente ya trajera la lista guardada, no coincidiría
+  // con el HTML del SSR (lista vacía) y React descartaría el árbol entero
+  // con un error de hidratación. El store real entra un render después de
+  // montar; la ventana es de un frame y el debounce de cálculo la absorbe.
+  const instrumentosPersistidos = useStore(seleccion);
+  const [hidratado, setHidratado] = useState(false);
+  useEffect(() => setHidratado(true), []);
+  const instrumentos = hidratado ? instrumentosPersistidos : [];
 
   const [montoTexto, setMontoTexto] = useState('250,000');
   // 'vista' = liquidez inmediata: sólo productos sin plazo, proyectados a un
