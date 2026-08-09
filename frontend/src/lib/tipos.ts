@@ -221,6 +221,7 @@ export interface Asignacion {
 export type RazonCorte = 'MONTO_AGOTADO' | 'LIMITE_SEGURO' | 'COMPRA_MINIMO' | 'TRAMO_LLENO';
 
 export type RazonDescarte =
+  | 'TIENE_PLAZO'
   | 'PLAZO_MAYOR_AL_HORIZONTE'
   | 'MINIMO_SUPERA_MONTO'
   | 'BANDERA_ROJA'

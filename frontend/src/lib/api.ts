@@ -133,6 +133,7 @@ export const api = {
     horizonte_dias: number;
     respetar_seguro: boolean;
     excluir_rojas: boolean;
+    solo_vista: boolean;
   }): Promise<RespuestaCombinacion> {
     return pedir<RespuestaCombinacion>('/api/v1/calculadora/optimizar', {
       method: 'POST',

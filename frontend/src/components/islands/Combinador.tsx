@@ -35,7 +35,14 @@ export default function Combinador() {
   const instrumentos = useStore(seleccion);
 
   const [montoTexto, setMontoTexto] = useState('250,000');
-  const [horizonte, setHorizonte] = useState(91);
+  // 'vista' = liquidez inmediata: sólo productos sin plazo, proyectados a un
+  // año. Para la API el horizonte sigue siendo un número de días — la huella
+  // y las peticiones usan siempre `horizonteDias`, nunca el valor unión, para
+  // que alternar 364 ↔ vista produzca peticiones idénticas y no invalide el
+  // resultado del optimizador.
+  const [horizonte, setHorizonte] = useState<number | 'vista'>(91);
+  const modoVista = horizonte === 'vista';
+  const horizonteDias = modoVista ? 364 : horizonte;
   const [respetarSeguro, setRespetarSeguro] = useState(true);
   const [excluirRojas, setExcluirRojas] = useState(true);
   const [pesos, setPesos] = useState<Record<number, string>>({});
@@ -96,7 +103,7 @@ export default function Combinador() {
     }
     const huellaActual = JSON.stringify([
       monto,
-      horizonte,
+      horizonteDias,
       instrumentos.map((i) => i.productoId),
       instrumentos.map((i) => pesos[i.productoId] ?? '0'),
     ]);
@@ -110,7 +117,7 @@ export default function Combinador() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           monto_total: monto,
-          horizonte_dias: horizonte,
+          horizonte_dias: horizonteDias,
           items: instrumentos.map((i) => ({
             producto_id: i.productoId,
             porcentaje: pesos[i.productoId] ?? '0',
@@ -126,7 +133,7 @@ export default function Combinador() {
     } finally {
       setCargando(false);
     }
-  }, [instrumentos, monto, horizonte, pesos]);
+  }, [instrumentos, monto, horizonteDias, pesos]);
 
   useEffect(() => {
     if (temporizador.current) clearTimeout(temporizador.current);
@@ -146,9 +153,10 @@ export default function Combinador() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           monto_total: monto,
-          horizonte_dias: horizonte,
+          horizonte_dias: horizonteDias,
           respetar_seguro: respetarSeguro,
           excluir_rojas: excluirRojas,
+          solo_vista: modoVista,
         }),
       });
       const datos = await respuesta.json();
@@ -175,7 +183,7 @@ export default function Combinador() {
       // se saltará el fetch, conservando la respuesta exacta del optimizador.
       huellaOptimizador.current = JSON.stringify([
         monto,
-        horizonte,
+        horizonteDias,
         propuesta.asignaciones.map((a) => a.producto_id),
         propuesta.asignaciones.map((a) => a.porcentaje),
       ]);
@@ -189,6 +197,19 @@ export default function Combinador() {
   const sumaOk = Math.abs(sumaPesos - 100) < 1;
   const real = resultado ? Number(resultado.ganancia_real) : 0;
   const protegido = resultado ? Number(resultado.porcentaje_protegido) : 0;
+
+  // La etiqueta de vista exige que TODO lo asignado sea sin plazo: con la
+  // pastilla activa y un plazo agregado a mano, «disponible en cualquier
+  // momento» mentiría — se vuelve al número de días.
+  const todasVista =
+    resultado !== null &&
+    resultado.asignaciones.length > 0 &&
+    resultado.asignaciones.every((a) => a.plazo_dias === null);
+  const subtituloReparto = resultado
+    ? modoVista && todasVista
+      ? 'disponible en cualquier momento · proyección a 1 año'
+      : `${resultado.horizonte_dias} días`
+    : null;
 
   return (
     <div className="rejilla">
@@ -244,6 +265,14 @@ export default function Combinador() {
                 {dias} días
               </button>
             ))}
+            <button
+              type="button"
+              className={`pastilla ${modoVista ? 'activa' : ''}`}
+              aria-pressed={modoVista}
+              onClick={() => setHorizonte('vista')}
+            >
+              A la vista
+            </button>
           </div>
         </div>
 
@@ -340,7 +369,7 @@ export default function Combinador() {
                 monto={monto}
                 sumaPesos={sumaPesos}
                 sumaOk={sumaOk}
-                subtitulo={resultado ? `${resultado.horizonte_dias} días` : null}
+                subtitulo={subtituloReparto}
                 alCambiarPeso={(productoId, valor) =>
                   setPesos((previos) => ({ ...previos, [productoId]: valor }))
                 }

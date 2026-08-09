@@ -11,6 +11,7 @@ interface Peticion {
   horizonte_dias?: number;
   respetar_seguro?: boolean;
   excluir_rojas?: boolean;
+  solo_vista?: boolean;
 }
 
 export const POST: APIRoute = async ({ request }) => {
@@ -31,9 +32,11 @@ export const POST: APIRoute = async ({ request }) => {
         monto_total: cuerpo.monto_total,
         horizonte_dias: cuerpo.horizonte_dias,
         // Los dos interruptores vienen encendidos si no se dicen: el defecto
-        // seguro es proteger, no maximizar.
+        // seguro es proteger, no maximizar. El modo vista, en cambio, es una
+        // restricción que sólo aplica si se pide.
         respetar_seguro: cuerpo.respetar_seguro ?? true,
         excluir_rojas: cuerpo.excluir_rojas ?? true,
+        solo_vista: cuerpo.solo_vista ?? false,
       }),
     );
   } catch (error) {
