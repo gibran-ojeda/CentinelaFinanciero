@@ -107,7 +107,9 @@ que se explica al final.
    su letra pequeña no lo es.
 
    Si **no puedes distinguir** cuál es la incondicional, no elijas al azar:
-   devuelve la más baja y explícalo en `condiciones`.
+   devuelve la más baja. En `condiciones` va la condición de cada tasa tal
+   como la leería el usuario; tu duda sobre cuál era la incondicional es
+   trabajo de revisión y va en `ambiguas`.
 
 6. **«Sin tasas» es una respuesta correcta y frecuente.** Muchas páginas sólo
    traen publicidad. Si no encuentras una tasa con plazo y valor, devuelve
