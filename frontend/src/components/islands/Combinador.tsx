@@ -639,8 +639,8 @@ function Cascada({ datos }: { datos: RespuestaCombinacion }) {
       monto: `−${dinero(datos.efecto_inflacion)}`,
       izquierda: desde(Math.max(0, bruto - isr - inflacion)),
       ancho: ancho(inflacion),
-      color: '#8fa0c9',
-      texto: '#b9cff0',
+      color: 'var(--cascada-inflacion)',
+      texto: 'var(--cascada-inflacion-tinta)',
       sub: `Pérdida de poder adquisitivo (${porcentaje(datos.inflacion_anual)} anual)`,
     },
     {
