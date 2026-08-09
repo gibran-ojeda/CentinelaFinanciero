@@ -21,12 +21,7 @@ import { limpiar, quitar, repartoInicial, seleccion } from '~/lib/seleccion';
 import type { RespuestaCombinacion } from '~/lib/tipos';
 
 const HORIZONTES = [28, 91, 182, 364];
-const MONTOS = [
-  [50_000, '$50k'],
-  [250_000, '$250k'],
-  [1_000_000, '$1 M'],
-  [5_000_000, '$5 M'],
-] as const;
+const PASO_MONTO = 1_000;
 
 export default function Combinador() {
   const instrumentos = useStore(seleccion);
@@ -42,6 +37,13 @@ export default function Combinador() {
   const [error, setError] = useState<string | null>(null);
 
   const monto = soloDigitos(montoTexto);
+
+  // Edición de la entrada, no cálculo de dinero: suma enteros de pesos al
+  // texto del campo, igual que teclear dígitos.
+  function ajustarMonto(delta: number) {
+    const siguiente = Math.max(0, (Number(soloDigitos(montoTexto)) || 0) + delta);
+    setMontoTexto(miles(String(siguiente)));
+  }
 
   /**
    * Los porcentajes se reajustan cuando cambia la selección.
@@ -186,25 +188,37 @@ export default function Combinador() {
       <div className="panel">
         <div className="campo">
           <label htmlFor="c-monto">Monto total (MXN)</label>
-          <input
-            id="c-monto"
-            className="control monto"
-            type="text"
-            inputMode="numeric"
-            value={montoTexto}
-            onChange={(e) => setMontoTexto(miles(soloDigitos(e.target.value)))}
-          />
-          <div className="chips">
-            {MONTOS.map(([valor, etiqueta]) => (
-              <button
-                key={valor}
-                type="button"
-                className="chip"
-                onClick={() => setMontoTexto(miles(String(valor)))}
-              >
-                {etiqueta}
-              </button>
-            ))}
+          <div className="monto-grupo">
+            <button
+              type="button"
+              className="paso-monto"
+              aria-label="Restar $1,000"
+              onClick={() => ajustarMonto(-PASO_MONTO)}
+            >
+              −
+            </button>
+            <input
+              id="c-monto"
+              className="control monto"
+              type="text"
+              inputMode="numeric"
+              value={montoTexto}
+              onChange={(e) => setMontoTexto(miles(soloDigitos(e.target.value)))}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  ajustarMonto(e.key === 'ArrowUp' ? PASO_MONTO : -PASO_MONTO);
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="paso-monto"
+              aria-label="Sumar $1,000"
+              onClick={() => ajustarMonto(PASO_MONTO)}
+            >
+              +
+            </button>
           </div>
         </div>
 
@@ -577,14 +591,17 @@ const ESTILOS = `
     border: 1px solid var(--linea); border-radius: var(--radio-campo);
   }
   .monto { min-height: 44px; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .monto-grupo { display: flex; gap: 6px; }
+  .monto-grupo .control { flex: 1; min-width: 0; }
+  .paso-monto {
+    width: 44px; min-height: 44px; flex: none; cursor: pointer;
+    font-size: 18px; line-height: 1; color: var(--texto-fuerte);
+    background: var(--superficie); border: 1px solid var(--linea);
+    border-radius: var(--radio-campo);
+  }
+  .paso-monto:hover { border-color: var(--linea-fuerte); }
 
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .chip {
-    padding: 4px 12px; cursor: pointer; font-size: 12px;
-    border: 1px solid var(--linea); border-radius: var(--radio-pastilla);
-    background: transparent; color: var(--texto-tenue);
-  }
-  .chip:hover { border-color: var(--linea-fuerte); color: var(--texto-fuerte); }
 
   .pastilla {
     min-height: 36px; padding: 7px 15px; cursor: pointer; white-space: nowrap;
