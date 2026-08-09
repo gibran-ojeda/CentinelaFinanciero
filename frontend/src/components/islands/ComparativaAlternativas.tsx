@@ -217,4 +217,11 @@ const ESTILOS = `
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* En angosto, la etiqueta cede columna y fluye en líneas: sin esto, los
+   nombres largos («Todo en Mercado Pago — …») dejan la pista en ~50px y el
+   chart deja de leerse como chart. */
+@media (max-width: 560px) {
+  .bm-chart { grid-template-columns: minmax(70px, 110px) 1fr auto; }
+  .bm-nombre { white-space: normal; font-size: 11px; line-height: 1.35; }
+}
 `;
