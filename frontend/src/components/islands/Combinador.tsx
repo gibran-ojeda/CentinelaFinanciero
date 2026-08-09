@@ -220,7 +220,7 @@ export default function Combinador() {
           <div className="monto-grupo">
             <button
               type="button"
-              className="paso-monto"
+              className="monto-paso"
               aria-label="Restar $1,000"
               onClick={() => ajustarMonto(-PASO_MONTO)}
             >
@@ -242,7 +242,7 @@ export default function Combinador() {
             />
             <button
               type="button"
-              className="paso-monto"
+              className="monto-paso"
               aria-label="Sumar $1,000"
               onClick={() => ajustarMonto(PASO_MONTO)}
             >
@@ -705,13 +705,15 @@ const ESTILOS = `
   .monto { min-height: 44px; font-size: 18px; font-variant-numeric: tabular-nums; }
   .monto-grupo { display: flex; gap: 6px; }
   .monto-grupo .control { flex: 1; min-width: 0; }
-  .paso-monto {
+  /* «monto-paso», no «paso-monto»: la cascada ya usa .paso-monto para sus
+     cifras y esta hoja es global en la página. */
+  .monto-paso {
     width: 44px; min-height: 44px; flex: none; cursor: pointer;
     font-size: 18px; line-height: 1; color: var(--texto-fuerte);
     background: var(--superficie); border: 1px solid var(--linea);
     border-radius: var(--radio-campo);
   }
-  .paso-monto:hover { border-color: var(--linea-fuerte); }
+  .monto-paso:hover { border-color: var(--linea-fuerte); }
 
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 
