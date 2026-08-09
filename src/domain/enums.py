@@ -265,6 +265,9 @@ class RazonDescarte(StrEnum):
     que simplemente no les tocó turno antes de agotarse el monto tampoco.
     """
 
+    TIENE_PLAZO = "TIENE_PLAZO"
+    """El reparto se pidió sólo a la vista y este producto es a plazo."""
+
     PLAZO_MAYOR_AL_HORIZONTE = "PLAZO_MAYOR_AL_HORIZONTE"
     MINIMO_SUPERA_MONTO = "MINIMO_SUPERA_MONTO"
     BANDERA_ROJA = "BANDERA_ROJA"

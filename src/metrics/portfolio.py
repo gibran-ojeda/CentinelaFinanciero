@@ -433,13 +433,20 @@ def _razon_no_elegible(
     monto_total: Decimal,
     horizonte_dias: int,
     excluir_rojas: bool,
+    solo_vista: bool = False,
 ) -> RazonDescarte | None:
     """La primera condición de elegibilidad que falla, o `None` si entra.
 
     El orden es el del predicado histórico de `elegibles` — plazo, mínimo,
     bandera — para que la razón reportada no dependa de una reordenación
-    accidental de las condiciones.
+    accidental de las condiciones. La comprobación de `solo_vista` va antes
+    que todas: en modo vista el horizonte sigue siendo el periodo de
+    proyección (un plazo de 91 días cabe en 364), así que reportar
+    `PLAZO_MAYOR_AL_HORIZONTE` mentiría — el hecho que descalifica es tener
+    plazo, no excederse de él.
     """
+    if solo_vista and not candidato.es_a_la_vista:
+        return RazonDescarte.TIENE_PLAZO
     if not (candidato.es_a_la_vista or (candidato.plazo_dias or 0) <= horizonte_dias):
         return RazonDescarte.PLAZO_MAYOR_AL_HORIZONTE
     if candidato.monto_minimo > monto_total:
@@ -455,13 +462,16 @@ def elegibles(
     monto_total: Decimal,
     horizonte_dias: int,
     excluir_rojas: bool,
+    solo_vista: bool = False,
 ) -> list[Candidato]:
     """Qué puede entrar en un reparto automático.
 
     Se descarta lo que el usuario no podría contratar (monto mínimo por encima
     de su capital) y lo que no vence dentro de su horizonte. Un plazo que no
     cabe puede elegirse a mano —con su advertencia— pero no lo propone la
-    herramienta: proponerlo sería recomendar iliquidez sin decirlo.
+    herramienta: proponerlo sería recomendar iliquidez sin decirlo. Con
+    `solo_vista`, además, sólo entran productos de liquidez inmediata: el
+    dinero que debe estar siempre disponible no se propone a plazo.
     """
     return [
         c
@@ -471,6 +481,7 @@ def elegibles(
             monto_total=monto_total,
             horizonte_dias=horizonte_dias,
             excluir_rojas=excluir_rojas,
+            solo_vista=solo_vista,
         )
         is None
     ]
@@ -485,8 +496,13 @@ def optimizar(
     valor_udi: Decimal,
     respetar_seguro: bool = True,
     excluir_rojas: bool = True,
+    solo_vista: bool = False,
 ) -> Reparto:
     """Reparto por tramos: cada peso al segmento que más TEN ofrece.
+
+    Con `solo_vista`, el reparto se restringe a productos de liquidez
+    inmediata (los a plazo se descartan con `TIENE_PLAZO`); el horizonte
+    sigue siendo el periodo de proyección del rendimiento.
 
     Devuelve **importes**, no porcentajes. Sigue siendo una heurística
     deliberadamente simple y explicable —"el dinero va al tramo que más
@@ -526,6 +542,7 @@ def optimizar(
             monto_total=monto_total,
             horizonte_dias=horizonte_dias,
             excluir_rojas=excluir_rojas,
+            solo_vista=solo_vista,
         )
         if razon is not None:
             razones_descarte[candidato.producto_id] = razon
@@ -684,6 +701,7 @@ def referencia_cetes(
     monto_total: Decimal,
     horizonte_dias: int,
     excluir_rojas: bool,
+    solo_vista: bool = False,
 ) -> Candidato | None:
     """El CETES contra el que comparar: el de mayor plazo que cabe.
 
@@ -691,7 +709,9 @@ def referencia_cetes(
     respeta su mínimo de contratación y su plazo — y gana el de mayor
     `plazo_dias` (la vista cuenta como 0); empate → menor `producto_id`. Sin
     candidato, la referencia se omite: no se inventa un CETES que el catálogo
-    no tiene.
+    no tiene. Con `solo_vista` todo CETES es a plazo, así que la referencia
+    desaparece por el mismo mecanismo — comparar contra un instrumento que el
+    modo excluye describiría mal la pregunta que el usuario hizo.
     """
     pool = [
         c
@@ -700,6 +720,7 @@ def referencia_cetes(
             monto_total=monto_total,
             horizonte_dias=horizonte_dias,
             excluir_rojas=excluir_rojas,
+            solo_vista=solo_vista,
         )
         if c.instrumento is TipoInstrumento.CETES
     ]
@@ -717,6 +738,7 @@ def mejor_unico(
     params: ParametrosFiscales,
     valor_udi: Decimal,
     excluir_rojas: bool,
+    solo_vista: bool = False,
 ) -> tuple[Candidato, Combinacion] | None:
     """«Todo en un solo instrumento»: el elegible con mayor ganancia real.
 
@@ -737,6 +759,7 @@ def mejor_unico(
         monto_total=monto_total,
         horizonte_dias=horizonte_dias,
         excluir_rojas=excluir_rojas,
+        solo_vista=solo_vista,
     )
     mejor: tuple[Candidato, Combinacion] | None = None
     for candidato in sorted(pool, key=lambda c: c.producto_id):

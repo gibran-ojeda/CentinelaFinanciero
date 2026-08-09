@@ -377,6 +377,13 @@ class SolicitudOptimizador(Esquema):
     excluir_rojas: bool = Field(
         default=True, description="Deja fuera a las instituciones con bandera roja activa"
     )
+    solo_vista: bool = Field(
+        default=False,
+        description=(
+            "Restringe el reparto a productos de liquidez inmediata (sin plazo). "
+            "El horizonte sigue siendo el periodo de proyección del rendimiento."
+        ),
+    )
     inflacion_anual: Decimal | None = None
 
 
