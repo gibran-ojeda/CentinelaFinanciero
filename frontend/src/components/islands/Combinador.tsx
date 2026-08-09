@@ -16,8 +16,16 @@ import { useStore } from '@nanostores/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ComparativaAlternativas from '~/components/islands/ComparativaAlternativas';
 import ExplicacionOptimizador from '~/components/islands/ExplicacionOptimizador';
-import { colorSerie, dinero, miles, porcentaje, soloDigitos, tramoEtiqueta } from '~/lib/formato';
-import { limpiar, quitar, repartoInicial, seleccion } from '~/lib/seleccion';
+import {
+  colorSerie,
+  dinero,
+  dineroCorto,
+  etiquetaChipTramo,
+  miles,
+  porcentaje,
+  soloDigitos,
+} from '~/lib/formato';
+import { limpiar, quitar, repartoInicial, seleccion, type Instrumento } from '~/lib/seleccion';
 import type { RespuestaCombinacion } from '~/lib/tipos';
 
 const HORIZONTES = [28, 91, 182, 364];
@@ -260,175 +268,270 @@ export default function Combinador() {
           </button>
         </div>
 
-        <div className="instrumentos">
-          <div className="instrumentos-cabecera">
-            <span className="etiqueta">Instrumentos ({instrumentos.length})</span>
-            <span className="suma">
-              <span style={{ color: sumaOk ? 'var(--positivo)' : 'var(--aviso)' }}>
-                Σ {sumaPesos.toFixed(1)} %
-              </span>
-              {instrumentos.length > 0 && (
-                <button type="button" className="enlace" onClick={limpiar}>
-                  Limpiar
-                </button>
-              )}
-            </span>
-          </div>
-
-          {instrumentos.length === 0 && (
-            <p className="vacio">
-              Aún no hay instrumentos. Agrégalos desde el <a href="/">mercado</a> o pulsa{' '}
-              <strong>Optimizar</strong> para una propuesta automática.
-            </p>
-          )}
-
-          <div className="lista">
-            {instrumentos.map((instrumento, indice) => (
-              <div key={instrumento.productoId} className="item">
-                <i className="punto" style={{ background: colorSerie(indice) }} aria-hidden="true" />
-                <div className="item-texto">
-                  <div className="item-nombre">{instrumento.institucion}</div>
-                  <div className="item-sub">{instrumento.producto}</div>
-                </div>
-                <input
-                  className="pct"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  aria-label={`Porcentaje de ${instrumento.institucion}`}
-                  value={pesos[instrumento.productoId] ?? ''}
-                  onChange={(e) =>
-                    setPesos((previos) => ({
-                      ...previos,
-                      [instrumento.productoId]: e.target.value,
-                    }))
-                  }
-                />
-                <span className="tenue-2">%</span>
-                <button
-                  type="button"
-                  className="quitar"
-                  aria-label={`Quitar ${instrumento.institucion}`}
-                  onClick={() => quitar(instrumento.productoId)}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <button type="button" className="optimizar" onClick={optimizar} disabled={cargando}>
-            ⚡ Optimizar combinación
-          </button>
-          <p className="nota-optimizar">
-            Optimizar <strong>reemplaza tu selección actual</strong>: ordena por TEN y llena cada
-            institución hasta su límite de cobertura
-            {respetarSeguro
-              ? '.'
-              : ' — con los límites desactivados, todo el monto puede ir a un solo emisor.'}
-          </p>
-        </div>
+        <button type="button" className="optimizar" onClick={optimizar} disabled={cargando}>
+          ⚡ Buscar mejor alternativa
+        </button>
+        <p className="nota-optimizar">
+          La búsqueda <strong>reemplaza tu selección actual</strong>: ordena por tasa efectiva
+          neta y llena cada institución hasta su límite de cobertura
+          {respetarSeguro
+            ? '.'
+            : ' — con los límites desactivados, todo el monto puede ir a un solo emisor.'}
+        </p>
       </div>
 
       {/* ── Resultados ── */}
       <div>
         {error && <p className="error">{error}</p>}
 
-        {!resultado && !error && (
+        {instrumentos.length === 0 && !resultado && !error && (
           <div className="panel espera">
             <p className="tenue">
-              Elige un monto y al menos un instrumento para ver el desglose, o pulsa Optimizar.
+              Elige un monto y agrega instrumentos desde el <a href="/">mercado</a>, o pulsa{' '}
+              <strong>Buscar mejor alternativa</strong> para una propuesta automática.
             </p>
           </div>
         )}
 
-        {resultado && (
+        {(instrumentos.length > 0 || resultado) && (
           <>
             <div className={`panel ${cargando ? 'calculando' : ''}`}>
-              <div className="stats">
-                <div className="stat">
-                  <div className="stat-etiqueta">TEN ponderada</div>
-                  <div className="cifra stat-valor positivo">
-                    {porcentaje(resultado.ten_ponderada)}
+              {resultado && (
+                <div className="stats">
+                  <div className="stat">
+                    <div className="stat-etiqueta">TEN ponderada</div>
+                    <div className="cifra stat-valor positivo">
+                      {porcentaje(resultado.ten_ponderada)}
+                    </div>
                   </div>
-                </div>
-                <div className="stat">
-                  <div className="stat-etiqueta">Ganancia real</div>
-                  <div
-                    className="cifra stat-valor"
-                    style={{ color: real < 0 ? 'var(--negativo)' : 'var(--positivo)' }}
-                  >
-                    {dinero(resultado.ganancia_real)}
-                  </div>
-                </div>
-                <div className="stat">
-                  <div className="stat-etiqueta">Protegido</div>
-                  <div
-                    className="cifra stat-valor"
-                    style={{
-                      color:
-                        protegido >= 100
-                          ? 'var(--positivo)'
-                          : protegido >= 60
-                            ? 'var(--aviso)'
-                            : 'var(--negativo)',
-                    }}
-                  >
-                    {protegido} %
-                  </div>
-                  <div className="tenue-2 stat-sub">{dinero(resultado.monto_protegido)}</div>
-                </div>
-              </div>
-
-              {/* Barra de asignación */}
-              <div className="asignacion">
-                <div className="barra">
-                  {resultado.asignaciones.map((a, indice) => (
+                  <div className="stat">
+                    <div className="stat-etiqueta">Ganancia real</div>
                     <div
-                      key={a.producto_id}
-                      title={`${a.institucion.nombre} ${a.porcentaje}%`}
-                      style={{ width: `${a.porcentaje}%`, background: colorSerie(indice) }}
-                    />
-                  ))}
+                      className="cifra stat-valor"
+                      style={{ color: real < 0 ? 'var(--negativo)' : 'var(--positivo)' }}
+                    >
+                      {dinero(resultado.ganancia_real)}
+                    </div>
+                  </div>
+                  <div className="stat">
+                    <div className="stat-etiqueta">Protegido</div>
+                    <div
+                      className="cifra stat-valor"
+                      style={{
+                        color:
+                          protegido >= 100
+                            ? 'var(--positivo)'
+                            : protegido >= 60
+                              ? 'var(--aviso)'
+                              : 'var(--negativo)',
+                      }}
+                    >
+                      {protegido} %
+                    </div>
+                    <div className="tenue-2 stat-sub">{dinero(resultado.monto_protegido)}</div>
+                  </div>
                 </div>
-                <div className="leyenda">
-                  {resultado.asignaciones.map((a, indice) => (
-                    <span key={a.producto_id} className="leyenda-item">
-                      <i style={{ background: colorSerie(indice) }} aria-hidden="true" />
-                      {a.institucion.nombre} {Number(a.porcentaje).toFixed(1)}%
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <Cascada datos={resultado} />
-
-              <ComparativaAlternativas resultado={resultado} />
-
-              <p className="narrativa">{resultado.narrativa}</p>
-
-              {Number(resultado.monto_no_asignado) > 0 && (
-                <p className="sin-asignar">
-                  {dinero(resultado.monto_no_asignado)} no se pudieron colocar sin exceder algún
-                  límite de seguro. Repartirlos entre los instrumentos ya llenos anularía la
-                  protección que pediste respetar.
-                </p>
               )}
 
-              <div className="detalle">
-                <div className="etiqueta">
-                  Detalle por instrumento · {resultado.horizonte_dias} días
+              <RepartoDona
+                instrumentos={instrumentos}
+                pesos={pesos}
+                resultado={resultado}
+                monto={monto}
+                sumaPesos={sumaPesos}
+                sumaOk={sumaOk}
+                subtitulo={resultado ? `${resultado.horizonte_dias} días` : null}
+                alCambiarPeso={(productoId, valor) =>
+                  setPesos((previos) => ({ ...previos, [productoId]: valor }))
+                }
+              />
+
+              {resultado && (
+                <>
+                  <Cascada datos={resultado} />
+
+                  <ComparativaAlternativas resultado={resultado} />
+
+                  <p className="narrativa">{resultado.narrativa}</p>
+
+                  {Number(resultado.monto_no_asignado) > 0 && (
+                    <p className="sin-asignar">
+                      {dinero(resultado.monto_no_asignado)} no se pudieron colocar sin exceder
+                      algún límite de seguro. Repartirlos entre los instrumentos ya llenos
+                      anularía la protección que pediste respetar.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+
+            {resultado && (
+              <>
+                <ExplicacionOptimizador
+                  pasos={resultado.pasos_optimizador}
+                  descartes={resultado.descartes_optimizador}
+                  asignaciones={resultado.asignaciones}
+                />
+
+                <div className="avisos">
+                  <div className="aviso-caja">
+                    <div className="aviso-titulo">Nota fiscal</div>
+                    <p className="tenue aviso-texto">{resultado.nota_fiscal}</p>
+                  </div>
+                  <div className="aviso-caja">
+                    <div className="aviso-titulo">Sobre el optimizador</div>
+                    <p className="tenue aviso-texto">{resultado.aviso_optimizador}</p>
+                  </div>
+                  <p className="tenue-2 disclaimer">{resultado.disclaimer}</p>
                 </div>
-                {resultado.asignaciones.map((a, indice) => (
-                  <div key={a.producto_id} className="detalle-fila">
-                    <i className="punto" style={{ background: colorSerie(indice) }} aria-hidden="true" />
-                    <span className="detalle-nombre">{a.institucion.nombre}</span>
-                    {/* La fila dice QUÉ producto es y lleva a su ficha: antes
-                        solo nombraba a la institución. */}
-                    <a className="detalle-producto tenue" href={`/institucion/${a.institucion.slug}`}>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      <style>{ESTILOS}</style>
+    </div>
+  );
+}
+
+/**
+ * El reparto como dona anotada.
+ *
+ * Un solo bloque cuenta lo que antes contaban tres (la lista de instrumentos,
+ * la barra de asignación y el detalle por instrumento): quiénes son, cuánto
+ * les toca y qué hace cada peso. Las filas nacen del store —un instrumento
+ * recién quitado desaparece al instante— y las cifras llegan del resultado,
+ * unidas por id; sin resultado, la fila es su propio esqueleto durante el
+ * debounce.
+ *
+ * La dona es geometría de porcentajes ya calculados por la API: con
+ * `pathLength=100`, el dasharray de cada gajo ES su porcentaje, sin
+ * trigonometría. El centro va en HTML superpuesto, nunca en <text> SVG, que
+ * escala con el ancho. Sin resultado no se dibujan gajos provisionales: los
+ * pesos no se normalizan en cliente para adivinar un reparto.
+ */
+function RepartoDona({
+  instrumentos,
+  pesos,
+  resultado,
+  monto,
+  sumaPesos,
+  sumaOk,
+  subtitulo,
+  alCambiarPeso,
+}: {
+  instrumentos: Instrumento[];
+  pesos: Record<number, string>;
+  resultado: RespuestaCombinacion | null;
+  monto: string;
+  sumaPesos: number;
+  sumaOk: boolean;
+  subtitulo: string | null;
+  alCambiarPeso: (productoId: number, valor: string) => void;
+}) {
+  const asignaciones = resultado?.asignaciones ?? [];
+  const porProducto = new Map(asignaciones.map((a) => [a.producto_id, a]));
+
+  // Offset acumulado de cada gajo sobre pathLength=100: geometría, no dinero.
+  const offsets: number[] = [];
+  let acumulado = 0;
+  for (const a of asignaciones) {
+    offsets.push(acumulado);
+    acumulado += Number(a.porcentaje);
+  }
+
+  return (
+    <div className="reparto">
+      <div className="reparto-cabecera">
+        <span className="reparto-titulo">
+          <span className="etiqueta">Tu reparto</span>
+          {subtitulo && <span className="tenue-2 reparto-sub">{subtitulo}</span>}
+        </span>
+        <span className="suma">
+          <span style={{ color: sumaOk ? 'var(--positivo)' : 'var(--aviso)' }}>
+            Σ {sumaPesos.toFixed(1)} %
+          </span>
+          {instrumentos.length > 0 && (
+            <button type="button" className="enlace" onClick={limpiar}>
+              Limpiar
+            </button>
+          )}
+        </span>
+      </div>
+
+      <div className="reparto-cuerpo">
+        <div className="dona-caja">
+          <svg className="dona" viewBox="0 0 100 100" aria-hidden="true">
+            <g transform="rotate(-90 50 50)">
+              <circle className="dona-pista" cx="50" cy="50" r="40" />
+              {asignaciones.map((a, indice) => (
+                <circle
+                  key={a.producto_id}
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  pathLength={100}
+                  strokeDasharray={`${Number(a.porcentaje)} ${100 - Number(a.porcentaje)}`}
+                  strokeDashoffset={-offsets[indice]}
+                  style={{ stroke: colorSerie(indice) }}
+                />
+              ))}
+            </g>
+          </svg>
+          <div className="dona-centro">
+            <div className="cifra dona-monto">{dineroCorto(resultado?.monto_total ?? monto)}</div>
+            <div className="tenue-2">
+              {instrumentos.length} instrumento{instrumentos.length === 1 ? '' : 's'}
+            </div>
+          </div>
+        </div>
+
+        <div className="reparto-filas">
+          {instrumentos.map((instrumento, indice) => {
+            const a = porProducto.get(instrumento.productoId);
+            return (
+              <div key={instrumento.productoId} className="fila-instrumento">
+                <div className="fila-linea">
+                  <i
+                    className="punto"
+                    style={{ background: colorSerie(indice) }}
+                    aria-hidden="true"
+                  />
+                  <span className="fila-nombre">{instrumento.institucion}</span>
+                  {a ? (
+                    /* El enlace usa el slug de la institución que viaja en la
+                       asignación: el del store es el del producto. */
+                    <a className="fila-producto tenue" href={`/institucion/${a.institucion.slug}`}>
                       {a.producto}
                     </a>
+                  ) : (
+                    <span className="fila-producto tenue">{instrumento.producto}</span>
+                  )}
+                  <span className="fila-peso">
+                    <input
+                      className="pct"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      aria-label={`Porcentaje de ${instrumento.institucion}`}
+                      value={pesos[instrumento.productoId] ?? ''}
+                      onChange={(e) => alCambiarPeso(instrumento.productoId, e.target.value)}
+                    />
+                    <span className="tenue-2">%</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="quitar"
+                    aria-label={`Quitar ${instrumento.institucion}`}
+                    onClick={() => quitar(instrumento.productoId)}
+                  >
+                    ×
+                  </button>
+                </div>
+                {a && (
+                  <div className="fila-datos">
                     <span className="tenue">
                       {dinero(a.monto)} ({Number(a.porcentaje).toFixed(1)}%)
                     </span>
@@ -442,49 +545,29 @@ export default function Combinador() {
                         ? `Cubierto (${a.cobertura.tipo === 'SOBERANO' ? 'soberano' : a.cobertura.tipo})`
                         : `Excede cobertura ${dinero(a.monto_expuesto)}`}
                     </span>
-                    {a.escalonada && (
-                      /* La TEN de arriba ya es la efectiva del monto asignado
-                         (la calcula la API); los chips enseñan la escalera
-                         que la explica — visibles, no en un title que el
-                         táctil no puede abrir. */
-                      <span className="detalle-tramos">
-                        {a.tramos.map((t) => (
-                          <span key={t.desde} className="chip-tramo">
-                            {porcentaje(t.tasa_nominal)} {tramoEtiqueta(t.hasta)}
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                    {a.advertencia_liquidez && (
-                      <span className="aviso-liquidez">{a.advertencia_liquidez}</span>
-                    )}
                   </div>
-                ))}
+                )}
+                {a?.escalonada && (
+                  /* La TEN de la fila ya es la efectiva del monto asignado
+                     (la calcula la API); los chips enseñan la escalera que la
+                     explica — visibles, no en un title que el táctil no puede
+                     abrir. */
+                  <div className="fila-tramos">
+                    {a.tramos.map((t) => (
+                      <span key={t.desde} className="chip-tramo">
+                        {etiquetaChipTramo(t)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {a?.advertencia_liquidez && (
+                  <div className="aviso-liquidez">{a.advertencia_liquidez}</div>
+                )}
               </div>
-            </div>
-
-            <ExplicacionOptimizador
-              pasos={resultado.pasos_optimizador}
-              descartes={resultado.descartes_optimizador}
-              asignaciones={resultado.asignaciones}
-            />
-
-            <div className="avisos">
-              <div className="aviso-caja">
-                <div className="aviso-titulo">Nota fiscal</div>
-                <p className="tenue aviso-texto">{resultado.nota_fiscal}</p>
-              </div>
-              <div className="aviso-caja">
-                <div className="aviso-titulo">Sobre el optimizador</div>
-                <p className="tenue aviso-texto">{resultado.aviso_optimizador}</p>
-              </div>
-              <p className="tenue-2 disclaimer">{resultado.disclaimer}</p>
-            </div>
-          </>
-        )}
+            );
+          })}
+        </div>
       </div>
-
-      <style>{ESTILOS}</style>
     </div>
   );
 }
@@ -627,10 +710,6 @@ const ESTILOS = `
   }
   .opcion strong { font-family: var(--fuente-titulo); }
 
-  .instrumentos { padding-top: 14px; border-top: 1px solid var(--linea); }
-  .instrumentos-cabecera {
-    display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px;
-  }
   .suma {
     display: inline-flex; align-items: center; gap: 10px; font-size: 12px;
     font-variant-numeric: tabular-nums;
@@ -641,21 +720,7 @@ const ESTILOS = `
     text-decoration: underline; text-underline-offset: 3px;
   }
   .enlace:hover { color: var(--negativo); }
-  .vacio { margin: 4px 0 8px; font-size: 13px; color: var(--texto-tenue-2); }
-
-  .lista { display: grid; gap: 8px; }
-  .item {
-    display: flex; align-items: center; gap: 9px; padding: 9px 11px;
-    border: 1px solid var(--linea); border-radius: var(--radio-sub);
-    background: rgba(20,22,58,.5);
-  }
   .punto { width: 9px; height: 9px; flex: none; border-radius: 3px; }
-  .item-texto { flex: 1; min-width: 0; }
-  .item-nombre {
-    font-family: var(--fuente-titulo); font-weight: 600; font-size: 14px;
-    color: var(--texto-fuerte); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .item-sub { font-size: 11px; color: var(--texto-tenue-2); }
   .pct {
     width: 62px; min-height: 36px; padding: 4px 8px; text-align: right;
     font: inherit; font-size: 14px; color: var(--texto-fuerte);
@@ -693,17 +758,46 @@ const ESTILOS = `
   .stat-sub { margin-top: 2px; font-size: 11px; }
   .positivo { color: var(--positivo); }
 
-  .asignacion { margin-bottom: 16px; }
-  .barra {
-    display: flex; height: 22px; overflow: hidden;
-    border: 1px solid var(--linea); border-radius: var(--radio-pastilla);
+  .reparto { margin-bottom: 16px; }
+  .reparto-cabecera {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; margin-bottom: 10px;
   }
-  .leyenda { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; }
-  .leyenda-item {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 11px;
-    color: var(--texto-tenue);
+  .reparto-titulo { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .reparto-sub { font-size: 11px; }
+  .reparto-cuerpo { display: grid; gap: 14px; align-items: start; }
+  .dona-caja { position: relative; width: 158px; margin: 0 auto; }
+  .dona { display: block; width: 100%; height: auto; }
+  .dona circle { fill: none; stroke-width: 12; }
+  .dona-pista { stroke: var(--linea); }
+  .dona-centro {
+    position: absolute; inset: 0; display: grid; place-content: center;
+    gap: 2px; text-align: center;
   }
-  .leyenda-item i { width: 8px; height: 8px; border-radius: 3px; }
+  .dona-monto { font-size: 19px; color: var(--texto-fuerte); }
+  .reparto-filas { display: grid; gap: 8px; min-width: 0; }
+  .fila-instrumento {
+    display: grid; gap: 6px; padding: 9px 12px; font-size: 12px;
+    border: 1px solid var(--linea); border-radius: var(--radio-sub);
+    background: rgba(20,22,58,.5);
+  }
+  .fila-linea { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .fila-nombre {
+    font-family: var(--fuente-titulo); font-weight: 600; font-size: 13px;
+    color: var(--texto-fuerte); white-space: nowrap;
+  }
+  .fila-producto {
+    min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    color: inherit;
+  }
+  a.fila-producto { text-decoration: underline dotted; text-underline-offset: 2px; }
+  a.fila-producto:hover, a.fila-producto:focus-visible { color: var(--marca-200); }
+  .fila-peso { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+  .fila-datos { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+  .fila-tramos { display: flex; flex-wrap: wrap; gap: 5px; }
+  @media (min-width: 720px) {
+    .reparto-cuerpo { grid-template-columns: 170px 1fr; }
+  }
 
   .cascada { display: grid; gap: 12px; margin-bottom: 16px; }
   .paso-cabecera {
@@ -734,22 +828,6 @@ const ESTILOS = `
     background: var(--aviso-fondo); color: var(--aviso);
   }
 
-  .detalle { margin-top: 16px; display: grid; gap: 6px; }
-  .detalle-fila {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
-    padding: 9px 12px; font-size: 12px;
-    border: 1px solid var(--linea); border-radius: var(--radio-sub);
-    background: rgba(20,22,58,.5);
-  }
-  .detalle-nombre {
-    min-width: 130px; font-family: var(--fuente-titulo); font-weight: 600;
-    font-size: 13px; color: var(--texto-fuerte);
-  }
-  .detalle-producto {
-    color: inherit; text-decoration: underline dotted; text-underline-offset: 2px;
-  }
-  .detalle-producto:hover, .detalle-producto:focus-visible { color: var(--marca-200); }
-  .detalle-tramos { display: flex; flex-wrap: wrap; gap: 5px; flex-basis: 100%; }
   /* Compartido con el panel de explicación: su hoja sólo se monta cuando hay
      pasos, y estos chips también aparecen en mezclas manuales. */
   .chip-tramo {
